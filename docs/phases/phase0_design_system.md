@@ -1,498 +1,291 @@
-# Phase 0 — UI/UX Design System
+# Phase 0 Design System - Verified Reference
 
-> **Status:** ✅ Complete  
-> **Time taken:** ~1 day  
-> **Priority:** Do this before any new page development
+> This document describes the design-system foundation that exists in code today, the intended usage model, and the gaps that still need to be closed before Phase 0 can be marked complete.
 
 ---
 
-## Why This Exists
+## Design Goal
 
-Previously, pages used hardcoded hex colors and inline `style={{}}` objects. Each page looked slightly different. This phase establishes a **single source of truth** for colors, typography, and reusable components so every future page looks consistent automatically.
+The design system is meant to give the product one consistent frontend language:
 
----
+- one token source
+- one shell pattern
+- one reusable component library
+- one interaction model for loading, empty, confirm, and feedback states
 
-## Files Changed
-
-| File | Change |
-|---|---|
-| `src/app/globals.css` | Full rewrite: dark design tokens, WCAG accessibility fix |
-| `tailwind.config.ts` | Mapped CSS vars to Tailwind class names |
-| `src/app/layout.tsx` | Added `ToastProvider`, removed inline styles |
-| `src/components/ui/Button.tsx` | Rebuilt with CVA (7 variants) |
-| `src/components/ui/Badge.tsx` | New — 8 semantic variants |
-| `src/components/ui/HealthDot.tsx` | New — status indicator dot |
-| `src/components/ui/LoadingSpinner.tsx` | New — accessible spinner |
-| `src/components/ui/StatCard.tsx` | New — metric card with trend |
-| `src/components/ui/StatusBadge.tsx` | New — 18 preconfigured statuses |
-| `src/components/ui/ConfirmModal.tsx` | New — accessible confirm dialog |
-| `src/components/ui/Toast.tsx` | New — context + `useToast` hook |
-| `src/components/ui/PageHeader.tsx` | New — standard page title bar |
-| `src/components/ui/DataTable.tsx` | New — full table with search/sort/pagination |
-| `src/components/ui/EmptyState.tsx` | New — empty list placeholder |
-| `src/components/ui/Breadcrumb.tsx` | New — navigation trail |
-| `src/components/ui/index.ts` | New — barrel export for all of the above |
+The implementation already provides that foundation. The remaining work is mostly consistency and completion, not direction.
 
 ---
 
-## Design Tokens (`globals.css`)
+## Implemented Structure
 
-All colors are defined as CSS variables. **Never hardcode a hex color in a component file again.**
+### Token source
 
-```css
-/* Backgrounds */
---bg-primary:    #0F172A   /* page background */
---bg-card:       #1E293B   /* card/panel surface */
---bg-hover:      #293548   /* hover state */
+`platform/client/src/app/globals.css`
 
-/* Accent */
---accent:        #3B82F6   /* primary CTA blue */
---accent-hover:  #2563EB
---accent-purple: #8B5CF6   /* secondary / gradients */
+Contains:
 
-/* Text */
---text-primary:  #F1F5F9   /* headings, labels */
---text-muted:    #94A3B8   /* descriptions, placeholders */
+- dark-theme canvas and surfaces
+- text and border colors
+- semantic colors for success, warning, danger
+- radius and shadow system
+- animation helpers
 
-/* Borders */
---border:        #334155
+### Tailwind bridge
 
-/* Semantic */
---success:       #10B981   /* sent, verified */
---warning:       #F59E0B   /* quota warning, paused */
---danger:        #EF4444   /* failed, blocked */
---info:          #60A5FA   /* informational */
-```
+`platform/client/tailwind.config.ts`
 
-### Tailwind Mapping
+Purpose:
 
-Because `tailwind.config.ts` maps these to Tailwind class names, you can write:
+- expose token names as Tailwind utilities
+- let component code use semantic classes instead of repeated literal values
 
-```tsx
-// ✅ Correct — uses design token
-<div className="bg-[var(--bg-card)] text-[var(--text-primary)]">
+### Root wiring
 
-// ✅ Also fine — Tailwind mapped names
-<div className="bg-bg-card text-text-primary">
+`platform/client/src/app/layout.tsx`
 
-// ❌ Never do this
-<div style={{ backgroundColor: '#1E293B', color: '#F1F5F9' }}>
-```
+Purpose:
 
-### Typography Scale
+- install Inter globally
+- wrap app with `AuthProvider`
+- wrap app with `ToastProvider`
+- mount the shared layout wrapper
 
-```css
---text-h1:      1.75rem  /* bold headings */
---text-h2:      1.25rem  /* semibold subheadings */
---text-h3:      1rem     /* semibold section titles */
---text-body:    0.875rem /* 14px — standard body text */
---text-caption: 0.75rem  /* 12px — secondary labels */
---text-mono:    0.8125rem /* 13px — IDs, codes, timestamps */
-```
+### UI library
 
-### WCAG Accessibility Fix
+`platform/client/src/components/ui`
 
-The old code had:
-```css
-/* ❌ BUG: This disabled keyboard navigation for ALL users */
-*:focus { outline: none; }
-```
+Current modules:
 
-Fixed to:
-```css
-/* ✅ Correct: hides outline for mouse, shows for keyboard users only */
-*:focus { outline: none; }
-*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-```
+- `Button`
+- `Badge`
+- `HealthDot`
+- `LoadingSpinner`
+- `StatCard`
+- `StatusBadge`
+- `ConfirmModal`
+- `Toast`
+- `PageHeader`
+- `DataTable`
+- `EmptyState`
+- `Breadcrumb`
+- `index.ts`
+
+### App shell
+
+`platform/client/src/components/layout`
+
+Current modules:
+
+- `LayoutWrapper`
+- `Sidebar`
+- `Header`
 
 ---
 
-## Component Reference
+## Recommended Usage Flow
 
-### ATOMS
+Every new app page should follow this shape:
 
-Atoms are the smallest building blocks. They have no sub-components.
+1. Page shell from `LayoutWrapper`
+2. Optional `Breadcrumb`
+3. `PageHeader`
+4. optional metrics using `StatCard`
+5. primary content using `DataTable` or form cards
+6. `EmptyState` when data is absent
+7. `Toast` for async feedback
+8. `ConfirmModal` for destructive actions
 
----
-
-#### `Button`
-
-```tsx
-import { Button } from '@/components/ui';
-
-// Variants
-<Button variant="primary">Send Campaign</Button>
-<Button variant="secondary">Cancel</Button>
-<Button variant="outline">View Details</Button>
-<Button variant="ghost">More options</Button>
-<Button variant="danger">Delete</Button>
-<Button variant="success">Verify Domain</Button>
-<Button variant="purple">Upgrade Plan</Button>
-
-// Sizes
-<Button size="sm">Small</Button>
-<Button size="md">Medium (default)</Button>
-<Button size="lg">Large</Button>
-<Button size="icon"><Trash2 className="h-4 w-4" /></Button>
-
-// Loading state (disables button + shows spinner)
-<Button isLoading={isSaving}>Saving...</Button>
-
-// Full width
-<Button fullWidth>Import All Contacts</Button>
-```
+This is the intended Phase 0 architecture. It is already possible with the current component set.
 
 ---
 
-#### `Badge`
+## Verified Component Notes
 
-```tsx
-import { Badge } from '@/components/ui';
+### `Button`
 
-<Badge variant="success">Active</Badge>
-<Badge variant="warning">Paused</Badge>
-<Badge variant="danger">Failed</Badge>
-<Badge variant="info">Scheduled</Badge>
-<Badge variant="accent">Pro Plan</Badge>
-<Badge variant="purple">Beta</Badge>
-<Badge variant="outline">Draft</Badge>
-<Badge variant="default">Unknown</Badge>
-```
+Use for:
 
----
+- primary actions
+- secondary actions
+- ghost/icon actions
+- loading submissions
 
-#### `HealthDot`
+Strengths:
 
-```tsx
-import { HealthDot } from '@/components/ui';
+- CVA variants
+- size variants
+- loading support
 
-<HealthDot status="good" label="Connected" />
-<HealthDot status="warning" label="Degraded" />
-<HealthDot status="danger" label="Offline" pulse />
-<HealthDot status="unknown" />
-```
+Current caution:
 
----
+- small and icon sizes do not satisfy a strict 44x44 mobile target rule
 
-#### `LoadingSpinner` / `PageLoader`
+### `Badge`
 
-```tsx
-import { LoadingSpinner, PageLoader } from '@/components/ui';
+Use for:
 
-// Inline spinner (e.g. next to text while fetching)
-<LoadingSpinner size="sm" />
-<LoadingSpinner size="md" label="Importing contacts..." />
+- plan labels
+- state labels
+- lightweight emphasis
 
-// Full page loading state
-<PageLoader label="Loading campaigns..." />
-```
+Current caution:
 
----
+- `info` and `purple` styles depend on tokens not yet defined in `globals.css`
 
-### MOLECULES
+### `StatusBadge`
 
-Molecules combine atoms into slightly more complex components.
+Use for:
 
----
+- campaign, contact, domain, and tenant state labels
 
-#### `StatCard`
+Current caution:
 
-```tsx
-import { StatCard } from '@/components/ui';
-import { Mail } from 'lucide-react';
+- some pages still ship page-local badge implementations instead of using this shared one
 
-<StatCard
-  label="Emails Sent"
-  value="24,831"
-  trend={12}
-  trendLabel="vs last month"
-  icon={<Mail className="h-5 w-5" />}
-/>
+### `StatCard`
 
-// Negative trend
-<StatCard label="Bounce Rate" value="1.2%" trend={-0.3} trendLabel="this week" />
+Use for:
 
-// No trend
-<StatCard label="Total Contacts" value="3,200" />
-```
+- top-of-page metrics
+- quick trend display
 
----
+Current caution:
 
-#### `StatusBadge`
+- some analytics pages still define local metric-card components instead of using the shared one
 
-Preconfigured badge for all entity statuses. Input a status string, get the right color automatically.
+### `DataTable`
 
-```tsx
-import { StatusBadge } from '@/components/ui';
+Use for:
 
-// Campaign statuses
-<StatusBadge status="draft" />        // grey   Draft
-<StatusBadge status="scheduled" />    // blue   Scheduled
-<StatusBadge status="processing" />   // blue   Sending...
-<StatusBadge status="throttled" />    // yellow ⏳ Throttled
-<StatusBadge status="completed" />    // green  Completed
-<StatusBadge status="paused" />       // yellow Paused
-<StatusBadge status="failed" />       // red    Failed
-<StatusBadge status="cancelled" />    // grey   Cancelled
+- list screens with local filtering and pagination
 
-// Contact statuses
-<StatusBadge status="subscribed" />   // green  Subscribed
-<StatusBadge status="unsubscribed" /> // yellow Unsubscribed
-<StatusBadge status="bounced" />      // red    Bounced
-<StatusBadge status="inactive" />     // grey   Inactive
+Built-in behavior:
 
-// Domain / tenant statuses
-<StatusBadge status="verified" />     // green  Verified
-<StatusBadge status="suspended" />    // red    ⛔ Suspended
-<StatusBadge status="pending" />      // yellow Pending
-<StatusBadge status="active" />       // green  Active
-```
+- search
+- sort
+- pagination
+- empty state
+- loading overlay
+
+Current caution:
+
+- major list pages are not fully standardized on this component yet
+
+### `ConfirmModal`
+
+Use for:
+
+- delete
+- cancel
+- suspend
+- irreversible actions
+
+Current caution:
+
+- Escape close exists
+- focus trap does not
+- initial focus and focus restore are not implemented
+
+### `Toast`
+
+Use for:
+
+- async success
+- warnings
+- API failures
+- information feedback
+
+Current caution:
+
+- info styling depends on missing tokens
+- adoption is still limited to a small subset of pages
 
 ---
 
-#### `ConfirmModal`
+## Verified Gaps
 
-Always show this before any destructive action (delete, suspend, cancel campaign).
+### Token completeness gap
 
-```tsx
-import { ConfirmModal } from '@/components/ui';
+Missing root variables are the main structural issue in the current design system.
 
-const [isOpen, setIsOpen] = useState(false);
-const [isDeleting, setIsDeleting] = useState(false);
+Missing values include:
 
-async function handleDelete() {
-    setIsDeleting(true);
-    await deleteContact(id);
-    setIsDeleting(false);
-    setIsOpen(false);
-    toast.success('Contact deleted.');
-}
+- typography tokens
+- purple accent token
+- info-state tokens
 
-<ConfirmModal
-    isOpen={isOpen}
-    onClose={() => setIsOpen(false)}
-    onConfirm={handleDelete}
-    title="Delete Contact"
-    message="This contact will be moved to trash. You can restore within 30 days."
-    confirmLabel="Delete"
-    cancelLabel="Cancel"
-    variant="danger"
-    isLoading={isDeleting}
-/>
-```
+### Adoption gap
 
-**Keyboard support:** `Escape` closes the modal. `Tab` cycles through buttons.
+The app still contains many pages with:
 
----
+- inline styles
+- hardcoded color values
+- page-specific visual patterns
 
-#### `useToast` Hook
+### Accessibility gap
 
-Add globally to your page — calls `toast.success()`, `toast.error()`, `toast.warning()`, `toast.info()` from anywhere. Auto-dismisses after 4 seconds.
+Phase 0 accessibility goals are not fully met because:
 
-```tsx
-import { useToast } from '@/components/ui';
+- the global focus reset still removes default outlines
+- modal focus management is incomplete
+- mobile hit targets are not consistently large enough
 
-function MyPage() {
-    const toast = useToast();
+### Environment setup gap
 
-    async function handleImport() {
-        try {
-            await importContacts(file);
-            toast.success('✅ 500 contacts imported successfully.');
-        } catch (err) {
-            toast.error('❌ Import failed. Please check your CSV format.');
-        }
-    }
-}
-```
+The Phase 0 plan also called for:
 
-**`ToastProvider` is already added to `layout.tsx`** — you don't need to add it again.
+- Mailhog in Docker
+- seed development data
+- fully documented `.env.example`
+
+Those items are still open.
 
 ---
 
-### ORGANISMS
+## Practical Rules For Future Work
 
-Organisms are full page sections that assemble multiple molecules.
+When building or editing frontend code after Phase 0:
 
----
-
-#### `PageHeader`
-
-Use at the top of every page. Accepts a title, optional subtitle, and optional action button.
-
-```tsx
-import { PageHeader, Button, Breadcrumb } from '@/components/ui';
-import { Upload } from 'lucide-react';
-
-<PageHeader
-    title="Contacts"
-    subtitle="Manage your subscriber lists"
-    breadcrumb={
-        <Breadcrumb items={[
-            { label: 'Contacts', href: '/contacts' }
-        ]} showHome />
-    }
-    action={
-        <Button onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4" />
-            Import
-        </Button>
-    }
-/>
-```
+- prefer shared UI components before creating page-local ones
+- prefer token classes or CSS variables before hardcoded colors
+- do not add new inline style-heavy layouts unless temporary
+- use `Button isLoading` for async submits
+- use `ConfirmModal` for destructive actions
+- use `useToast` for user-visible API results
+- use `EmptyState` instead of blank containers
 
 ---
 
-#### `Breadcrumb`
+## Recommended Work To Finish The Design System
 
-```tsx
-import { Breadcrumb } from '@/components/ui';
+### Foundation fixes
 
-// Simple
-<Breadcrumb items={[
-    { label: 'Campaigns', href: '/campaigns' },
-    { label: 'Holiday Sale', href: '/campaigns/123' },
-    { label: 'Analytics' },   // last item: no href = current page
-]} />
+- define all missing tokens in `globals.css`
+- remove unsupported Tailwind token aliases or back them with real values
+- remove the global `*:focus { outline: none; }`
 
-// With home icon
-<Breadcrumb showHome items={[{ label: 'Templates' }]} />
-```
+### Component hardening
 
-**Accessibility:** renders a `<nav aria-label="Breadcrumb">` with `aria-current="page"` on the last item.
+- improve `ConfirmModal` accessibility
+- verify all component variants against actual token support
 
----
+### Product migration
 
-#### `EmptyState`
+- convert layout shell to token-only styling
+- migrate major feature pages onto shared components
+- replace local badges/cards/tables with shared versions
 
-Show when a table or list has 0 rows. **Never show a blank white space.**
+### Developer setup
 
-```tsx
-import { EmptyState, Button } from '@/components/ui';
-import { Users } from 'lucide-react';
-
-{contacts.length === 0 && (
-    <EmptyState
-        icon={<Users className="h-12 w-12" />}
-        title="No contacts yet"
-        description="Import a CSV to get started. Supports up to 100k rows."
-        action={
-            <Button onClick={() => setImportOpen(true)}>
-                Import Contacts
-            </Button>
-        }
-    />
-)}
-```
+- add Mailhog profile
+- add seed script
+- document all env vars
 
 ---
 
-#### `DataTable`
+## Current Status
 
-Full-featured table with built-in search, sort, and pagination.
+The current design system should be described as:
 
-```tsx
-import { DataTable, StatusBadge, Button } from '@/components/ui';
-import { Column } from '@/components/ui';
-
-interface Contact { id: string; name: string; email: string; status: string; }
-
-const columns: Column<Contact>[] = [
-    { key: 'name',   header: 'Name',   sortable: true },
-    { key: 'email',  header: 'Email',  sortable: true },
-    { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status as any} /> },
-    { key: 'actions', header: '', width: '80px',
-      render: (row) => (
-        <Button variant="ghost" size="icon" onClick={() => handleDelete(row.id)}>
-            <Trash2 className="h-4 w-4" />
-        </Button>
-      )
-    },
-];
-
-<DataTable
-    columns={columns}
-    data={contacts}
-    isLoading={isFetching}
-    searchable
-    searchPlaceholder="Search contacts..."
-    searchKeys={['name', 'email']}
-    pageSize={25}
-    emptyTitle="No contacts found"
-    emptyDescription="Try a different search or import contacts."
-    actions={
-        <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-            Delete Selected
-        </Button>
-    }
-/>
-```
-
----
-
-## Standard Page Layout Pattern
-
-Every new page **must** follow this layout:
-
-```tsx
-export default function MyPage() {
-    const toast = useToast();
-
-    return (
-        <div className="p-6">
-
-            {/* 1. Header */}
-            <PageHeader
-                title="Page Title"
-                subtitle="Short description"
-                action={<Button>Primary Action</Button>}
-            />
-
-            {/* 2. Stat cards (3–4 key metrics) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <StatCard label="Total" value="1,234" trend={5} />
-                <StatCard label="Active" value="892" />
-                <StatCard label="Failed" value="12" trend={-2} />
-                <StatCard label="Rate" value="24.3%" trend={1.2} />
-            </div>
-
-            {/* 3. Main content (table, form, etc.) */}
-            <DataTable columns={columns} data={data} ... />
-
-            {/* 4. Empty state shown automatically by DataTable when data=[] */}
-        </div>
-    );
-}
-```
-
----
-
-## UX Rules — Non-Negotiable
-
-These rules apply to **every** page and every PR gets rejected if these are violated:
-
-| Rule | Implementation |
-|---|---|
-| Every delete action | Must show `<ConfirmModal>` first |
-| Every form submit | Show `isLoading` on `<Button>` while waiting |
-| Every API success | Call `toast.success('✅ ...')` |
-| Every API error | Call `toast.error('❌ Something went wrong.')` |
-| Every empty list | Show `<EmptyState>` with a CTA button |
-| Every list page | Has a search input |
-| Mobile viewport | Sidebar hidden, hamburger shows |
-
----
-
-## Dependency Added
-
-```bash
-npm install class-variance-authority
-```
-
-Used by `Button.tsx` and `Badge.tsx` for type-safe variant management.
-
----
-
-## Next Phase
-
-**Phase 1.5 — Auth Cleanup** (fix forgot password, enable Google login, add audit logs)
+**Established and usable, but not yet complete or consistently adopted across the app.**

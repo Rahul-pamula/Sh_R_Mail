@@ -24,98 +24,112 @@ To prevent platform/system emails from going to spam due to DMARC/Spoofing rules
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-� PHASE 0 — UI/UX Design System (Do FIRST before any new page)
-  WHY: Currently pages use inline styles + hardcoded hex colors.
-       This makes each page look different and inconsistent.
-       Do this once → all future pages look professional automatically.
+🏗 PHASE 0 — UI/UX Foundation and Design System
+  WHY: This phase establishes the frontend baseline before feature work scales.
+       It should define the visual language, reusable UI primitives, interaction rules,
+       accessibility defaults, and local frontend setup.
 
-  [SETUP — One Time, ~1 Day]
-  - [ ] Install shadcn/ui (40+ professional components pre-built)
-      → npx shadcn-ui@latest init
-      → Add: Button, Card, Badge, Table, Dialog, Toast, Tabs, Select, Progress
-  - [ ] Install Google Font (Inter) in layout.tsx
-      → Inter is what Mailchimp, Vercel, Linear, Notion use
+  VERIFIED STATUS:
+  - Foundation exists, but Phase 0 is NOT fully complete.
+  - Shared components are built.
+  - Core dark-theme tokens exist.
+  - Adoption across product pages is still incomplete.
+  - Accessibility and dev-setup items are still open.
 
-  [DESIGN TOKENS — globals.css — Define Once, Use Everywhere]
-  - [ ] CSS Color Variables (never hardcode hex colors in components again):
-      --bg-primary:    #0F172A   (page background)
-      --bg-card:       #1E293B   (card surface)
-      --bg-hover:      #293548   (hover state)
-      --accent:        #3B82F6   (primary blue CTA)
-      --accent-purple: #8B5CF6   (secondary / gradients)
-      --text-primary:  #F1F5F9   (headings, labels)
-      --text-muted:    #94A3B8   (descriptions, placeholders)
-      --border:        #334155   (card borders, dividers)
-      --success:       #10B981   (green — sent, verified)
-      --warning:       #F59E0B   (yellow — 80% quota, paused)
-      --danger:        #EF4444   (red — failed, blocked)
-  - [ ] Typography scale:
-      H1: 28px bold  | H2: 20px semibold | H3: 16px semibold
-      Body: 14px     | Caption: 12px     | Mono: 13px (for IDs, codes)
+  [ARCHITECTURE]
+  - Token source: `platform/client/src/app/globals.css`
+  - Tailwind token bridge: `platform/client/tailwind.config.ts`
+  - Root wiring: `platform/client/src/app/layout.tsx`
+  - Shared UI library: `platform/client/src/components/ui/*`
+  - App shell: `platform/client/src/components/layout/*`
 
-  [REUSABLE COMPONENTS — Follow Atomic Design Principle]
-  Components are organized in 3 layers so new developers understand at a glance:
+  [TECH STACK]
+  - Next.js 14 App Router
+  - React 18
+  - TypeScript
+  - Tailwind CSS
+  - CSS Variables
+  - Inter via `next/font/google`
+  - `class-variance-authority`
+  - `lucide-react`
 
-  ATOMS — Single purpose, no sub-components:
-  - [ ] Button.tsx        → Primary, secondary, danger, ghost variants
-  - [ ] Badge.tsx         → Small pill label (Free, Pro, Active)
-  - [ ] HealthDot.tsx     → 🟢🟡🔴 colored dot with label
-  - [ ] LoadingSpinner.tsx → Spinner on buttons while API awaits
+  [SETUP]
+  - [ ] shadcn/ui installed and initialized
+      → No verified `components.json` or generated shadcn component setup found
+  - [x] Inter font installed in root layout
 
-  MOLECULES — Combined atoms:
-  - [ ] StatCard.tsx      → Large number + label + trend (↑12%)
-  - [ ] StatusBadge.tsx   → Colored pill: sent/draft/failed/paused/active/throttled
-  - [ ] ConfirmModal.tsx  → "Are you sure?" popup with confirm/cancel buttons
-  - [ ] Toast system      → Success/warning/error popup notifications
+  [DESIGN TOKENS]
+  - [x] Core dark-mode tokens exist in `globals.css`
+      → background, text, border, radius, shadow, success/warning/danger
+  - [ ] Typography scale is fully defined
+      → `--text-h1`, `--text-h2`, `--text-h3`, `--text-body`, `--text-caption`, `--text-mono` are referenced but not defined
+  - [ ] Semantic token set is complete
+      → `--info`, `--info-bg`, `--accent-purple` are referenced but not defined
+  - [ ] App no longer uses hardcoded colors or inline style-heavy UI
+      → many pages still use `style={{}}`, hex colors, and `rgba(...)`
 
-  ORGANISMS — Full sections with multiple molecules:
-  - [ ] PageHeader.tsx    → Title + subtitle + right-side action button
-  - [ ] DataTable.tsx     → Table + search bar + sort + pagination
-  - [ ] EmptyState.tsx    → Icon + message + CTA when list is empty
-  - [ ] Breadcrumb.tsx    → Campaigns > Holiday Sale > Analytics (back navigation)
+  [REUSABLE COMPONENTS]
+  - [x] `Button.tsx`
+  - [x] `Badge.tsx`
+  - [x] `HealthDot.tsx`
+  - [x] `LoadingSpinner.tsx`
+  - [x] `StatCard.tsx`
+  - [x] `StatusBadge.tsx`
+  - [x] `ConfirmModal.tsx`
+  - [x] `Toast.tsx`
+  - [x] `PageHeader.tsx`
+  - [x] `DataTable.tsx`
+  - [x] `EmptyState.tsx`
+  - [x] `Breadcrumb.tsx`
+  - [x] `src/components/ui/index.ts`
 
-  SETUP:
-  - [ ] tailwind.config.js → Map CSS variables to Tailwind class names:
-      → bg-primary, text-muted, border-subtle usable in className="bg-primary"
+  [TAILWIND BRIDGE]
+  - [x] Tailwind config maps tokens to utility names
+  - [ ] All mapped Tailwind token names resolve to actual CSS variables
+      → several HSL/shadcn-style aliases are configured without matching root variables
 
-  [STANDARD PAGE LAYOUT — Every New Page Follows This]
-      1. <PageHeader title="Contacts" action={<Button>Import</Button>} />
-      2. <StatsRow>  — 3 to 4 StatCards (key metrics at a glance)
-      3. <DataTable> — Main content (table, cards, or form)
-      4. <EmptyState>— Shown if table has 0 rows (not a blank white box!)
+  [STANDARD PAGE MODEL]
+  Target pattern for feature pages:
+      1. `Breadcrumb` if needed
+      2. `PageHeader`
+      3. optional `StatCard` row
+      4. `DataTable` or standardized content block
+      5. `EmptyState` when data is absent
+      6. `Toast` for async feedback
+      7. `ConfirmModal` for destructive actions
 
-  [UX RULES — Non-Negotiable on Every Page]
-  - [ ] Every delete action → show ConfirmModal first
-  - [ ] Every form submit  → show loading spinner on button while waiting
-  - [ ] Every API success  → show Toast: "✅ Contacts imported successfully"
-  - [ ] Every API error    → show Toast: "❌ Something went wrong. Try again."
-  - [ ] Every empty list   → show EmptyState with helpful CTA button
-  - [ ] Every list page    → has search input + at least one filter option
-  - [ ] Mobile responsive  → sidebar hidden on mobile, hamburger menu added
+  [UX RULES]
+  - [ ] Every destructive action uses `ConfirmModal`
+  - [ ] Every async form submit uses loading state consistently
+  - [ ] Every API success path uses toast feedback consistently
+  - [ ] Every API error path uses toast feedback consistently
+  - [ ] Every empty list uses `EmptyState`
+  - [ ] Every list page has consistent search plus filter behavior
+  - [ ] Mobile navigation is complete end-to-end
+      → mobile menu button exists, but full sidebar toggle behavior is not fully implemented
 
-  [ACCESSIBILITY — WCAG 2.1 AA]
-  - [ ] FIX globals.css → Remove or override "*:focus { outline: none }" if it exists
-      → A simple :focus-visible is not enough if the * selector has higher precedence.
-      → Ensure the hard reset is completely removed. Replace with:
-         *:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  - [ ] Color contrast: --text-muted (#94A3B8) on --bg-card (#1E293B) = 5.6:1 ✅ passes
-  - [ ] Keyboard navigation for all modals (Escape to close, Tab through buttons)
-  - [ ] ARIA labels on all icon-only buttons (e.g. delete, edit, close)
-  - [ ] Minimum 44x44px touch targets on all buttons (mobile)
+  [ACCESSIBILITY]
+  - [ ] Remove global `*:focus { outline: none }`
+  - [ ] Modal accessibility is complete
+      → Escape close exists, but focus trap and focus restore are missing
+  - [ ] Icon-only buttons are fully labeled app-wide
+  - [ ] 44x44 touch-target guidance is satisfied app-wide
+  - [ ] Color-contrast verification is documented for the actual token values in use
 
   [LOCAL DEVELOPMENT SETUP]
-  - [ ] Add Mailhog to docker-compose.yml as dev-only service:
-      → docker-compose --profile dev  → starts Mailhog on port 8025
-      → Mailhog = fake SMTP server, all emails go to web UI, not real inboxes
-      → Developers can test emails without needing Amazon SES credentials
-  - [ ] Seed data script (scripts/seed_dev_data.py):
-      → Creates: 1 tenant, 500 fake contacts, 3 templates, 2 campaigns
-      → New developer runs this once to get a realistic test environment
-  - [ ] .env.example file with ALL variables documented
-      → Every variable has a comment explaining what it does
+  - [ ] Mailhog added to `docker-compose.yml`
+  - [ ] `scripts/seed_dev_data.py` added
+  - [ ] `.env.example` fully documents all required variables
 
-  NOTE: Phase 0 = 1 day. Saves 2 weeks of fixing inconsistent UIs later.
-        Priority: Do before Phase 1.5 or Phase 3 frontend work.
+  [PHASE 0 DONE MEANS]
+  - token system is complete and internally consistent
+  - shared UI is used by the main product pages
+  - accessibility baseline is enforced
+  - local frontend/email testing setup is reproducible
+
+  NOTE:
+  - Correct status: Partially complete
+  - Correct summary: the design-system foundation exists, but standardization work remains
 
 ─────────────────────────────────────────
 �🏗 PHASE 1 — Foundation ✅ DONE
@@ -638,4 +652,3 @@ RUNBOOK 3: "Monthly operations checklist for the company"
   - [ ] Check AWS SES sending limits in AWS Console
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
