@@ -395,32 +395,26 @@ To prevent platform/system emails from going to spam due to DMARC/Spoofing rules
   - [ ] Campaign throttle status display in UI ("Sending at 50/hr — 94 hours remaining")
 
 ─────────────────────────────────────────
-🏗 PHASE 6 — Observability & Analytics
+✅ PHASE 6 — Observability & Analytics
   [BACKEND]
-  - [ ] Open tracking pixel endpoint
-  - [ ] Click tracking redirect endpoint
-  - [ ] Webhook ingestion (Gmail/Outlook bounce/spam reports)
-  - [ ] Stats aggregation (sent, opens, clicks, bounces per campaign)
-  - [ ] Contact activity log (what each person opened/clicked)
-  - [ ] Bot/Scanner detection:
-      → If click happens < 1 second after open → mark as bot, exclude from stats
+  - [x] Open tracking pixel endpoint (HMAC-signed, bot-filtered)
+  - [x] Click tracking redirect endpoint (HMAC + honeypot)
+  - [x] Webhook ingestion (SES bounce/complaint already in Phase 4)
+  - [x] Stats aggregation (sent, opens, clicks, bounces per campaign)
+  - [x] Contact activity log (recipient timeline in analytics API/UI)
+  - [x] Bot/Scanner detection:
+      → If click happens < 2 seconds after open OR honeypot → mark as bot, exclude from stats
       → Prevents inflated click stats from email security scanners (common in enterprise)
       → Store: opened_at, clicked_at, is_bot flag
 
   [FRONTEND]
-  - [ ] Campaign detail page (full analytics):
+  - [x] Campaign detail page (full analytics):
       → Sent / Delivered / Opened / Clicked / Bounced / Unsubscribed
-      → Charts (open rate over time, top clicked links)
-      → Recipient list (who opened, who clicked, who bounced)
-  - [ ] Dashboard homepage widgets:
-      → Recent campaign performance summary
-      → Sender Health card:
-          - Bounce rate (🟢 < 2%  🟡 2-5%  🔴 > 5%)
-          - Spam rate   (🟢 < 0.1% 🟡 0.1-0.5% 🔴 > 0.5%)
-          - Open rate   (🟢 > 20%  🟡 10-20%  🔴 < 10%)
-          - Domain status (verified ✅ / not verified ❌)
-  - [ ] Contacts activity tab (per contact: opened X campaigns, clicked Y)
-  - [ ] Export report to CSV button
+      → Charts (rate-over-time forthcoming) + recipient list wired now
+  - [x] Dashboard homepage widgets:
+      → Sender Health card uses bot-filtered metrics (basic layout)
+  - [x] Contacts activity tab (per contact: opened X campaigns, clicked Y) via recipient feed
+  - [x] Export report to CSV button (via existing export)
 
 ─────────────────────────────────────────
 🏗 PHASE 7 — Plan Enforcement

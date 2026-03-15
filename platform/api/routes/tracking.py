@@ -6,8 +6,10 @@ Endpoints:
   GET /track/click                → records click, redirects to destination URL
 """
 import base64
-import time
-from fastapi import APIRouter, Request, Query
+import hashlib
+import hmac
+import os
+from fastapi import APIRouter, Request, Query, HTTPException
 from fastapi.responses import Response, RedirectResponse
 from utils.supabase_client import db
 import logging
@@ -49,6 +51,8 @@ PROXY_IP_PREFIXES = [
     "216.39.62.", "66.218.66.",
 ]
 
+TRACKING_SECRET = os.getenv("TRACKING_SECRET", "dev-tracking-secret")
+
 def _is_bot(user_agent: str, ip: str = "") -> bool:
     ua = (user_agent or "").lower()
     if any(frag in ua for frag in BOT_UA_FRAGMENTS):
@@ -61,8 +65,14 @@ def _is_bot(user_agent: str, ip: str = "") -> bool:
 
 
 
-def _record_event(dispatch_id: str, event_type: str, url: str | None,
-                  ip: str, user_agent: str) -> None:
+def _record_event(
+    dispatch_id: str,
+    event_type: str,
+    url: str | None,
+    ip: str,
+    user_agent: str,
+    force_bot: bool = False,
+) -> None:
     """Fire-and-forget: record tracking event in email_events table."""
     try:
         # Get dispatch info
@@ -90,7 +100,7 @@ def _record_event(dispatch_id: str, event_type: str, url: str | None,
             return
 
         tenant_id = camp.data[0]["tenant_id"]
-        is_bot    = _is_bot(user_agent, ip)
+        is_bot    = force_bot or _is_bot(user_agent, ip)
 
         # Bot detection for click: check if there was a recent open
         # If no open exists yet for this dispatch, it may be a scanner prefetch
@@ -138,9 +148,18 @@ def _record_event(dispatch_id: str, event_type: str, url: str | None,
 
 # ── Open Tracking ──────────────────────────────────────────────────────────────
 
+def _verify_signature(dispatch_id: str, payload: str | None, signature: str | None) -> None:
+    if not signature:
+        raise HTTPException(status_code=400, detail="missing signature")
+    base = dispatch_id if payload is None else f"{dispatch_id}:{payload}"
+    expected = hmac.new(TRACKING_SECRET.encode(), base.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail="invalid signature")
+
+
 @router.get("/open/{dispatch_id}")
 @limiter.limit("5000/minute")
-async def track_open(dispatch_id: str, request: Request):
+async def track_open(dispatch_id: str, request: Request, s: str | None = Query(None)):
     """
     Email open tracking pixel.
     Returns a 1×1 transparent GIF. Browser loads this image on email open.
@@ -148,6 +167,8 @@ async def track_open(dispatch_id: str, request: Request):
     """
     ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
+
+    _verify_signature(dispatch_id, None, s)
 
     _record_event(dispatch_id, "open", None, ip, user_agent)
 
@@ -167,8 +188,10 @@ async def track_open(dispatch_id: str, request: Request):
 @limiter.limit("5000/minute")
 async def track_click(
     request: Request,
-    url: str = Query(..., description="Destination URL (base64url encoded)"),
-    d: str   = Query(..., description="dispatch_id"),
+    u: str = Query(..., description="Destination URL (base64url encoded)"),
+    d: str = Query(..., description="dispatch_id"),
+    s: str | None = Query(None, description="HMAC signature"),
+    hp: int | None = Query(None, description="Honeypot flag"),
 ):
     """
     Link click tracker.
@@ -179,11 +202,15 @@ async def track_click(
     user_agent = request.headers.get("user-agent", "")
 
     # Decode the destination URL
+    padding = '=' * (-len(u) % 4)
+    encoded = f"{u}{padding}"
     try:
-        destination = base64.urlsafe_b64decode(url.encode() + b"==").decode()
+        destination = base64.urlsafe_b64decode(encoded.encode()).decode()
     except Exception:
-        destination = url  # Fallback: use as-is if not base64
+        destination = u  # Fallback: use as-is if decode fails
 
-    _record_event(d, "click", destination, ip, user_agent)
+    _verify_signature(d, u, s)
+
+    _record_event(d, "click", destination, ip, user_agent, force_bot=bool(hp))
 
     return RedirectResponse(url=destination, status_code=302)
