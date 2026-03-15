@@ -334,31 +334,32 @@ To prevent platform/system emails from going to spam due to DMARC/Spoofing rules
 
 
 ─────────────────────────────────────────
-🏗 PHASE 4 — Campaign Orchestration ✅ DONE
+🏗 PHASE 4 — Campaign Orchestration ⚠ MOSTLY COMPLETE
   [BACKEND]
   - [x] Campaign CRUD
-  - [x] Snapshot HTML + recipients
-  - [x] Insert email_tasks
+  - [x] Snapshot campaign content + dispatch intents
+      → Runtime uses `campaign_snapshots` and `campaign_dispatch`, not `email_tasks`, as the active orchestration model
+  - [ ] Insert email_tasks
+      → Old checklist item is outdated relative to current implementation
   - [x] Spintax + merge tags
-  - [ ] Scheduled sending (cron trigger at scheduled_at)
-  - [ ] Pause/resume campaign
-  - [ ] Cancel campaign mid-send
+  - [x] Scheduled sending
+      → Verified in both embedded API scheduler and standalone worker scheduler, but architecture is duplicated
+  - [x] Pause/resume campaign
+  - [x] Cancel campaign mid-send
   - [ ] Resend to unopened contacts
 
   [FRONTEND]
   - [x] Campaigns list page (status badges, stats)
-  - [x] Create campaign form (name, subject, template, audience)
+  - [x] Create campaign wizard (details → audience → content → review)
   - [x] Campaign detail page (basic)
-  - [ ] Campaign creation wizard (step-by-step: content → audience → schedule → review)
-  - [ ] Pre-send checklist popup (before "Send" button works):
-      → Template has unsubscribe link ✅/❌
-      → Domain is verified ✅/❌
-      → Audience has > 0 contacts ✅/❌
-      → Bounce rate is acceptable ✅/❌
-  - [ ] Schedule picker (date/time input for scheduled send)
-  - [ ] Schedule picker (date/time input for scheduled send)
-  - [ ] Pause button / Cancel button on in-progress campaign
+  - [x] Campaign creation wizard (step-by-step: content → audience → schedule → review)
+  - [x] Pre-send checklist UI
+      → Checks name, sender identity, subject, content, and audience
+      → Does not yet expose richer deliverability/compliance checks promised by older docs
+  - [x] Schedule picker (date/time input for scheduled send)
+  - [x] Pause button / Cancel button on in-progress campaign
   - [ ] Send test email modal (enter email address, preview)
+      → Backend route exists, but the current frontend temp-draft flow does not fully match required campaign fields
 
 ─────────────────────────────────────────
 🏗 PHASE 5 — Delivery Engine ✅ DONE

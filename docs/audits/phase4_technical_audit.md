@@ -1,207 +1,364 @@
-# Phase 4 — Campaign Orchestration: Complete Technical Audit
+# Phase 4 Technical Audit - Campaign Orchestration
 
----
+> Audit basis: code verification
+> Audit date: March 15, 2026
+> Scope: campaign routes, models, scheduler paths, worker behavior, and campaign frontend
+> Verdict: Campaign orchestration is operational, but the current docs overstate completeness and understate contract drift
 
-## Section 1 — What We Built
+## Executive Verdict
 
-### 1.1 Campaign CRUD & State Machine
+Phase 4 is implemented as a real campaign subsystem. The platform can already create drafts, edit campaigns, choose audiences, schedule sends, send immediately, insert dispatch intents, publish RabbitMQ tasks, and manage campaigns through pause, resume, and cancel.
 
-Campaigns are the central object in Phase 4. A campaign moves through a well-defined state machine managed by both Supabase (persistence) and Redis (live signals to workers).
+The major problem is not absence of orchestration. The major problem is mismatch:
 
-**States:**
-- `draft` → `scheduled` → `sending` → `sent`
-- `sending` → `paused` → `sending` (resume)
-- `sending` → `cancelled`
+- docs still describe a cleaner and more complete architecture than the code actually has
+- some frontend actions do not match the backend contract
+- the scheduler exists in two places
+- `email_tasks` is not the active orchestration primitive even though older docs say it is
 
-**Code Path:** `routes/campaigns.py`
+The correct status is:
 
-**Key Design Decision: Separate Redis vs Supabase state**
-- **Redis** stores `SENDING` / `PAUSED` / `CANCELLED` as a fast key-value for the worker to check on every message.
-- **Supabase** stores the human-readable status for UI display and filtering.
-- This means the worker can be paused in milliseconds (Redis write) without waiting for a DB round-trip.
+- orchestration core: implemented
+- operator lifecycle controls: implemented
+- overall completeness against original Phase 4 goals: mostly complete, not fully complete
 
-### 1.2 Campaign Wizard (4-Step UI)
+## Audit Scope
 
-**Component Path:** `platform/client/src/components/CampaignWizard/Steps/`
+Code paths reviewed:
 
-The wizard is a single state object passed between steps, auto-saved to `localStorage` on every change:
+- `platform/api/routes/campaigns.py`
+- `platform/api/models/campaign.py`
+- `platform/api/main.py`
+- `platform/worker/scheduler.py`
+- `platform/worker/email_sender.py`
+- `platform/client/src/components/CampaignWizard/index.tsx`
+- `platform/client/src/components/CampaignWizard/Steps/Step1Details.tsx`
+- `platform/client/src/components/CampaignWizard/Steps/Step2Audience.tsx`
+- `platform/client/src/components/CampaignWizard/Steps/Step3Content.tsx`
+- `platform/client/src/components/CampaignWizard/Steps/Step4Review.tsx`
+- `platform/client/src/app/campaigns/page.tsx`
+- `platform/client/src/app/campaigns/[id]/page.tsx`
+- `platform/client/src/app/campaigns/new/page.tsx`
 
-```javascript
-wizardData = {
-  name: string,
-  subject: string,
-  listId: string,       // 'all' or 'batch:<uuid>'
-  listName: string,     // display label
-  templateName: string,
-  htmlContent: string,
-}
-```
+## Current Technical Architecture
 
-**State Persistence Pattern:** The wizard saves to `localStorage` on every field change, so the user never loses work on accidental refresh. On mount, the wizard checks `localStorage` and restores the draft.
+### API layer
 
-### 1.3 Pre-Send Checklist
+FastAPI exposes campaign operations under `/campaigns`.
 
-Implemented in `Step4Review.tsx`. The checklist is a computed array of `{ label, ok }` objects evaluated synchronously from `wizardData`. The "Launch Campaign" button has a hard `disabled` gate until all 4 checks pass:
+Verified routes:
 
-```
-✅ Campaign name set
-✅ Subject line filled
-✅ Content written
-✅ Audience selected
-```
+- `POST /campaigns/`
+- `GET /campaigns/`
+- `GET /campaigns/{campaign_id}`
+- `GET /campaigns/{campaign_id}/dispatch`
+- `PATCH /campaigns/{campaign_id}`
+- `PUT /campaigns/{campaign_id}`
+- `DELETE /campaigns/{campaign_id}`
+- `POST /campaigns/{campaign_id}/schedule`
+- `POST /campaigns/{campaign_id}/send`
+- `POST /campaigns/{campaign_id}/pause`
+- `POST /campaigns/{campaign_id}/resume`
+- `POST /campaigns/{campaign_id}/cancel`
+- `POST /campaigns/{campaign_id}/preview`
+- `POST /campaigns/{campaign_id}/test`
 
-### 1.4 Scheduled Sending Architecture
+### Persistence model
 
-**Two-part system:**
+The active Phase 4 orchestration model uses:
 
-| Part | What It Does | Where It Lives |
-|------|-------------|----------------|
-| `POST /campaigns/{id}/schedule` | Validates future date, sets `status='scheduled'` | `routes/campaigns.py` |
-| Embedded Scheduler | Polls every 60s, dispatches due campaigns | Asyncio background task in `main.py` lifespan |
+- `campaigns`
+- `campaign_snapshots`
+- `campaign_dispatch`
 
-**Why embedded (not a separate process):**
-Using FastAPI's `@asynccontextmanager` `lifespan`, the scheduler runs as a coroutine in the same event loop as the API. No extra terminal, no port conflicts, no inter-process communication needed.
+Important correction:
 
-```python
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_run_scheduler())
-    yield
-    task.cancel()
-```
+- the active runtime code does not orchestrate sends by inserting `email_tasks`
+- the real orchestration primitive is `campaign_dispatch` plus RabbitMQ tasks
 
-### 1.5 Delete vs Archive Logic
+### Worker-state model
 
-| Status | Action | Reason |
-|--------|--------|--------|
-| `draft` | `DELETE FROM campaigns WHERE id=...` | No emails sent. No analytics impact. |
-| Any other | `UPDATE campaigns SET is_archived=true` | Keeps unsubscribe links valid (CAN-SPAM). Preserves analytics. |
+Runtime live state is intentionally split:
 
-`GET /campaigns/` always filters `.is_("is_archived", "false")` so archived campaigns never appear in the UI.
+- Redis stores worker-facing fast state like `SENDING`, `PAUSED`, and `CANCELLED`
+- PostgreSQL stores persistent campaign status for UI and querying
 
----
+This is a valid pattern, but the docs need to state it directly.
 
-## Section 2 — Security Review
+### Scheduler model
 
-### 2.1 Critical Security Controls
+There are currently two scheduler implementations:
 
-| Control | Status | Implementation |
-|---------|--------|----------------|
-| **Tenant Isolation** | ✅ Enforced | Every campaign query includes `.eq("tenant_id", tenant_id)` from JWT. |
-| **Campaign Ownership** | ✅ Enforced | Pause/Resume/Cancel/Delete all verify ownership before taking action. |
-| **Schedule Past Prevention** | ✅ Enforced | API validates `scheduled_dt <= datetime.now(UTC)` rejects with 400. |
-| **Cancel on Already-Sent** | ✅ Handled | If all dispatch records are DISPATCHED, cancel marks campaign as 'sent' not 'cancelled'. |
-| **Draft Delete Safety** | ✅ Enforced | Only `status='draft'` campaigns can be permanently deleted. |
+1. embedded scheduler in `platform/api/main.py`
+2. standalone scheduler in `platform/worker/scheduler.py`
 
-### 2.2 Potential Risks
+Both poll for:
 
-1. **Scheduler Double-Dispatch Risk:**
-   - *Risk:* If two API instances run simultaneously (horizontal scaling), both schedulers could pick up the same campaign.
-   - *Mitigation (Current):* The scheduler immediately updates `status='sending'` before dispatching. Second instance will see `status='sending'` and skip it.
-   - *Production Fix:* Add `SELECT ... FOR UPDATE SKIP LOCKED` via a Supabase RPC to make this atomic at the DB level.
+- `status = scheduled`
+- `scheduled_at <= now`
+- `is_archived = false`
 
-2. **`localStorage` Draft Exposure:**
-   - *Risk:* Campaign drafts are stored in browser `localStorage`, which is accessible to any JS on the page (XSS risk).
-   - *Mitigation:* The HTML content written is sanitized on the backend before storage. Frontend does not execute stored HTML.
-   - *Production Fix:* Move draft auto-save to `POST /campaigns/` on each step (save as draft server-side).
+and then dispatch due campaigns.
 
-3. **Unprotected Test Email Endpoint:**
-   - *Risk:* `POST /campaigns/{id}/test` creates a temporary draft campaign. These temp drafts accumulate in the DB.
-   - *Mitigation:* The temp drafts don't get dispatched to the real audience.
-   - *Production Fix:* Add a cleanup cron to delete draft campaigns older than 24 hours with name prefix `[TEST]`.
+This means scheduled sending exists, but the architecture is duplicated.
 
----
+## Verified Backend Logic
 
-## Section 3 — Edge Case Review
+## 1. Campaign creation and update
 
-### 3.1 Cancel During Last Email
-- **Scenario:** Worker is on the last email when user clicks Cancel.
-- **Behavior:** The last email gets dispatched (already PROCESSING), then the worker calls the auto-complete check. The scheduler checks: 0 PENDING records remain → sets campaign to `sent`.
-- **Cancel API response:** Returns `"status": "sent"` instead of `"cancelled"`, correctly reflecting reality.
+`CampaignCreate` currently requires:
 
-### 3.2 Schedule in the Past
-- **Scenario:** User somehow submits a `scheduled_at` time that's already passed.
-- **Behavior:** Backend API checks `if scheduled_dt <= datetime.now(UTC)` → raises `HTTP 400`.
-- **Result:** User sees an error immediately. Campaign is never created.
+- `name`
+- `subject`
+- `body_html`
+- `from_name`
+- `from_prefix`
+- `domain_id`
 
-### 3.3 Pause with No Pending Emails
-- **Scenario:** User clicks Pause after all emails are already DISPATCHED.
-- **Behavior:** Redis is set to PAUSED. DB status set to `paused`. But on next worker check (auto-complete), it sees 0 PENDING records and updates to `sent`.
-- **Result:** The campaign briefly shows `paused` then updates to `sent`. This is acceptable behavior.
+plus optional status and scheduling.
 
-### 3.4 Audience is Empty at Send Time
-- **Scenario:** User selects a batch that has been cleared, then clicks Send.
-- **Behavior:** `send_campaign()` queries contacts with the batch filter, gets 0 results → raises `HTTP 400 "No contacts found for audience"`.
-- **Result:** Campaign remains as `draft`. No RabbitMQ tasks created.
+This is stricter than some frontend helper flows assume.
 
-### 3.5 Wizard Draft Conflict
-- **Scenario:** User has a draft in `localStorage` from an old campaign and starts a new one.
-- **Behavior:** Opening `/campaigns/new` loads localStorage data. The user will see the old name/subject pre-filled.
-- **Mitigation:** The wizard shows the restored data clearly; user can overwrite.
-- **Production Fix:** Key the localStorage by timestamp or prompt user "Restore previous draft?".
+Create route behavior:
 
----
+- verifies tenant is active
+- verifies selected domain belongs to tenant and is verified
+- inserts campaign row
 
-## Section 4 — Code Quality & Architecture
+Update behavior:
 
-### 4.1 Architecture Score
+- `PATCH` allows partial updates
+- `PUT` allows draft/paused editing with a separate flow
 
-| Category | Score | Reasoning |
-|----------|-------|-----------|
-| **Structure** | **8/10** | Campaign logic is contained in `campaigns.py`. The embedded scheduler adds a few lines to `main.py` but avoids a whole extra process. |
-| **Reliability** | **8/10** | Redis + DB dual-state model is robust. The auto-complete logic correctly handles race conditions for small audiences. |
-| **Scalability** | **7/10** | Single scheduler instance is fine for MVP. Needs distributed lock (Redis SETNX or Postgres FOR UPDATE SKIP LOCKED) for multi-instance production. |
-| **UX Quality** | **9/10** | Wizard with localStorage persistence, pre-send checklist, and Send Now vs Schedule mode is a polished, complete user experience. |
-| **Security** | **8/10** | Good tenant isolation. Minor risks around localStorage and temp test drafts (documented above). |
+This dual-route design works, but it increases complexity.
 
-### 4.2 Technical Debt / TODOs
+## 2. Audience resolution
 
-- [ ] **Distributed Scheduler Lock:** Use Redis `SETNX` or Postgres `FOR UPDATE SKIP LOCKED` before the scheduler dispatches, to safely support horizontal API scaling.
-- [ ] **Server-side Draft Save:** Replace `localStorage` with auto-save to `POST /campaigns/` (save as draft) on each step change.
-- [ ] **Test Draft Cleanup:** Cron to delete `[TEST]` draft campaigns older than 24 hours.
-- [ ] **Resend to Unopened:** Requires Phase 6 (Open Tracking) to know who didn't open. Not buildable yet.
-- [ ] **A/B Testing:** Split campaigns into variants — Phase 10.
-- [ ] **Campaign Templates (Saved):** Save and reuse campaign settings — not yet implemented.
+The send path supports all of these target formats:
 
----
+- `all`
+- `batch:{id}`
+- `domain:{domain}`
+- `domains:{d1,d2}`
+- `batch_domain:{batch_id}:{domain}`
+- `batch_domains:{batch_id}:{d1,d2}`
 
-## Section 5 — Files Reference
+That is a stronger implementation than the old docs describe.
 
-### Backend (`platform/api`)
+Audience filters are translated into contact queries before dispatch rows are inserted.
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `routes/campaigns.py` | All campaign endpoints | `create_campaign()`, `send_campaign()`, `schedule_campaign()`, `pause_campaign()`, `cancel_campaign()`, `delete_campaign()` |
-| `main.py` | App startup + embedded scheduler | `_run_scheduler()`, `lifespan()` asyncio context |
-| `utils/redis_client.py` | Campaign state via Redis | `set_campaign_status()`, `get_campaign_status()` |
-| `utils/rabbitmq_client.py` | Message broker | `publish_tasks()` |
+## 3. Send orchestration
 
-### Backend (`platform/worker`)
+The send route does these things in order:
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `email_sender.py` | Async delivery worker | `process_message()`, `_inject_email_footer()`, auto-complete on last dispatch |
+1. fetches campaign and domain
+2. validates state
+3. resolves audience
+4. enforces billing quota and daily send limits
+5. inserts a `campaign_snapshots` row
+6. updates campaign status to `sending`
+7. sets Redis status to `SENDING`
+8. inserts `campaign_dispatch` rows
+9. publishes RabbitMQ tasks
+10. updates send counters
 
-### Frontend (`platform/client`)
+This is the real orchestration backbone of Phase 4.
 
-| File | Purpose |
-|------|---------|
-| `CampaignWizard/Steps/Step1Details.tsx` | Name + Subject form |
-| `CampaignWizard/Steps/Step2Audience.tsx` | Audience selection (All / Batch) |
-| `CampaignWizard/Steps/Step3Content.tsx` | HTML editor + template picker |
-| `CampaignWizard/Steps/Step4Review.tsx` | Checklist + Send Now / Schedule Later |
-| `app/campaigns/page.tsx` | Campaign list (Delete/Archive buttons) |
-| `app/campaigns/[id]/page.tsx` | Campaign detail + Pause/Resume/Cancel |
+## 4. Scheduling
 
----
+The schedule route:
 
-## Section 6 — Final Verdict
+- validates ownership
+- only allows scheduling from `draft` or `scheduled`
+- validates ISO timestamp
+- rejects past time
+- updates `status = scheduled`
+- persists `scheduled_at`
+- persists `audience_target`
 
-**Phase 4 is ✅ COMPLETE for MVP scope.**
+The scheduling contract is real and correctly represented in code.
 
-The campaign orchestration layer is fully functional: creation, wizard-guided setup, test email, scheduled sending (with embedded cron), live pause/resume/cancel via Redis, and a legally-safe archive pattern for sent campaigns. The system correctly auto-completes campaigns when all dispatches finish.
+## 5. Pause, resume, cancel
 
-**Remaining items before a public launch:**
-1. Distributed scheduler lock (for multi-instance deployment)
-2. Server-side draft persistence (replaces localStorage)
-3. Resend to Unopened (blocked on Phase 6 Open Tracking)
+Pause:
+
+- sets Redis state to `PAUSED`
+- sets DB status to `paused`
+
+Resume:
+
+- requires current DB status `paused`
+- sets Redis state to `SENDING`
+- sets DB status to `sending`
+
+Cancel:
+
+- checks whether all dispatches are already complete
+- if complete and some were dispatched, normalizes to `sent`
+- otherwise sets Redis state to `CANCELLED`
+- updates campaign status
+- marks pending dispatches as `CANCELLED`
+
+This is a practical implementation and one of the stronger parts of Phase 4.
+
+## 6. Worker behavior
+
+`email_sender.py` verifies Redis state for each message:
+
+- `CANCELLED` -> discard
+- `PAUSED` -> park back into holding flow
+- otherwise claim dispatch row and send
+
+The worker then:
+
+- injects unsubscribe footer
+- injects tracking pixel
+- wraps links for click tracking
+- sends via SMTP
+- updates dispatch status
+
+This ties Phase 4 cleanly into Phase 5 delivery behavior.
+
+## Verified Frontend Logic
+
+## 1. Wizard
+
+The campaign wizard is real and usable.
+
+Verified capabilities:
+
+- step-by-step flow
+- local session persistence
+- draft edit mode
+- explicit save draft to DB
+- send now vs schedule later choice
+- pre-send checklist UI
+
+## 2. Step 2 audience
+
+The frontend audience step supports:
+
+- all contacts
+- lists
+- import batches
+- multi-domain selection inside a batch
+
+This is broader than the old Phase 4 docs, which only described all contacts and a single batch.
+
+## 3. Step 3 content
+
+This step supports two content modes:
+
+- compose
+- template
+
+But there is a contract bug:
+
+- the templates API returns `data`
+- the frontend reads `json.templates`
+
+So template mode is not wired correctly to the current backend response format.
+
+## 4. Step 4 review
+
+The review step provides:
+
+- summary card
+- preview card
+- checklist
+- send-now / schedule-later toggle
+- test-email modal
+
+But two important frontend-backend mismatches exist:
+
+### Test email mismatch
+
+The frontend creates a temporary campaign before calling `/test`, but that temp create call omits required fields such as sender and domain data.
+
+### Local-storage cleanup mismatch
+
+The success path removes:
+
+- `campaign_wizard_draft`
+
+But the actual wizard storage key is:
+
+- `campaign_local_sessions`
+
+So browser draft cleanup is inconsistent.
+
+## 5. Campaign list and detail pages
+
+These pages are implemented and useful, with:
+
+- status badges
+- auto-refresh polling
+- pause/resume/cancel controls
+- metrics derived from dispatch rows
+- duplicate action
+- preview modal
+
+But the duplicate action has the same contract issue as test email:
+
+- it creates a new campaign without required sender/domain fields
+
+So the duplicate button should not be treated as fully working.
+
+## Technical Debt and Verified Gaps
+
+### 1. Scheduler duplication
+
+There are two dispatch schedulers with overlapping logic:
+
+- embedded API scheduler
+- standalone worker scheduler
+
+This should be consolidated.
+
+### 2. Frontend-backend contract drift
+
+Verified examples:
+
+- templates payload mismatch in Step 3
+- duplicate campaign create payload missing required fields
+- test-email temp draft payload missing required fields
+
+These are not theoretical concerns; they are code-path mismatches.
+
+### 3. Hardcoded API bases
+
+Campaign frontend files mix:
+
+- hardcoded `http://127.0.0.1:8000`
+- `NEXT_PUBLIC_API_URL`
+
+This is a real environment/configuration weakness.
+
+### 4. No campaign service layer
+
+The route file carries a large amount of business logic directly. That is workable for now, but it increases future maintenance cost and makes docs claiming a cleaner architecture inaccurate.
+
+### 5. `CampaignResponse` model drift
+
+`CampaignResponse` still references `project_id`, which does not match the current tenant-centered runtime model. This is another sign of model drift.
+
+### 6. `email_tasks` docs are outdated
+
+The current code does not use `email_tasks` as the active orchestration primitive. Documents that still say Phase 4 inserts `email_tasks` are wrong.
+
+## Final Verdict
+
+Phase 4 is not missing. It is a real, functional campaign system.
+
+But the correct technical summary is:
+
+- campaign CRUD: implemented
+- send/schedule lifecycle: implemented
+- pause/resume/cancel: implemented
+- audience targeting: implemented and more advanced than old docs suggest
+- template and test-email frontend flows: not fully aligned with backend contracts
+- scheduler architecture: duplicated and not yet cleanly consolidated
+
+So the right conclusion is:
+
+**Phase 4 is mostly complete and operational, not fully complete.**
