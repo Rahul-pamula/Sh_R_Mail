@@ -296,31 +296,34 @@ To prevent platform/system emails from going to spam due to DMARC/Spoofing rules
       → Large imports can partially succeed because the worker enforces limits chunk by chunk
 
 ─────────────────────────────────────────
-🏗 PHASE 3 — Template Engine ⚠ STABILIZED
+🏗 PHASE 3 — Template Engine ⚠ PARTIALLY COMPLETE
   [BACKEND]
   - [x] Template CRUD
   - [x] Category
-  - [x] Store compiled HTML
-      → SECURITY: HTML must be aggressively sanitized (bleach on backend, DOMPurify on frontend)
-      → Disallow <script> tags, restrict external JS, limit inline event handlers
-      → Prevents critical XSS attacks via malicious templates
-  - [x] Preset templates (35 presets)
+  - [ ] Persist compiled HTML from the active block editor
+      → `compiled_html` exists in schema and service, but the structured block-editor save path does not keep it in sync
+      → Preview compilation works, persistence is partial
+  - [x] Preset gallery and preset-driven template creation
+      → Frontend-defined preset starter designs exist and create real template rows
   - [ ] Template versioning (save history)
   - [ ] Plain text auto-generator (sync from HTML for spam filters)
-      → Store in DB, allow manual override via frontend UI.
+      → `plain_text` field exists, but no verified save pipeline or frontend override UI is wired
   - [ ] Public "View Online" link (render template in browser without login)
 
   [FRONTEND]
   - [x] Templates list page (grid of template cards with thumbnails)
-  - [x] Create template (pick preset)
-  - [ ] Advanced Template Editor — GrapesJS builder (drag & drop)
-      → Store raw HTML directly in the DB.
-      → Use grapesjs-preset-newsletter for Outlook-safe table layouts.
-      → Intercept image uploads and save to Supabase Storage bucket.
+  - [x] Create template (blank canvas and preset entry flow)
+  - [x] Structured block editor (rows → columns → blocks)
+      → Active editing route is `/templates/[id]/block`
+      → `/templates/[id]` and `/templates/[id]/editor` redirect into the block editor
+  - [x] Server-side compile preview
+      → `design_json -> MJML -> HTML` through backend `compile_service.py`
+  - [ ] GrapesJS as the primary editor
+      → Legacy GrapesJS code still exists, but it is no longer the active primary editing path
   - [ ] Plain Text (Auto-generated) | Plain Text (Custom) tabs
-      → Lets users override generated plain text if formatting breaks.
   - [ ] Send test email button (enter email address → receive real email)
   - [ ] Duplicate template button
+      → Frontend button exists, but the backend duplicate endpoint does not
   - [ ] Category filter tabs on template list
   - [ ] Version history panel (see and restore older versions)
   - [ ] Dynamic placeholder guide (show list of {{merge_tags}} user can use)
