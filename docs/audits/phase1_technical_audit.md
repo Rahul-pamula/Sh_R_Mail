@@ -1,6 +1,6 @@
 # Phase 1 - Technical Audit
 
-> Audit date: 2026-03-14  
+> Audit date: 2026-03-15  
 > Scope: verified against repository code, not earlier markdown assumptions
 
 ---
@@ -31,8 +31,10 @@ Reviewed code areas:
 - `platform/client/src/app/signup/page.tsx`
 - `platform/client/src/app/onboarding/*`
 - `platform/client/src/app/dashboard/page.tsx`
-- `platform/database/migrations/002_progressive_onboarding.sql`
-- `migrations/add_onboarding_fields.sql`
+- `migrations/002_progressive_onboarding.sql`
+- `migrations/021_onboarding_field_extensions.sql`
+- `migrations/022_campaign_runtime_alignment.sql`
+- `migrations/manual_apply_latest_runtime_sync.sql`
 
 ---
 
@@ -287,6 +289,8 @@ The user flow works, but protection logic is duplicated and should eventually be
 - tenant lifecycle columns exist
 - additional onboarding fields are added by migration
 - migration docs correctly describe `tenants.status` as authoritative
+- ordered top-level migration files now exist for the current onboarding/runtime schema
+- a manual catch-up SQL file exists for environments that missed recent runtime changes
 
 ### Strong architecture note
 
@@ -296,6 +300,10 @@ The migration and refinement docs are actually more accurate than the old Phase 
 - `onboarding_progress` is auxiliary
 
 That is the correct architectural rule.
+
+### Operational note
+
+Schema truth is now documented more accurately in the repository, but environment drift is still possible if a database was created from older bootstrap SQL and never received the later numbered migrations.
 
 ---
 

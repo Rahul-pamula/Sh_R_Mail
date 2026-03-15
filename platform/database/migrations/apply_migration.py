@@ -25,6 +25,7 @@ statements = [
     "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE",
     "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_name TEXT",
     "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_name TEXT",
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_domain TEXT",
     "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_contacts INT DEFAULT 1000",
     """CREATE TABLE IF NOT EXISTS contact_custom_fields (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -37,6 +38,7 @@ statements = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_contacts_tenant_email ON contacts(tenant_id, email)",
     "CREATE INDEX IF NOT EXISTS idx_contacts_tenant_created ON contacts(tenant_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_contacts_tenant_email_domain ON contacts(tenant_id, email_domain)",
 ]
 
 print("🔄 Applying Phase 2 migration...")

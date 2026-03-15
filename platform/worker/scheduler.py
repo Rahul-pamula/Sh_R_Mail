@@ -95,7 +95,26 @@ async def dispatch_campaign(db: Client, campaign: dict):
     query = db.table("contacts").select("id, email, first_name, last_name").eq("tenant_id", tenant_id)
 
     if audience_target != "all":
-        if audience_target.startswith("batch:"):
+        if audience_target.startswith("batch_domains:"):
+            _, batch_id, domain_blob = audience_target.split(":", 2)
+            domains = [item.strip().lower() for item in domain_blob.split(",") if item.strip()]
+            query = query.eq("import_batch_id", batch_id)
+            if len(domains) == 1:
+                query = query.eq("email_domain", domains[0])
+            elif domains:
+                query = query.in_("email_domain", domains)
+        elif audience_target.startswith("batch_domain:"):
+            _, batch_id, domain = audience_target.split(":", 2)
+            query = query.eq("import_batch_id", batch_id).eq("email_domain", domain)
+        elif audience_target.startswith("domains:"):
+            domains = [item.strip().lower() for item in audience_target.split("domains:", 1)[1].split(",") if item.strip()]
+            if len(domains) == 1:
+                query = query.eq("email_domain", domains[0])
+            elif domains:
+                query = query.in_("email_domain", domains)
+        elif audience_target.startswith("domain:"):
+            query = query.eq("email_domain", audience_target.split("domain:", 1)[1].strip().lower())
+        elif audience_target.startswith("batch:"):
             batch_id = audience_target.split("batch:", 1)[1]
             query = query.eq("import_batch_id", batch_id)
         else:
@@ -248,4 +267,3 @@ async def run_scheduler():
 
 if __name__ == "__main__":
     asyncio.run(run_scheduler())
-

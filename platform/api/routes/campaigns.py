@@ -324,8 +324,32 @@ async def send_campaign(request: Request, campaign_id: str, send_request: SendRe
         .select("id, email, first_name, last_name")\
         .eq("tenant_id", tenant_id)\
         .not_.in_("status", ["bounced", "unsubscribed"])
-        
-    if target.startswith("batch:"):
+
+    if target.startswith("batch_domains:"):
+        _, batch_id, domain_blob = target.split(":", 2)
+        domains = [item.strip().lower() for item in domain_blob.split(",") if item.strip()]
+        contacts_query = contacts_query.eq("import_batch_id", batch_id)
+        if len(domains) == 1:
+            contacts_query = contacts_query.eq("email_domain", domains[0])
+        elif domains:
+            contacts_query = contacts_query.in_("email_domain", domains)
+        audience_label = f"Batch domains: {', '.join(domains[:3])}"
+    elif target.startswith("batch_domain:"):
+        _, batch_id, domain = target.split(":", 2)
+        contacts_query = contacts_query.eq("import_batch_id", batch_id).eq("email_domain", domain)
+        audience_label = f"Batch domain: {domain}"
+    elif target.startswith("domains:"):
+        domains = [item.strip().lower() for item in target.split("domains:", 1)[1].split(",") if item.strip()]
+        if len(domains) == 1:
+            contacts_query = contacts_query.eq("email_domain", domains[0])
+        elif domains:
+            contacts_query = contacts_query.in_("email_domain", domains)
+        audience_label = f"Domains: {', '.join(domains[:3])}"
+    elif target.startswith("domain:"):
+        domain = target.split("domain:", 1)[1]
+        contacts_query = contacts_query.eq("email_domain", domain)
+        audience_label = f"Domain: {domain}"
+    elif target.startswith("batch:"):
         batch_id = target.split("batch:", 1)[1]
         contacts_query = contacts_query.eq("import_batch_id", batch_id)
         audience_label = f"Batch: {batch_id[:8]}..."
@@ -656,5 +680,3 @@ async def send_test_email(campaign_id: str, request: TestEmailRequest, tenant_id
         "message": f"Test email successfully dispatched to {request.recipient_email}",
         "subject": subject
     }
-
-

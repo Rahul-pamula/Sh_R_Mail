@@ -33,6 +33,7 @@ const colors = {
 interface ContactData {
     id: string;
     email: string;
+    email_domain?: string | null;
     first_name: string | null;
     last_name: string | null;
     status: string;
@@ -48,6 +49,10 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
     const [contact, setContact] = useState<ContactData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
+    const [draftEmail, setDraftEmail] = useState("");
+    const [draftCustomFields, setDraftCustomFields] = useState<Record<string, string>>({});
+    const [savingProfile, setSavingProfile] = useState(false);
 
     // Tagging state
     const [tagInput, setTagInput] = useState("");
@@ -63,7 +68,10 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
                     headers: apiHeaders(token!)
                 });
                 if (res.ok) {
-                    setContact(await res.json());
+                    const data = await res.json();
+                    setContact(data);
+                    setDraftEmail(data.email || "");
+                    setDraftCustomFields(data.custom_fields || {});
                 } else if (res.status === 404) {
                     setError("Contact not found");
                 } else {
@@ -123,6 +131,66 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
         setUpdatingTags(false);
     };
 
+    const handleSaveContact = async () => {
+        if (!token || !contact) return;
+        setSavingProfile(true);
+        try {
+            const sanitizedCustomFields = Object.fromEntries(
+                Object.entries(draftCustomFields).filter(([key, value]) => key.trim() && value.trim())
+            );
+            const res = await fetch(`${API_BASE}/contacts/${params.id}`, {
+                method: "PATCH",
+                headers: {
+                    ...apiHeaders(token),
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    email: draftEmail,
+                    custom_fields: sanitizedCustomFields
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.detail || "Failed to update contact");
+                return;
+            }
+            setContact(data.contact);
+            setDraftEmail(data.contact.email || "");
+            setDraftCustomFields(data.contact.custom_fields || {});
+            setIsEditing(false);
+        } catch (e) {
+            console.error(e);
+            alert("Error updating contact");
+        }
+        setSavingProfile(false);
+    };
+
+    const handleCustomFieldChange = (key: string, value: string) => {
+        setDraftCustomFields((current) => ({ ...current, [key]: value }));
+    };
+
+    const handleCustomFieldRename = (oldKey: string, nextKey: string) => {
+        setDraftCustomFields((current) => {
+            const updated = { ...current };
+            const value = updated[oldKey] || "";
+            delete updated[oldKey];
+            if (nextKey.trim()) {
+                updated[nextKey] = value;
+            }
+            return updated;
+        });
+    };
+
+    const handleAddCustomField = () => {
+        let nextKey = "new_field";
+        let index = 1;
+        while (draftCustomFields[nextKey]) {
+            index += 1;
+            nextKey = `new_field_${index}`;
+        }
+        setDraftCustomFields((current) => ({ ...current, [nextKey]: "" }));
+    };
+
     if (loading) {
         return <div style={{ padding: "40px", color: colors.textSecondary }}>Loading contact details...</div>;
     }
@@ -138,7 +206,7 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
         );
     }
 
-    const { email, first_name, last_name, status, custom_fields, tags, created_at } = contact;
+    const { email, email_domain, first_name, last_name, status, custom_fields, tags, created_at } = contact;
     const displayName = [first_name, last_name].filter(Boolean).join(" ") || "Unnamed Contact";
 
     return (
@@ -176,19 +244,55 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
                                 <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                     <Mail style={{ width: "14px", height: "14px" }} /> {email}
                                 </span>
+                                {email_domain && (
+                                    <span style={{
+                                        padding: "2px 8px",
+                                        borderRadius: "999px",
+                                        backgroundColor: "rgba(59,130,246,0.12)",
+                                        border: `1px solid ${colors.border}`,
+                                        color: "var(--text-primary)"
+                                    }}>
+                                        {email_domain}
+                                    </span>
+                                )}
                                 <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                     <Calendar style={{ width: "14px", height: "14px" }} /> Added {new Date(created_at).toLocaleDateString()}
                                 </span>
                             </div>
                         </div>
-                        <div style={{
-                            padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, textTransform: "capitalize",
-                            backgroundColor: status === 'subscribed' ? `${colors.statusSuccess}20` : `${colors.statusError}20`,
-                            color: status === 'subscribed' ? colors.statusSuccess : colors.statusError,
-                            display: "flex", alignItems: "center", gap: "6px"
-                        }}>
-                            {status === 'subscribed' ? <UserCheck style={{ width: "14px", height: "14px" }} /> : <ListCollapse style={{ width: "14px", height: "14px" }} />}
-                            {status}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <button
+                                onClick={() => {
+                                    if (isEditing) {
+                                        setDraftEmail(contact.email || "");
+                                        setDraftCustomFields(contact.custom_fields || {});
+                                        setIsEditing(false);
+                                    } else {
+                                        setIsEditing(true);
+                                    }
+                                }}
+                                style={{
+                                    padding: "8px 14px",
+                                    borderRadius: "8px",
+                                    border: `1px solid ${colors.border}`,
+                                    background: isEditing ? colors.bgHover : "transparent",
+                                    color: "var(--text-primary)",
+                                    cursor: "pointer",
+                                    fontSize: "13px",
+                                    fontWeight: 600
+                                }}
+                            >
+                                {isEditing ? "Cancel" : "Edit Contact"}
+                            </button>
+                            <div style={{
+                                padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, textTransform: "capitalize",
+                                backgroundColor: status === 'subscribed' ? `${colors.statusSuccess}20` : `${colors.statusError}20`,
+                                color: status === 'subscribed' ? colors.statusSuccess : colors.statusError,
+                                display: "flex", alignItems: "center", gap: "6px"
+                            }}>
+                                {status === 'subscribed' ? <UserCheck style={{ width: "14px", height: "14px" }} /> : <ListCollapse style={{ width: "14px", height: "14px" }} />}
+                                {status}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -203,7 +307,22 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "120px 1fr" }}>
                             <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>Email</span>
-                            <span style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 500 }}>{email}</span>
+                            {isEditing ? (
+                                <input
+                                    value={draftEmail}
+                                    onChange={(e) => setDraftEmail(e.target.value)}
+                                    style={{
+                                        padding: "8px 10px",
+                                        fontSize: "14px",
+                                        backgroundColor: "var(--bg-primary)",
+                                        color: "var(--text-primary)",
+                                        border: `1px solid ${colors.border}`,
+                                        borderRadius: "6px"
+                                    }}
+                                />
+                            ) : (
+                                <span style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 500 }}>{email}</span>
+                            )}
                         </div>
                         {first_name && (
                             <div style={{ display: "grid", gridTemplateColumns: "120px 1fr" }}>
@@ -222,13 +341,76 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
                         {custom_fields && Object.keys(custom_fields).length > 0 && (
                             <>
                                 <div style={{ height: "1px", backgroundColor: colors.border, margin: "8px 0" }} />
-                                {Object.entries(custom_fields).map(([key, value]) => (
-                                    <div key={key} style={{ display: "grid", gridTemplateColumns: "120px 1fr" }}>
-                                        <span style={{ color: "var(--text-muted)", fontSize: "14px", textTransform: "capitalize" }}>{key.replace(/_/g, " ")}</span>
-                                        <span style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 500 }}>{value as string}</span>
+                                {Object.entries(isEditing ? draftCustomFields : (custom_fields || {})).map(([key, value]) => (
+                                    <div key={key} style={{ display: "grid", gridTemplateColumns: isEditing ? "120px 1fr" : "120px 1fr", gap: "10px" }}>
+                                        {isEditing ? (
+                                            <input
+                                                value={key}
+                                                onChange={(e) => handleCustomFieldRename(key, e.target.value.trim().replace(/\s+/g, "_").toLowerCase())}
+                                                style={{
+                                                    padding: "8px 10px",
+                                                    fontSize: "13px",
+                                                    backgroundColor: "var(--bg-primary)",
+                                                    color: "var(--text-primary)",
+                                                    border: `1px solid ${colors.border}`,
+                                                    borderRadius: "6px",
+                                                    textTransform: "none"
+                                                }}
+                                            />
+                                        ) : (
+                                            <span style={{ color: "var(--text-muted)", fontSize: "14px", textTransform: "capitalize" }}>{key.replace(/_/g, " ")}</span>
+                                        )}
+                                        {isEditing ? (
+                                            <input
+                                                value={String(value ?? "")}
+                                                onChange={(e) => handleCustomFieldChange(key, e.target.value)}
+                                                style={{
+                                                    padding: "8px 10px",
+                                                    fontSize: "13px",
+                                                    backgroundColor: "var(--bg-primary)",
+                                                    color: "var(--text-primary)",
+                                                    border: `1px solid ${colors.border}`,
+                                                    borderRadius: "6px"
+                                                }}
+                                            />
+                                        ) : (
+                                            <span style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 500 }}>{value as string}</span>
+                                        )}
                                     </div>
                                 ))}
                             </>
+                        )}
+                        {isEditing && (
+                            <div style={{ display: "flex", gap: "10px", paddingTop: "10px" }}>
+                                <button
+                                    onClick={handleAddCustomField}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: "8px",
+                                        border: `1px solid ${colors.border}`,
+                                        background: "transparent",
+                                        color: "var(--text-primary)",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    Add Custom Field
+                                </button>
+                                <button
+                                    onClick={handleSaveContact}
+                                    disabled={savingProfile}
+                                    style={{
+                                        padding: "8px 14px",
+                                        borderRadius: "8px",
+                                        border: "none",
+                                        background: "var(--accent)",
+                                        color: "white",
+                                        cursor: savingProfile ? "wait" : "pointer",
+                                        opacity: savingProfile ? 0.7 : 1
+                                    }}
+                                >
+                                    {savingProfile ? "Saving..." : "Save Changes"}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>

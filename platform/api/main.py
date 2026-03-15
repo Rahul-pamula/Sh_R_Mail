@@ -75,7 +75,26 @@ async def _run_scheduler():
                     # Audience
                     target = camp.get("audience_target") or "all"
                     q = db.client.table("contacts").select("id, email, first_name, last_name").eq("tenant_id", tid)
-                    if target.startswith("batch:"):
+                    if target.startswith("batch_domains:"):
+                        _, batch_id, domain_blob = target.split(":", 2)
+                        domains = [item.strip().lower() for item in domain_blob.split(",") if item.strip()]
+                        q = q.eq("import_batch_id", batch_id)
+                        if len(domains) == 1:
+                            q = q.eq("email_domain", domains[0])
+                        elif domains:
+                            q = q.in_("email_domain", domains)
+                    elif target.startswith("batch_domain:"):
+                        _, batch_id, domain = target.split(":", 2)
+                        q = q.eq("import_batch_id", batch_id).eq("email_domain", domain)
+                    elif target.startswith("domains:"):
+                        domains = [item.strip().lower() for item in target.split("domains:", 1)[1].split(",") if item.strip()]
+                        if len(domains) == 1:
+                            q = q.eq("email_domain", domains[0])
+                        elif domains:
+                            q = q.in_("email_domain", domains)
+                    elif target.startswith("domain:"):
+                        q = q.eq("email_domain", target.split("domain:", 1)[1].strip().lower())
+                    elif target.startswith("batch:"):
                         q = q.eq("import_batch_id", target.split("batch:", 1)[1])
                     contacts = q.execute().data or []
                     if not contacts:

@@ -10,16 +10,58 @@ Production Hardened:
 - Structured logging
 - Contact status management (subscribed/unsubscribed/bounced/complained)
 """
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from utils.supabase_client import db
 import re
 import logging
+from collections import Counter
+from difflib import get_close_matches
 
 logger = logging.getLogger("email_engine.contacts")
 
 BATCH_SIZE = 500  # Chunk size for bulk upsert
+COMMON_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "icloud.com",
+    "proton.me",
+    "protonmail.com",
+    "aol.com",
+    "live.com",
+    "msn.com",
+    "edu.in",
+}
 
 class ContactService:
+    @staticmethod
+    def normalize_domains(domains: Optional[List[str]]) -> List[str]:
+        """Normalize, deduplicate, and discard blank domain filters."""
+        if not domains:
+            return []
+
+        normalized: List[str] = []
+        seen = set()
+        for domain in domains:
+            value = (domain or "").strip().lower()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            normalized.append(value)
+        return normalized
+
+    @staticmethod
+    def extract_email_domain(email: str) -> Optional[str]:
+        """Extract and normalize the domain portion of an email address."""
+        if not email or "@" not in email:
+            return None
+
+        _, domain = email.rsplit("@", 1)
+        normalized = domain.strip().lower()
+        return normalized or None
+
     @staticmethod
     def validate_email(email: str) -> bool:
         """Validate email format using regex"""
@@ -89,7 +131,8 @@ class ContactService:
         page: int = 1,
         limit: int = 20,
         search: Optional[str] = None,
-        batch_id: Optional[str] = None
+        batch_id: Optional[str] = None,
+        domains: Optional[List[str]] = None
     ) -> Dict:
         """
         Get paginated contacts with optional search and batch filter.
@@ -97,12 +140,19 @@ class ContactService:
         offset = (page - 1) * limit
         
         query = db.client.table("contacts")\
-            .select("id, email, first_name, last_name, custom_fields, tags, status, created_at", count="exact")\
+            .select("id, email, email_domain, first_name, last_name, custom_fields, tags, status, created_at", count="exact")\
             .eq("tenant_id", tenant_id)
-        
+
         if batch_id:
             query = query.eq("import_batch_id", batch_id)
-        
+
+        normalized_domains = ContactService.normalize_domains(domains)
+        if normalized_domains:
+            if len(normalized_domains) == 1:
+                query = query.eq("email_domain", normalized_domains[0])
+            else:
+                query = query.in_("email_domain", normalized_domains)
+
         if search:
             query = query.or_(f"email.ilike.%{search}%,first_name.ilike.%{search}%,last_name.ilike.%{search}%")
         
@@ -120,8 +170,29 @@ class ContactService:
                 "total": total,
                 "page": page,
                 "limit": limit,
-                "total_pages": total_pages
+                "total_pages": total_pages,
+                "active_domains": normalized_domains
             }
+        }
+
+    @staticmethod
+    def suggest_domain_correction(domain: Optional[str], known_domains: Optional[List[str]] = None) -> Optional[Dict]:
+        """Suggest a likely correction for suspicious typo domains."""
+        if not domain:
+            return None
+
+        normalized = domain.strip().lower()
+        if not normalized or normalized in COMMON_EMAIL_DOMAINS:
+            return None
+
+        candidates = sorted(set(COMMON_EMAIL_DOMAINS).union(set(known_domains or [])))
+        match = get_close_matches(normalized, candidates, n=1, cutoff=0.84)
+        if not match or match[0] == normalized:
+            return None
+
+        return {
+            "suggested_domain": match[0],
+            "reason": "Possible domain typo"
         }
     
     @staticmethod
@@ -156,6 +227,7 @@ class ContactService:
             row = {
                 "tenant_id": tenant_id,
                 "email": email.lower(),
+                "email_domain": ContactService.extract_email_domain(email),
                 "first_name": contact.get("first_name", "").strip() or None,
                 "last_name": contact.get("last_name", "").strip() or None
             }
@@ -300,6 +372,32 @@ class ContactService:
         return result.data[0] if result.data else {}
 
     @staticmethod
+    def update_contact(
+        tenant_id: str,
+        contact_id: str,
+        email: str,
+        custom_fields: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """Update a contact email and custom fields."""
+        normalized_email = email.strip().lower()
+        if not normalized_email or not ContactService.validate_email(normalized_email):
+            raise ValueError("Invalid email format")
+
+        payload: Dict[str, Any] = {
+            "email": normalized_email,
+            "email_domain": ContactService.extract_email_domain(normalized_email),
+            "custom_fields": custom_fields or {}
+        }
+
+        result = db.client.table("contacts")\
+            .update(payload)\
+            .eq("tenant_id", tenant_id)\
+            .eq("id", contact_id)\
+            .execute()
+
+        return result.data[0] if result.data else {}
+
+    @staticmethod
     def get_suppression_list(tenant_id: str, page: int = 1, limit: int = 50) -> Dict:
         """Get contacts mapped to bounced or unsubscribed status."""
         offset = (page - 1) * limit
@@ -322,6 +420,44 @@ class ContactService:
                 "page": page,
                 "limit": limit,
                 "total_pages": total_pages
+            }
+        }
+
+    @staticmethod
+    def get_domain_summary(tenant_id: str, limit: int = 12, batch_id: Optional[str] = None) -> Dict:
+        """
+        Return the most common contact domains for a tenant.
+        This is currently aggregated in Python from tenant-scoped contact rows.
+        """
+        query = db.client.table("contacts")\
+            .select("email_domain")\
+            .eq("tenant_id", tenant_id)
+
+        if batch_id:
+            query = query.eq("import_batch_id", batch_id)
+
+        result = query.execute()
+
+        domains = [
+            row.get("email_domain", "").strip().lower()
+            for row in (result.data or [])
+            if row.get("email_domain")
+        ]
+        counts = Counter(domains)
+        top_domains = [
+            {
+                "domain": domain,
+                "count": count,
+                **(ContactService.suggest_domain_correction(domain, list(counts.keys())) or {})
+            }
+            for domain, count in counts.most_common(limit)
+        ]
+
+        return {
+            "data": top_domains,
+            "meta": {
+                "total_domains": len(counts),
+                "contacts_with_domain": len(domains)
             }
         }
 

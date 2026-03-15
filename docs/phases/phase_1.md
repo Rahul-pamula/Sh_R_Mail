@@ -1,7 +1,7 @@
 # Phase 1 - Foundation, Authentication, Tenant Identity, and Onboarding
 
 > Status: Mostly complete, with important architecture caveats  
-> Verified against code: 2026-03-14  
+> Verified against code: 2026-03-15  
 > Scope: auth routes, JWT middleware, onboarding routes, frontend auth state, onboarding UI, and route guards
 
 ---
@@ -42,8 +42,10 @@ Phase 1 is implemented with a custom authentication and tenant foundation. It is
 - `platform/api/routes/password_reset.py`
 - `platform/api/utils/jwt_middleware.py`
 - `platform/api/utils/supabase_client.py`
-- `platform/database/migrations/002_progressive_onboarding.sql`
-- `migrations/add_onboarding_fields.sql`
+- `migrations/002_progressive_onboarding.sql`
+- `migrations/021_onboarding_field_extensions.sql`
+- `migrations/022_campaign_runtime_alignment.sql`
+- `migrations/manual_apply_latest_runtime_sync.sql`
 
 ### Main frontend files
 
@@ -166,6 +168,7 @@ Implemented:
 - frontend onboarding wizard screens
 - frontend completion screen activating tenant
 - dashboard onboarding checklist experience
+- ordered top-level onboarding migration coverage for current tenant fields
 
 ### 4. Frontend route protection is implemented
 
@@ -176,6 +179,17 @@ Implemented:
 - onboarding redirect handling
 - waiting-room redirect handling
 - auth-page redirect-away handling for authenticated users
+
+### 5. Migration story is now more accurate
+
+The repository now has an ordered top-level migration path for the current Phase 1 schema, instead of relying only on the older platform migration directory and ad hoc SQL.
+
+Important current files:
+
+- `migrations/002_progressive_onboarding.sql`
+- `migrations/021_onboarding_field_extensions.sql`
+- `migrations/022_campaign_runtime_alignment.sql`
+- `migrations/manual_apply_latest_runtime_sync.sql`
 
 ---
 
@@ -222,6 +236,7 @@ This is the correct architectural rule and matches the migration notes in the re
 - [x] workspace switching
 - [x] email verification route family
 - [x] password reset route family exists
+- [x] ordered top-level onboarding migrations now exist
 
 ### Frontend
 
@@ -258,7 +273,16 @@ Actual architecture:
 
 The migration files explicitly document RLS as future work. The system currently uses `SERVICE_ROLE_KEY`, which bypasses RLS, so tenant isolation depends on application logic instead of database policy enforcement.
 
-### 3. Onboarding APIs are inconsistent
+### 3. Schema consistency still depends on migration discipline
+
+The docs now point to the correct ordered migration files, but environments can still drift if they were created from older schema bootstrap files plus manual SQL.
+
+That means:
+
+- the documentation is more accurate now
+- but operational correctness still depends on actually applying the numbered migrations or the manual runtime sync SQL
+
+### 4. Onboarding APIs are inconsistent
 
 Current inconsistencies:
 
@@ -267,7 +291,7 @@ Current inconsistencies:
 - legacy `/onboarding/intent` still uses `X-Tenant-ID`
 - there are two onboarding models in the codebase at once
 
-### 4. Auth API completeness is mixed
+### 5. Auth API completeness is mixed
 
 Not fully complete:
 
@@ -275,7 +299,7 @@ Not fully complete:
 - tenant selection at login is still "first tenant by join date"
 - some future-oriented comments are stale because workspace switching now exists
 
-### 5. Frontend protection is only partially centralized
+### 6. Frontend protection is only partially centralized
 
 Current issues:
 
@@ -283,7 +307,7 @@ Current issues:
 - middleware only targets a subset of protected app routes
 - status decisions rely on cookies populated client-side after login
 
-### 6. Some Phase 1.5 work already exists inside the codebase
+### 7. Some Phase 1.5 work already exists inside the codebase
 
 The codebase already includes:
 

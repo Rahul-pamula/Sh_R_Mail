@@ -248,27 +248,52 @@ To prevent platform/system emails from going to spam due to DMARC/Spoofing rules
   - [ ] Privacy policy / Terms page linked from footer (even if just external links)
 
 ─────────────────────────────────────────
-🏗 PHASE 2 — Contacts Engine ✅ DONE
+🏗 PHASE 2 — Contacts Engine ⚠ VERIFIED, PARTIALLY COMPLETE
   [BACKEND]
   - [x] CSV/XLSX ingestion
+  - [x] Upload preview endpoint
+  - [x] Async import job creation
+  - [x] RabbitMQ background import worker
+  - [x] Import batch history
   - [x] Deduplication
   - [x] Contact status (subscribed, unsubscribed, bounced)
-  - [x] Segmentation filters
+  - [x] Domain summary endpoint and `email_domain` storage
+  - [x] Batch-scoped domain filtering
+  - [ ] Segmentation filters
   - [x] Bulk delete
-  - [x] Contact search endpoint (search by email, name, tag)
-  - [x] Tags CRUD API (add/remove/list tags per contact)
-  - [x] Soft delete: deleted_at column on contacts (restore within 30 days)
+  - [ ] Contact search endpoint (search by email, name, tag)
+  - [x] Contact update endpoint (email + custom fields)
+  - [ ] Tags CRUD API (add/remove/list tags per contact)
+  - [ ] Soft delete: deleted_at column on contacts (restore within 30 days)
+  - [x] Suppression list API
+  - [x] Export contacts API
 
   [FRONTEND]
-  - [x] Contacts list page (table with search, filter, pagination)
-  - [x] Import contacts modal (CSV/XLSX drag & drop)
+  - [x] Contacts list page (table with search and pagination)
+  - [x] Import contacts modal with preview and mapping
+  - [x] Async import progress polling
+  - [x] Import history tab
+  - [x] Batch detail page
+  - [x] Batch detail domain filtering
   - [x] Contact status badges (subscribed / unsubscribed / bounced)
-  - [x] Segment builder UI (filter by field, value)
+  - [ ] Segment builder UI (filter by field, value)
   - [x] Bulk action buttons (delete selected)
-  - [x] Contact detail page (see individual contact activity)
+  - [x] Contact detail editing (email + custom fields)
+  - [ ] Contact detail page (see individual contact activity)
   - [x] Export contacts to CSV button
   - [x] Tags UI (add/remove tags on contacts)
   - [x] Suppression list page (view bounced/spam contacts)
+  - [x] Campaign audience selection supports batch-domain targeting
+  - [x] Campaign audience selection supports multi-domain selection inside a batch
+
+  Notes:
+      → Current implementation is async and queue-backed, not a fully synchronous import pipeline
+      → Search currently covers email and name; it does not currently search tags
+      → Tags support exists as per-contact tag updates, not a full standalone tags CRUD module
+      → Custom fields are actively stored on contacts via `custom_fields`, not primarily through a separate `contact_custom_fields` runtime model
+      → Fully blank rows are skipped during import instead of being counted as failed contacts
+      → Domain typo-like suggestions exist for suspicious domains, but real mailbox verification does not
+      → Large imports can partially succeed because the worker enforces limits chunk by chunk
 
 ─────────────────────────────────────────
 🏗 PHASE 3 — Template Engine ⚠ STABILIZED

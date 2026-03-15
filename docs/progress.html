@@ -77,6 +77,7 @@
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Onboarding routes exist", done: true },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Active-tenant guard exists", done: true },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Workspace switching exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Ordered top-level onboarding migrations now exist", done: true },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Supabase Auth is the active authentication system", done: false },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> RLS is the active tenant-isolation layer", done: false },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> <code>/auth/me</code> is fully implemented", done: false },
@@ -93,6 +94,52 @@
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[SECURITY MODEL]</span> <code>X-Tenant-ID</code> is validated against JWT when used", done: true },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[SECURITY MODEL]</span> Onboarding tenants are blocked from active-tenant routes", done: true },
                 { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[SECURITY MODEL]</span> Database-level RLS is the active protection mechanism", done: false }
+            ]
+        };
+
+        phasesData[2] = {
+            title: "PHASE 2 — Contacts Engine (Verified Audit)",
+            tasks: [
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> CSV and XLSX parsing are implemented", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Upload preview endpoint exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Import route creates async jobs and batch records", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> RabbitMQ background worker processes CSV imports", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Deduplication exists within upload and at database upsert level", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Plan limits count only genuinely new contacts", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Batch history API exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Bulk delete, delete-all, and batch delete flows exist", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Contact status and suppression flows exist", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Export contacts as CSV exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Search supports email, first name, and last name", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Domain summary API and <code>email_domain</code> storage exist", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Contact update API exists for email and custom fields", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Batch-scoped domain filtering exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Suspicious typo-domain suggestion logic exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Search supports tags and advanced segmentation", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Full tags CRUD module exists", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Soft delete with <code>deleted_at</code> and restore flow exists", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[DATA MODEL]</span> Runtime custom fields are stored directly on contacts via <code>custom_fields</code>", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[DATA MODEL]</span> Separate <code>contact_custom_fields</code> table is the active runtime model", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Contacts list page exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Import modal includes preview and mapping", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Async job polling UI exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Import history tab exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Batch detail page exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Batch detail supports multi-domain filtering", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Bulk delete and delete-all actions exist", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Contact detail page exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Contact detail editing exists for email and custom fields", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Contact detail shows activity history", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Tags UI exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Suppression list page exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Export button exists", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Campaign audience step supports multi-domain selection inside a batch", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> True segment-builder UI exists", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[TECH DEBT]</span> Contacts frontend uses environment-based shared API config", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[TECH DEBT]</span> Contacts pages are migrated to shared design-system components", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[OPERATIONAL MODEL]</span> Fully blank rows are skipped instead of counted as failed", done: true },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[OPERATIONAL MODEL]</span> Import behavior is file-atomic rather than partial-by-chunk", done: false },
+                { text: "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[DELIVERABILITY]</span> Real mailbox verification or MX/API-based deliverability checks exist", done: false }
             ]
         };
 

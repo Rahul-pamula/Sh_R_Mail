@@ -38,6 +38,11 @@ class BulkDeleteRequest(BaseModel):
     contact_ids: List[str]
 
 
+class UpdateContactRequest(BaseModel):
+    email: str
+    custom_fields: Dict[str, str] = {}
+
+
 # ===== STATS & LIST =====
 
 @router.get("/stats", response_model=ContactStats)
@@ -58,10 +63,29 @@ async def list_contacts(
     limit: int = 20,
     search: Optional[str] = None,
     batch_id: Optional[str] = None,
+    domain: Optional[str] = None,
+    domains: Optional[str] = None,
     tenant_id: str = Depends(require_active_tenant)
 ):
     """List contacts with pagination, search, and optional batch filter"""
-    return ContactService.get_contacts(tenant_id, page, limit, search, batch_id)
+    requested_domains = []
+    if domains:
+        requested_domains.extend([item for item in domains.split(",") if item.strip()])
+    elif domain:
+        requested_domains.append(domain)
+
+    return ContactService.get_contacts(tenant_id, page, limit, search, batch_id, requested_domains)
+
+
+@router.get("/domains")
+async def list_contact_domains(
+    limit: int = 12,
+    batch_id: Optional[str] = None,
+    tenant_id: str = Depends(require_active_tenant)
+):
+    """Return the most common contact domains for the current tenant."""
+    safe_limit = max(1, min(limit, 50))
+    return ContactService.get_domain_summary(tenant_id, safe_limit, batch_id)
 
 
 # ===== UPLOAD FLOW =====
@@ -127,25 +151,40 @@ async def import_contacts(
 
         # Map columns with safe type conversion
         contacts_to_import = []
+        skipped_blank = 0
         for _, row in df.iterrows():
             raw_email = row.get(email_col, "")
+            normalized_email = str(raw_email).strip().lower() if pd.notna(raw_email) else ""
+            custom = {}
+            if custom_field_map:
+                for field_name, csv_col in custom_field_map.items():
+                    val = row.get(csv_col, "")
+                    if pd.notna(val) and str(val).strip():
+                        custom[field_name] = str(val).strip()
+
+            meaningful_values = [normalized_email, *custom.values()]
+            if not any(value.strip() for value in meaningful_values):
+                skipped_blank += 1
+                continue
+
             contact = {
-                "email": str(raw_email).strip().lower() if pd.notna(raw_email) else "",
+                "email": normalized_email,
+                "email_domain": ContactService.extract_email_domain(normalized_email),
                 "first_name": str(row.get(first_name_col, "")).strip() if first_name_col and pd.notna(row.get(first_name_col)) else "",
                 "last_name": str(row.get(last_name_col, "")).strip() if last_name_col and pd.notna(row.get(last_name_col)) else ""
             }
             
             # Build custom fields from dynamic mapping
-            if custom_field_map:
-                custom = {}
-                for field_name, csv_col in custom_field_map.items():
-                    val = row.get(csv_col, "")
-                    if pd.notna(val) and str(val).strip():
-                        custom[field_name] = str(val).strip()
-                if custom:
-                    contact["custom_fields"] = custom
+            if custom:
+                contact["custom_fields"] = custom
             
             contacts_to_import.append(contact)
+
+        if not contacts_to_import:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No valid contact rows found after skipping {skipped_blank} blank rows."
+            )
 
         # ── PHASE 7.5: asynchronous JOB TRIGGER ─────────────────────────────
         # Instead of blocking and waiting for `bulk_upsert`, we queue a job.
@@ -180,7 +219,14 @@ async def import_contacts(
         await mq_client.publish_background_task(task_payload)
 
         # 4. Return immediately to the client (202 Accepted)
-        return {"status": "accepted", "job_id": job_id, "batch_id": batch_id, "message": "Import queued for processing."}
+        return {
+            "status": "accepted",
+            "job_id": job_id,
+            "batch_id": batch_id,
+            "message": "Import queued for processing.",
+            "skipped_blank": skipped_blank,
+            "accepted_rows": len(contacts_to_import)
+        }
 
     except HTTPException:
         raise
@@ -314,6 +360,7 @@ async def resolve_error(
     contact_data = {
         "tenant_id": tenant_id,
         "email": email,
+        "email_domain": ContactService.extract_email_domain(email),
         "first_name": body.first_name.strip() or None,
         "last_name": body.last_name.strip() or None,
         "import_batch_id": body.batch_id
@@ -379,6 +426,31 @@ async def update_contact_tags(
         return {"status": "success", "contact": updated}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update tags: {str(e)}")
+
+
+@router.patch("/{contact_id}")
+async def update_contact(
+    contact_id: str,
+    body: UpdateContactRequest,
+    tenant_id: str = Depends(require_active_tenant)
+):
+    """Update a contact email and custom fields."""
+    try:
+        contact = ContactService.update_contact(
+            tenant_id=tenant_id,
+            contact_id=contact_id,
+            email=body.email,
+            custom_fields=body.custom_fields
+        )
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        return {"status": "success", "contact": contact}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update contact: {str(e)}")
 
 @router.get("/suppression")
 async def get_suppressed_contacts(

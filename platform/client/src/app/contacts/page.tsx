@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useDeferredValue } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -14,7 +14,8 @@ import {
     AlertTriangle,
     Check,
     FileText,
-    Download
+    Download,
+    Globe2
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -29,11 +30,19 @@ function apiHeaders(token: string) {
 interface Contact {
     id: string;
     email: string;
+    email_domain?: string | null;
     first_name: string | null;
     last_name: string | null;
     custom_fields: Record<string, string> | null;
     tags?: string[];
     created_at: string;
+}
+
+interface DomainStat {
+    domain: string;
+    count: number;
+    suggested_domain?: string;
+    reason?: string;
 }
 
 interface Stats {
@@ -138,7 +147,12 @@ export default function ContactsPage() {
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState("");
+    const deferredSearch = useDeferredValue(search);
+    const [batchFilter, setBatchFilter] = useState("");
+    const [domainFilter, setDomainFilter] = useState("");
     const [loading, setLoading] = useState(true);
+    const [domainStats, setDomainStats] = useState<DomainStat[]>([]);
+    const [domainsLoading, setDomainsLoading] = useState(false);
 
     // Dynamic columns
     const customFieldKeys = React.useMemo(() => {
@@ -199,7 +213,9 @@ export default function ContactsPage() {
         setLoading(true);
         try {
             const params = new URLSearchParams({ page: String(page), limit: "20" });
-            if (search) params.set("search", search);
+            if (deferredSearch) params.set("search", deferredSearch);
+            if (batchFilter) params.set("batch_id", batchFilter);
+            if (domainFilter) params.set("domain", domainFilter);
             const res = await fetch(`${API_BASE}/contacts/?${params}`, { headers: apiHeaders(token) });
             if (res.ok) {
                 const data = await res.json();
@@ -209,6 +225,21 @@ export default function ContactsPage() {
             }
         } catch (e) { console.error("Contacts error:", e); }
         setLoading(false);
+    };
+
+    const fetchDomains = async () => {
+        if (!token) return;
+        setDomainsLoading(true);
+        try {
+            const params = new URLSearchParams({ limit: "10" });
+            if (batchFilter) params.set("batch_id", batchFilter);
+            const res = await fetch(`${API_BASE}/contacts/domains?${params}`, { headers: apiHeaders(token) });
+            if (res.ok) {
+                const data = await res.json();
+                setDomainStats(data.data || []);
+            }
+        } catch (e) { console.error("Domains error:", e); }
+        setDomainsLoading(false);
     };
 
     const fetchBatches = async () => {
@@ -225,8 +256,9 @@ export default function ContactsPage() {
     };
 
     useEffect(() => { fetchStats(); }, [token]);
-    useEffect(() => { fetchContacts(); }, [token, page, search]);
-    useEffect(() => { if (activeTab === "history") fetchBatches(); }, [activeTab, token]);
+    useEffect(() => { fetchContacts(); }, [token, page, deferredSearch, batchFilter, domainFilter]);
+    useEffect(() => { fetchDomains(); }, [token, batchFilter]);
+    useEffect(() => { fetchBatches(); }, [token]);
 
     // ===== Selection =====
     const toggleSelect = (id: string) => {
@@ -310,9 +342,11 @@ export default function ContactsPage() {
             });
             if (res.ok) {
                 const data = await res.json();
+                const acceptedRows = data.accepted_rows || rowCount;
+                const skippedBlank = data.skipped_blank || 0;
                 // Phase 7.5: async job — start polling
                 if (data.job_id) {
-                    setJobProgress({ id: data.job_id, progress: 0, status: 'pending', processed_items: 0, total_items: rowCount, failed_items: 0 });
+                    setJobProgress({ id: data.job_id, progress: 0, status: 'pending', processed_items: 0, total_items: acceptedRows, failed_items: 0 });
                     setUploadStep(3); // New: progress polling step
                     // Start polling
                     pollRef.current = setInterval(async () => {
@@ -320,23 +354,31 @@ export default function ContactsPage() {
                             const jr = await fetch(`${API_BASE}/contacts/jobs/${data.job_id}`, { headers: apiHeaders(token!) });
                             if (jr.ok) {
                                 const job = await jr.json();
-                                setJobProgress({ id: job.id, progress: job.progress, status: job.status, processed_items: job.processed_items || 0, total_items: job.total_items || rowCount, failed_items: job.failed_items || 0 });
+                                setJobProgress({ id: job.id, progress: job.progress, status: job.status, processed_items: job.processed_items || 0, total_items: job.total_items || acceptedRows, failed_items: job.failed_items || 0 });
                                 if (job.status === 'completed' || job.status === 'failed') {
                                     if (pollRef.current) clearInterval(pollRef.current);
-                                    setImportResult({ success: (job.processed_items || 0) - (job.failed_items || 0), failed: job.failed_items || 0, batch_id: data.batch_id });
+                                    setImportResult({
+                                        total: acceptedRows,
+                                        success: (job.processed_items || 0) - (job.failed_items || 0),
+                                        failed: job.failed_items || 0,
+                                        batch_id: data.batch_id,
+                                        skipped_blank: skippedBlank
+                                    });
                                     setUploadStep(4);
                                     fetchStats();
                                     fetchContacts();
+                                    fetchDomains();
                                 }
                             }
                         } catch { /* polling error, will retry */ }
                     }, 2000);
                 } else {
                     // Fallback: legacy synchronous response
-                    setImportResult(data);
+                    setImportResult({ ...data, total: acceptedRows, skipped_blank: skippedBlank });
                     setUploadStep(4);
                     fetchStats();
                     fetchContacts();
+                    fetchDomains();
                 }
             } else {
                 const err = await res.json();
@@ -368,6 +410,7 @@ export default function ContactsPage() {
             });
             fetchContacts();
             fetchStats();
+            fetchDomains();
         } catch (e) { alert("Delete failed"); }
     };
 
@@ -382,6 +425,7 @@ export default function ContactsPage() {
             setShowBulkDelete(false);
             fetchContacts();
             fetchStats();
+            fetchDomains();
         } catch (e) { alert("Bulk delete failed"); }
     };
 
@@ -396,6 +440,7 @@ export default function ContactsPage() {
             fetchContacts();
             fetchStats();
             fetchBatches();
+            fetchDomains();
         } catch (e) { alert("Delete all failed"); }
     };
 
@@ -409,6 +454,7 @@ export default function ContactsPage() {
             fetchContacts();
             fetchStats();
             fetchBatches();
+            fetchDomains();
         } catch (e) { alert("Batch delete failed"); }
     };
 
@@ -440,6 +486,8 @@ export default function ContactsPage() {
         cursor: "pointer",
         transition: "all 150ms"
     });
+
+    const highlightedBatch = batches.find((entry) => entry.id === batchFilter) || null;
 
     const handleExport = async () => {
         if (!token) return;
@@ -617,39 +665,114 @@ export default function ContactsPage() {
             {/* ===== TAB: Contacts ===== */}
             {activeTab === "contacts" && (
                 <>
-                    {/* Search */}
-                    <div style={{ position: "relative", maxWidth: "400px", marginBottom: "16px" }}>
-                        <Search style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", color: colors.textSecondary }} />
-                        <input
-                            placeholder="Search by email or name..."
-                            value={search}
-                            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            style={{
-                                width: "100%",
-                                padding: "8px 12px 8px 36px",
-                                fontSize: "14px",
-                                border: `1px solid ${colors.border}`,
-                                borderRadius: "6px",
-                                outline: "none",
-                                boxSizing: "border-box",
-                                backgroundColor: "var(--bg-card)",
-                                color: "var(--text-primary)"
-                            }}
-                        />
+                    <div style={{
+                        marginBottom: "18px",
+                        padding: "14px",
+                        borderRadius: "12px",
+                        border: `1px solid ${colors.border}`,
+                        backgroundColor: colors.bgMuted
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <Globe2 style={{ width: "15px", height: "15px", color: "#93C5FD" }} />
+                            <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.12em", color: "#93C5FD", fontWeight: 700 }}>
+                                Contact Filters
+                            </span>
+                            {highlightedBatch && (
+                                <span style={{ fontSize: "12px", color: colors.textSecondary }}>
+                                    {highlightedBatch.file_name}
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                            <div style={{ position: "relative", flex: "1 1 280px" }}>
+                                <Search style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", color: colors.textSecondary }} />
+                                <input
+                                    placeholder="Search by email..."
+                                    value={search}
+                                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                                    style={{
+                                        width: "100%",
+                                        padding: "10px 12px 10px 36px",
+                                        fontSize: "14px",
+                                        border: `1px solid ${colors.border}`,
+                                        borderRadius: "10px",
+                                        outline: "none",
+                                        boxSizing: "border-box",
+                                        backgroundColor: "var(--bg-primary)",
+                                        color: "var(--text-primary)"
+                                    }}
+                                />
+                            </div>
+                            <select
+                                value={batchFilter}
+                                onChange={(e) => {
+                                    setBatchFilter(e.target.value);
+                                    setDomainFilter("");
+                                    setPage(1);
+                                }}
+                                style={{
+                                    flex: "1 1 220px",
+                                    padding: "10px 12px",
+                                    fontSize: "14px",
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: "10px",
+                                    backgroundColor: "var(--bg-primary)",
+                                    color: colors.text
+                                }}
+                            >
+                                <option value="">All contacts</option>
+                                {batches.filter((entry) => entry.imported_count > 0).map((entry) => (
+                                    <option key={entry.id} value={entry.id}>
+                                        {entry.file_name} ({entry.imported_count})
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                value={domainFilter}
+                                onChange={(e) => { setDomainFilter(e.target.value); setPage(1); }}
+                                style={{
+                                    flex: "1 1 220px",
+                                    padding: "10px 12px",
+                                    fontSize: "14px",
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: "10px",
+                                    backgroundColor: "var(--bg-primary)",
+                                    color: colors.text
+                                }}
+                            >
+                                <option value="">All domains</option>
+                                {domainStats.map((entry) => (
+                                    <option key={entry.domain} value={entry.domain}>
+                                        {entry.domain} ({entry.count})
+                                        {entry.suggested_domain ? ` • maybe ${entry.suggested_domain}` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                            {(domainFilter || batchFilter) && (
+                                <button onClick={() => { setBatchFilter(""); setDomainFilter(""); setPage(1); }} style={{ ...btnOutline, padding: "10px 14px", borderRadius: "10px", whiteSpace: "nowrap" }}>
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        {domainsLoading && domainStats.length === 0 && (
+                            <p style={{ fontSize: "12px", color: colors.textSecondary, margin: "10px 0 0" }}>Loading domains...</p>
+                        )}
                     </div>
 
-                    {/* Floating Action Bar */}
                     {selected.size > 0 && (
-                        <div style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "12px",
-                            padding: "10px 16px",
-                            backgroundColor: "var(--info-bg)",
-                            border: `1px solid var(--accent)`,
-                            borderRadius: "8px",
-                            marginBottom: "16px"
-                        }}>
+                        <div
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "12px",
+                                padding: "10px 16px",
+                                backgroundColor: "rgba(59,130,246,0.1)",
+                                border: `1px solid rgba(59,130,246,0.35)`,
+                                borderRadius: "12px",
+                                marginBottom: "16px",
+                                boxShadow: "0 10px 28px rgba(59,130,246,0.12)"
+                            }}
+                        >
                             <span style={{ fontSize: "14px", fontWeight: 500, color: colors.text }}>
                                 {selected.size} contact{selected.size > 1 ? "s" : ""} selected
                             </span>
@@ -692,8 +815,16 @@ export default function ContactsPage() {
                                 ) : contacts.length === 0 ? (
                                     <tr>
                                         <td colSpan={4 + customFieldKeys.length} style={{ padding: "48px", textAlign: "center" }}>
-                                            <p style={{ color: colors.textSecondary, marginBottom: "12px" }}>No contacts yet. Upload a CSV or Excel file to get started.</p>
-                                            <button onClick={() => setShowUpload(true)} style={btnPrimary}>Upload Contacts</button>
+                                            <p style={{ color: colors.textSecondary, marginBottom: "12px" }}>
+                                                {domainFilter
+                                                    ? `No contacts found for ${domainFilter}. Clear the filter or import more data.`
+                                                    : "No contacts yet. Upload a CSV or Excel file to get started."}
+                                            </p>
+                                            {domainFilter ? (
+                                                <button onClick={() => { setDomainFilter(""); setPage(1); }} style={btnOutline}>Clear Domain Filter</button>
+                                            ) : (
+                                                <button onClick={() => setShowUpload(true)} style={btnPrimary}>Upload Contacts</button>
+                                            )}
                                         </td>
                                     </tr>
                                 ) : contacts.map((c) => (
@@ -707,9 +838,30 @@ export default function ContactsPage() {
                                             />
                                         </td>
                                         <td style={{ padding: "10px 12px", color: colors.accent, fontWeight: 500 }}>
-                                            <Link href={`/contacts/${c.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                                                {c.email}
-                                            </Link>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                <Link href={`/contacts/${c.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                                                    {c.email}
+                                                </Link>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                                    <span style={{ fontSize: "11px", color: colors.textSecondary }}>
+                                                        {(c.first_name || c.last_name)
+                                                            ? [c.first_name, c.last_name].filter(Boolean).join(" ")
+                                                            : "Unnamed contact"}
+                                                    </span>
+                                                    {c.email_domain && (
+                                                        <span style={{
+                                                            padding: "2px 8px",
+                                                            fontSize: "11px",
+                                                            borderRadius: "999px",
+                                                            backgroundColor: "rgba(59,130,246,0.12)",
+                                                            color: "#93C5FD",
+                                                            border: "1px solid rgba(59,130,246,0.22)"
+                                                        }}>
+                                                            {c.email_domain}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </td>
                                         <td style={{ padding: "10px 12px", color: colors.textSecondary }}>
                                             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
@@ -906,6 +1058,7 @@ export default function ContactsPage() {
                                                                         fetchBatches();
                                                                         fetchContacts();
                                                                         fetchStats();
+                                                                        fetchDomains();
                                                                     }}
                                                                 />
                                                             ))}
@@ -1056,7 +1209,7 @@ export default function ContactsPage() {
                                         {Object.entries(columnMappings).map(([csvCol, target]) => (
                                             <p key={csvCol} style={{ margin: "0 0 3px", fontSize: "12px", color: colors.textSecondary }}>
                                                 {csvCol} → <span style={{ fontWeight: 500, color: colors.text }}>
-                                                    {target === "email" ? "📧 Email" : target === "first_name" ? "👤 First Name" : target === "last_name" ? "👤 Last Name" : `📋 ${target.replace("custom:", "")}`}
+                                                    {target === "email" ? "📧 Email" : `📋 ${target.replace("custom:", "")}`}
                                                 </span>
                                             </p>
                                         ))}
@@ -1127,6 +1280,7 @@ export default function ContactsPage() {
                                     <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>Total processed: {importResult.total}</p>
                                     <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.success, fontWeight: 500 }}>✓ Imported: {importResult.success}</p>
                                     {importResult.new !== undefined && <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>New: {importResult.new} | Updated: {importResult.updated}</p>}
+                                    {importResult.skipped_blank > 0 && <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>Skipped blank rows: {importResult.skipped_blank}</p>}
                                     {importResult.failed > 0 && <p style={{ margin: 0, fontSize: "13px", color: colors.danger }}>✗ Failed: {importResult.failed}</p>}
                                 </div>
 

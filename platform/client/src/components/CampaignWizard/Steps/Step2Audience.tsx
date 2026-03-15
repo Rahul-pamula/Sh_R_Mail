@@ -10,7 +10,23 @@ export default function Step2Audience({ data, updateData, onNext, onBack }: any)
     const [totalContacts, setTotalContacts] = useState(0);
     const [batches, setBatches] = useState<any[]>([]);
     const [lists, setLists] = useState<any[]>([]);
+    const [batchDomains, setBatchDomains] = useState<any[]>([]);
+    const [domainsLoading, setDomainsLoading] = useState(false);
     const [error, setError] = useState("");
+
+    const selectedBatchId = typeof data.listId === "string" && data.listId.startsWith("batch:")
+        ? data.listId.replace("batch:", "")
+        : (typeof data.listId === "string" && data.listId.startsWith("batch_domain:")
+            ? data.listId.split(":")[1]
+            : (typeof data.listId === "string" && data.listId.startsWith("batch_domains:")
+                ? data.listId.split(":")[1]
+                : ""));
+
+    const selectedBatchDomains = typeof data.listId === "string" && data.listId.startsWith("batch_domains:")
+        ? data.listId.split(":")[2]?.split(",").filter(Boolean) || []
+        : (typeof data.listId === "string" && data.listId.startsWith("batch_domain:")
+            ? [data.listId.split(":")[2]].filter(Boolean)
+            : []);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -40,8 +56,51 @@ export default function Step2Audience({ data, updateData, onNext, onBack }: any)
         fetchData();
     }, [token]);
 
+    useEffect(() => {
+        const fetchBatchDomains = async () => {
+            if (!token || !selectedBatchId) {
+                setBatchDomains([]);
+                return;
+            }
+            setDomainsLoading(true);
+            try {
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+                const params = new URLSearchParams({ batch_id: selectedBatchId, limit: "20" });
+                const res = await fetch(`${API_BASE}/contacts/domains?${params}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const payload = res.ok ? await res.json() : { data: [] };
+                setBatchDomains(payload.data || []);
+            } catch {
+                setBatchDomains([]);
+            } finally {
+                setDomainsLoading(false);
+            }
+        };
+        fetchBatchDomains();
+    }, [token, selectedBatchId]);
+
     const select = (id: string, name: string) => {
         updateData({ listId: id, listName: name });
+    };
+
+    const toggleBatchDomain = (domain: string) => {
+        const batch = batches.find((b: any) => b.id === selectedBatchId);
+        if (!batch) return;
+
+        const nextDomains = selectedBatchDomains.includes(domain)
+            ? selectedBatchDomains.filter((value: string) => value !== domain)
+            : [...selectedBatchDomains, domain];
+
+        if (nextDomains.length === 0) {
+            select(`batch:${batch.id}`, batch.file_name.replace(/\.[^.]+$/, ""));
+            return;
+        }
+
+        select(
+            `batch_domains:${selectedBatchId}:${nextDomains.join(",")}`,
+            `${batch.file_name.replace(/\.[^.]+$/, "")} - ${nextDomains.length} domain${nextDomains.length > 1 ? "s" : ""}`
+        );
     };
 
     const AudienceCard = ({ id, name, count, subtitle, icon }: any) => {
@@ -164,10 +223,72 @@ export default function Step2Audience({ data, updateData, onNext, onBack }: any)
                                     name={batch.file_name.replace(/\.[^.]+$/, '')}
                                     count={batch.imported_count}
                                     subtitle={`contacts · Imported ${new Date(batch.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                                    icon={<FileSpreadsheet size={18} color={data.listId === `batch:${batch.id}` ? '#3B82F6' : '#71717A'} />}
+                                    icon={<FileSpreadsheet size={18} color={(data.listId === `batch:${batch.id}` || data.listId?.startsWith(`batch_domain:${batch.id}:`)) ? '#3B82F6' : '#71717A'} />}
                                 />
                             ))}
                         </>
+                    )}
+
+                    {selectedBatchId && (
+                        <div style={{
+                            marginTop: '12px',
+                            padding: '14px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(63, 63, 70, 0.35)',
+                            background: 'rgba(24, 24, 27, 0.35)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                <Globe size={16} color="#60A5FA" />
+                                <div>
+                                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#FAFAFA', margin: 0 }}>Optional domain filter inside this batch</p>
+                                    <p style={{ fontSize: '12px', color: '#71717A', margin: '2px 0 0' }}>Narrow the selected batch to one domain without changing the overall audience flow.</p>
+                                </div>
+                            </div>
+                            {domainsLoading ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#71717A', fontSize: '12px' }}>
+                                    <Loader2 size={14} className="animate-spin" /> Loading batch domains...
+                                </div>
+                            ) : batchDomains.length === 0 ? (
+                                <p style={{ fontSize: '12px', color: '#71717A', margin: 0 }}>No domain breakdown available for this batch yet.</p>
+                            ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    <button
+                                        onClick={() => {
+                                            const batch = batches.find((b: any) => b.id === selectedBatchId);
+                                            if (batch) select(`batch:${batch.id}`, batch.file_name.replace(/\.[^.]+$/, ''));
+                                        }}
+                                        style={{
+                                            padding: '8px 10px',
+                                            borderRadius: '999px',
+                                            border: `1px solid ${data.listId === `batch:${selectedBatchId}` ? 'rgba(59,130,246,0.45)' : 'rgba(63,63,70,0.35)'}`,
+                                            background: data.listId === `batch:${selectedBatchId}` ? 'rgba(59,130,246,0.12)' : 'rgba(39,39,42,0.45)',
+                                            color: '#FAFAFA',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Entire batch
+                                    </button>
+                                    {batchDomains.map((entry: any) => (
+                                        <button
+                                            key={entry.domain}
+                                            onClick={() => toggleBatchDomain(entry.domain)}
+                                            style={{
+                                                padding: '8px 10px',
+                                                borderRadius: '999px',
+                                                border: `1px solid ${selectedBatchDomains.includes(entry.domain) ? 'rgba(59,130,246,0.45)' : 'rgba(63,63,70,0.35)'}`,
+                                                background: selectedBatchDomains.includes(entry.domain) ? 'rgba(59,130,246,0.12)' : 'rgba(39,39,42,0.45)',
+                                                color: '#FAFAFA',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {entry.domain} ({entry.count})
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             )}
