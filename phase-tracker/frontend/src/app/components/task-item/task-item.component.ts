@@ -27,6 +27,7 @@ export class TaskItemComponent {
     
     // Optimistic UI update
     this.task.done = newStatus;
+    console.log('[TaskItem] toggleDone', this.task._id, '->', newStatus);
     
     this.phaseService.updateTask(this.task._id, undefined, newStatus).subscribe({
       next: (phase) => this.taskChanged.emit(phase),

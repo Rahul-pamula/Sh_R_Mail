@@ -24,6 +24,7 @@ export class PhaseCardComponent {
   constructor(private phaseService: PhaseService) {}
 
   startEdit(): void {
+    console.log('[PhaseCard] startEdit', this.phase?._id);
     this.editTitle = this.phase.title;
     this.isEditing = true;
   }
@@ -43,6 +44,7 @@ export class PhaseCardComponent {
   deletePhase(): void {
     if (!this.phase._id) return;
     if (confirm('Are you sure you want to delete this phase?')) {
+      console.log('[PhaseCard] deletePhase', this.phase._id);
       this.phaseService.deletePhase(this.phase._id).subscribe(() => {
         this.deleted.emit(this.phase._id);
       });
@@ -51,6 +53,7 @@ export class PhaseCardComponent {
 
   addTask(): void {
     if (!this.newTaskText.trim() || !this.phase._id) return;
+    console.log('[PhaseCard] addTask', this.phase._id, this.newTaskText);
     this.phaseService.addTask(this.phase._id, this.newTaskText).subscribe(updatedPhase => {
       this.phase.tasks = updatedPhase.tasks;
       this.newTaskText = '';

@@ -23,15 +23,25 @@ export class DashboardComponent implements OnInit {
   }
 
   loadPhases(): void {
-    this.phaseService.getPhases().subscribe(data => {
-      this.phases = data;
+    console.log('[Dashboard] Fetching phases...');
+    this.phaseService.getPhases().subscribe({
+      next: (data) => {
+        console.log('[Dashboard] Phases loaded:', data);
+        this.phases = data;
+      },
+      error: (err) => {
+        console.error('[Dashboard] Error fetching phases:', err);
+        alert('Failed to load phases. Check console for details.');
+      }
     });
   }
 
   createPhase(): void {
     if (!this.newPhaseTitle || !this.newPhaseTitle.trim()) return;
+    console.log('[Dashboard] Creating phase:', this.newPhaseTitle);
     this.phaseService.addPhase(this.newPhaseTitle).subscribe({
       next: (phase) => {
+        console.log('[Dashboard] Phase created:', phase);
         this.phases.push(phase);
         this.newPhaseTitle = '';
       },
