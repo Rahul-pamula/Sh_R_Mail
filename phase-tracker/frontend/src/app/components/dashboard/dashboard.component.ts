@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 export class DashboardComponent implements OnInit {
   phases: Phase[] = [];
   newPhaseTitle: string = '';
+  phaseError: string = '';
 
   constructor(private phaseService: PhaseService) { }
 
@@ -37,7 +38,12 @@ export class DashboardComponent implements OnInit {
   }
 
   createPhase(): void {
-    if (!this.newPhaseTitle || !this.newPhaseTitle.trim()) return;
+    if (!this.newPhaseTitle || !this.newPhaseTitle.trim()) {
+      this.phaseError = 'Enter a phase name first.';
+      setTimeout(() => (this.phaseError = ''), 2000);
+      return;
+    }
+    this.phaseError = '';
     console.log('[Dashboard] Creating phase:', this.newPhaseTitle);
     this.phaseService.addPhase(this.newPhaseTitle).subscribe({
       next: (phase) => {
