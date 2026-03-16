@@ -42,7 +42,8 @@ export class DashboardComponent implements OnInit {
     this.phaseService.addPhase(this.newPhaseTitle).subscribe({
       next: (phase) => {
         console.log('[Dashboard] Phase created:', phase);
-        this.phases.push(phase);
+        // Re-fetch to ensure we have the latest state from the API
+        this.loadPhases();
         this.newPhaseTitle = '';
       },
       error: (err) => {
