@@ -1,0 +1,92 @@
+<div class="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-xl transition-all hover:border-gray-600 flex flex-col h-full">
+  
+  <!-- Header / Progress Area -->
+  <div class="p-5 border-b border-gray-700 bg-gray-800/80 backdrop-blur">
+    <div class="flex justify-between items-start mb-3">
+      
+      <!-- View Mode -->
+      <div *ngIf="!isEditing" class="flex-grow pr-4">
+        <h3 class="text-xl font-bold text-gray-100 flex items-center">
+          {{ phase.title }}
+        </h3>
+      </div>
+      
+      <!-- Edit Mode -->
+      <div *ngIf="isEditing" class="flex-grow pr-4 flex items-center">
+        <input 
+          type="text" 
+          [(ngModel)]="editTitle" 
+          (keyup.enter)="saveEdit()"
+          (keyup.escape)="cancelEdit()"
+          class="w-full bg-gray-900 border border-indigo-500 rounded p-1 text-white focus:outline-none"
+          autoFocus
+        >
+        <button (click)="saveEdit()" class="ml-2 text-green-400 hover:text-green-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+        <button (click)="cancelEdit()" class="ml-2 text-red-400 hover:text-red-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex space-x-2" *ngIf="!isEditing">
+        <button (click)="startEdit()" class="text-gray-400 hover:text-indigo-400 transition-colors" title="Edit Phase">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </button>
+        <button (click)="deletePhase()" class="text-gray-400 hover:text-red-400 transition-colors" title="Delete Phase">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Progress Bar -->
+    <div class="flex items-center text-xs mt-2">
+      <span class="text-gray-400 font-medium mr-3 min-w-[35px]">{{ progressPercentage }}%</span>
+      <div class="w-full bg-gray-700 rounded-full h-1.5 flex-grow">
+        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-1.5 rounded-full transition-all duration-500" [style.width.%]="progressPercentage"></div>
+      </div>
+      <span class="text-gray-500 font-medium ml-3">{{ phase.tasks.length }} Tasks</span>
+    </div>
+  </div>
+
+  <!-- Checklist Area -->
+  <div class="p-4 flex-grow overflow-y-auto max-h-[350px]">
+    <!-- Empty State -->
+    <div *ngIf="phase.tasks.length === 0" class="text-center py-6 text-gray-500 text-sm">
+      <p>No tasks mapped for this phase.</p>
+    </div>
+
+    <!-- Task List -->
+    <div class="space-y-1">
+      <app-task-item 
+        *ngFor="let task of phase.tasks" 
+        [task]="task" 
+        (taskChanged)="onTaskUpdated($event)"
+      ></app-task-item>
+    </div>
+  </div>
+
+  <!-- Footer / Add Task Area -->
+  <div class="p-3 border-t border-gray-700 bg-gray-800/50 flex items-center gap-2">
+    <div class="relative flex-grow">
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </span>
+      <input 
+        type="text" 
+        [(ngModel)]="newTaskText" 
+        (keyup.enter)="addTask()"
+        placeholder="Add task..." 
+        class="w-full bg-gray-900 border border-gray-700 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+      >
+    </div>
+    <button 
+      (click)="addTask()"
+      [disabled]="!newTaskText.trim()"
+      class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium p-2 rounded-md transition-colors"
+      [ngClass]="{'opacity-50 cursor-not-allowed': !newTaskText.trim()}">
+      Add
+    </button>
+  </div>
+</div>
