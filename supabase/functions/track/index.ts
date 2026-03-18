@@ -157,9 +157,31 @@ Deno.serve(async (req: Request) => {
   const subPath = match ? match[1] : ""; // "open/<id>" or "click"
   console.log(`[TRACK] pathname=${fullPath} → subPath=${subPath}`);
 
-  const TRACKING_SECRET = Deno.env.get("TRACKING_SECRET") ?? "dev-tracking-secret";
-  const SUPABASE_URL    = Deno.env.get("SUPABASE_URL")    ?? "";
-  const SERVICE_KEY     = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  // Allow alternate env names because Supabase UI may forbid SUPABASE_* prefix.
+  const TRACKING_SECRET =
+    Deno.env.get("EDGE_TRACKING_SECRET") ??
+    Deno.env.get("TRACKING_SECRET") ??
+    "dev-tracking-secret";
+
+  const SUPABASE_URL =
+    Deno.env.get("EDGE_SUPABASE_URL") ??
+    Deno.env.get("SUPABASE_URL") ??
+    "";
+
+  const SERVICE_KEY =
+    Deno.env.get("EDGE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    "";
+
+  const TEST_BYPASS = (Deno.env.get("TRACKING_TEST_BYPASS") ?? "0") === "1";
+
+  // Hard fail fast if required env vars are missing so it shows up in logs.
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    console.error("[TRACK] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env; cannot record events");
+    return new Response("server not configured", { status: 500 });
+  }
+
+  console.log(`[TRACK] cfg url=${SUPABASE_URL ? "set" : "missing"} key=${SERVICE_KEY ? "set" : "missing"} secret=${TRACKING_SECRET ? "set" : "missing"} bypass=${TEST_BYPASS}`);
 
   const db = createClient(SUPABASE_URL, SERVICE_KEY);
   const ip = req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for") ?? "unknown";
@@ -170,8 +192,9 @@ Deno.serve(async (req: Request) => {
     const dispatchId = subPath.slice("open/".length);
     const s = url.searchParams.get("s");
 
-    const valid = await verifySignature(TRACKING_SECRET, dispatchId, s);
+    const valid = TEST_BYPASS || await verifySignature(TRACKING_SECRET, dispatchId, s);
     if (!valid) {
+      console.warn(`[TRACK] invalid open signature for dispatch ${dispatchId}`);
       return new Response("invalid signature", { status: 400 });
     }
 
@@ -207,8 +230,9 @@ Deno.serve(async (req: Request) => {
       destination = u;
     }
 
-    const valid = await verifySignature(TRACKING_SECRET, `${d}:${u}`, s);
+    const valid = TEST_BYPASS || await verifySignature(TRACKING_SECRET, `${d}:${u}`, s);
     if (!valid) {
+      console.warn(`[TRACK] invalid click signature for dispatch ${d}`);
       // Still redirect even on bad sig — don't break user experience
       return Response.redirect(destination, 302);
     }

@@ -1,0 +1,3 @@
+[functions]
+# Make the tracking pixel & click redirect publicly accessible (no JWT required).
+verify_jwt = false
