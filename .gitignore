@@ -52,3 +52,14 @@ Thumbs.db
 .temp/
 tmp/
 reference_repos/
+
+# Contact CSV files (contain real data — never commit)
+*.csv
+
+# Dev artifacts (scratch scripts and notes)
+docs/dev-notes/
+
+# Legacy run-state files
+sync
+init
+
