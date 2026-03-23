@@ -97,6 +97,7 @@ phases = [
     {"text": "[AUDIT FIX 4] Enable SSL cert verification in worker — remove ssl.CERT_NONE; add AMQP_SKIP_TLS_VERIFY dev flag (0.5d)", "done": False},
     {"text": "[AUDIT FIX 5] Delete /contacts/upload + /test-send from main.py; remove db_check.py, db_check2.py, generate_test_csv.py from repo root (0.5d)", "done": False},
     {"text": "[AUDIT FIX 6] Remove duplicate events router registration — second app.include_router(events_router.router) in main.py (0.5d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 17] OAuth State Parameter — Require and validate a random state string in the Google/GitHub OAuth flow to prevent CSRF (0.5d)", "done": False},
   ]},
   {"title": "PHASE 1.6 — GDPR & Legal Compliance", "tasks": [
     {"text": "[BACKEND] Data export API (async job — POST > job_id > poll > download ZIP)", "done": False},
@@ -152,6 +153,8 @@ phases = [
     {"text": "[FRONTEND] Campaign audience selection supports multi-domain selection inside a batch", "done": True},
     {"text": "[FRONTEND] Duplicate resolution UI (show conflict, let tenant choose which values to keep)", "done": False},
     {"text": "[FRONTEND] Contact scoring badge visible in contacts list", "done": False},
+    # === ADDED FROM FRIEND AUDIT ===
+    {"text": "[FRIEND AUDIT FIX 18] Streaming CSV Uploads — Replace pandas in-memory parser with async chunked byte stream parsing to prevent OOM API crashes (2d)", "done": False},
   ]},
   {"title": "PHASE 3 — Template Engine", "tasks": [
     {"text": "[BACKEND] Template CRUD", "done": True},
@@ -220,6 +223,8 @@ phases = [
     {"text": "[AUDIT FIX 7] Soft vs hard bounce classification — parse SES bounceType (Permanent/Transient/Undetermined) before suppressing (2d)", "done": False},
     {"text": "[AUDIT FIX 8] Real rolling bounce rate writer — write tenant:{id}:bounces:rolling to Redis after each bounce; circuit breaker then actually fires (1.5d)", "done": False},
     {"text": "[AUDIT FIX 9] Move scheduler to standalone worker/scheduler.py — Redis SET NX EX 90 distributed lock, 60s poll, remove from FastAPI lifespan (2d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 19] Batch DB Updates in Worker — Refactor email_sender.py to batch dispatch row updates via RPC instead of 1-by-1 HTTP calls (2d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 20] Native DB Connection — Switch worker from Supabase PostgREST HTTP client to asyncpg TCP connection pool (1.5d)", "done": False},
   ]},
   {"title": "PHASE 6 — Observability & Analytics", "tasks": [
     {"text": "[BACKEND] Open tracking pixel endpoint (HMAC-signed) via Supabase Edge Function", "done": True},
@@ -278,11 +283,14 @@ phases = [
     {"text": "[AUDIT FIX 11] Uncomment Nginx block in docker-compose.yml; close ports 8000 and 3000 from public network (0.5d)", "done": False},
     {"text": "[AUDIT FIX 12] GitHub Actions CI/CD pipeline — lint + test + Docker build + deploy on merge to main (2d)", "done": False},
     {"text": "[AUDIT FIX 13] git rm frnds_contacts.csv, testmail_contacts.csv, platform/api/app.db; add *.csv and *.db to .gitignore; purge from git history (0.5d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 21] Dynamic Config Loading — Replace Path(__file__) .env loading with robust config.py / pydantic-settings (0.5d)", "done": False},
   ]},
   {"title": "PHASE 7.6 — Code Quality & Hygiene [ADDED FROM AUDIT]", "tasks": [
     {"text": "[AUDIT FIX 14] Automated test suite — 20 priority tests: auth signup/login, _suppress_contact tenant isolation, unsub token roundtrip, dispatch contact count, quota gate, bounce classification (4d)", "done": False},
     {"text": "[AUDIT FIX 15] Migration file renumbering — resolve duplicate 012_* and 013_* filenames for safe fresh deployment (0.5d)", "done": False},
     {"text": "[AUDIT FIX 16] Remove dead Clerk config — delete CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY from docker-compose.yml and .env.example (0.5d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 22] Repository Pattern / DAL — Abstract direct Supabase queries out of controllers into services/db.py (4d)", "done": False},
+    {"text": "[FRIEND AUDIT FIX 23] Monolithic Worker Refactor — Split email_sender.py into modular layers (parsing, sending, injection, logging) (2d)", "done": False},
   ]},
   {"title": "PHASE 8 — Account Settings & Administration", "tasks": [
     {"text": "[SETTINGS CORE] Settings landing page (/settings) with navigation cards", "done": True},

@@ -102,6 +102,9 @@ These items were identified during the Phase 1 architect review. They must be re
 **Fix 6 — Duplicate events router registration** *(Effort: 0.5 days)*
 `app.include_router(events.router)` is called twice in `main.py` (lines 168 and 177). FastAPI silently allows this but it doubles route entries in the OpenAPI spec and is a source of confusion. Fix: remove the second `app.include_router(events_router.router)` call.
 
+**Fix 17 — OAuth State Parameter** *(Effort: 0.5 days) [ADDED FROM FRIEND AUDIT]*
+The OAuth implementation (`/auth/google/login`) does not use a state or nonce parameter. This makes the login flow susceptible to Cross-Site Request Forgery (CSRF). Fix: Require and validate a random `state` string in the OAuth flow.
+
 ---
 
 ## Phase 1.6 — GDPR & Legal Compliance
@@ -149,6 +152,13 @@ These items were identified during the Phase 1 architect review. They must be re
 **Audience targeting in campaigns:** Contacts can be targeted by full list, by import batch, by email domain, or by a combination of batch + specific domain inside that batch.
 
 **Segmentation:** A filter-based segment builder allows targeting by any contact field value combination.
+
+---
+
+### 🟡 Contact Engine Fixes [ADDED FROM FRIEND AUDIT]
+
+**Fix 18 — Streaming CSV Uploads** *(Effort: 2 days)*
+The `/contacts/upload` endpoint reads entire CSV/Excel files into `pandas` memory. A 1GB CSV file will crash the API via Out-Of-Memory (OOM). Fix: Replace the pandas in-memory parser with Python's built-in `csv` module parsing over an async byte stream to support massive contact lists without memory bloat.
 
 ---
 
@@ -224,6 +234,12 @@ Currently every SES bounce — temporary or permanent — permanently suppresses
 
 **Fix 9 — Move scheduler out of the API process** *(Effort: 2 days)*
 `_run_scheduler()` runs as `asyncio.create_task` inside the FastAPI lifespan. When two API replicas run, **both poll and risk double-dispatching the same campaign**. The `claim_scheduled_campaign()` optimistic lock mitigates this but is fragile. Fix: flesh out `platform/worker/scheduler.py` as a standalone entrypoint. Protect the poll loop with a Redis `SET NX EX 90` distributed lock (90-second TTL, 60-second poll interval) so only one scheduler instance runs at any time across all replicas.
+
+**Fix 19 — Batch DB Updates in Worker** *(Effort: 2 days) [ADDED FROM FRIEND AUDIT]*
+The worker currently executes a `db.table(...).update(...)` for **every single email**. For a campaign of 100,000 recipients, this translates to 100,000 individual HTTP requests to Supabase just to claim rows, and another 100,000 to mark them sent. This is a severe bottleneck. Fix: Refactor `email_sender.py` to batch dispatch row updates (e.g., updating 500 rows at once) or utilize Postgres stored procedures/RPC to claim batches atomically.
+
+**Fix 20 — Native DB Connection for Worker** *(Effort: 1.5 days) [ADDED FROM FRIEND AUDIT]*
+The Python services use the Supabase REST API (PostgREST) via `httpx`. While stateless, this introduces significant HTTP overhead and forces HTTP/1.1 downgrades. Fix: Switch the worker from the Supabase PostgREST client to `asyncpg` for direct, high-performance PostgreSQL TCP connections.
 
 ---
 
@@ -307,6 +323,9 @@ All deploys are currently manual. Fix: create `.github/workflows/deploy.yml` tha
 **Fix 13 — Remove real CSV files and SQLite artifact** *(Effort: 0.5 days)*
 `frnds_contacts.csv`, `testmail_contacts.csv`, and `platform/api/app.db` are committed to the repository. The CSVs contain real contact data; the SQLite file misleads developers about the active database. Fix: `git rm` all three files, add `*.csv` and `*.db` to `.gitignore`, then run `git filter-repo --path frnds_contacts.csv --invert-paths` (and equivalent for the other files) to purge them from history.
 
+**Fix 21 — Dynamic Config Loading** *(Effort: 0.5 days) [ADDED FROM FRIEND AUDIT]*
+Loading `.env` explicitly via `Path(__file__)` is fragile and breaks easily if scripts are executed from different working directories. Fix: Use standard environment variable injection (e.g. `pydantic-settings`) or a dedicated robust `config.py`.
+
 ---
 
 ## Phase 7.6 — Code Quality & Hygiene [ADDED FROM AUDIT]
@@ -323,6 +342,12 @@ Two files are named `012_*.sql` and two are named `013_*.sql`. On a fresh deploy
 
 **Fix 16 — Remove dead Clerk configuration** *(Effort: 0.5 days)*
 `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` appear in `docker-compose.yml` (lines 33–34). Clerk is not the active authentication system — the platform uses a custom JWT model. The Clerk keys confuse new developers, add unnecessary credential surface area, and suggest a half-migration that never completed. Fix: remove both environment variable references from `docker-compose.yml` and `.env.example`.
+
+**Fix 22 — Refactor Fat Controllers to Repository Pattern** *(Effort: 4 days) [ADDED FROM FRIEND AUDIT]*
+Routes and workers embed direct SQL/HTTP queries to Supabase (e.g., `db.client.table("campaigns").select(...)`). This tightly couples business logic with database implementation. Fix: Abstract database calls into a Data Access Layer (DAL) or Repository pattern (e.g., `services/db.py`) to improve maintainability and testability.
+
+**Fix 23 — Monolithic Worker Refactor** *(Effort: 2 days) [ADDED FROM FRIEND AUDIT]*
+`email_sender.py` handles parsing, circuit breaking, tracking injection, actual SMTP, and DB updates in one massive try/except block. Fix: Split `email_sender.py` into distinct, focused modules (parsing, sending, tracking injection, database logging).
 
 ---
 

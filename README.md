@@ -434,7 +434,26 @@ You should see:
 
 ---
 
-### Terminal 3 — Frontend (Next.js)
+### Terminal 3 — Background Data Worker
+
+```bash
+cd platform/api
+source .venv/bin/activate
+cd ../worker
+python background_worker.py
+```
+
+You should see:
+```
+[INFO] BackgroundWorker: Connected to RabbitMQ
+[INFO] BackgroundWorker: Waiting for long-running jobs...
+```
+
+✅ **Data Worker is ready** — it will process CSV imports, exports, and heavy lifting.
+
+---
+
+### Terminal 4 — Frontend (Next.js)
 
 ```bash
 cd platform/client
@@ -452,7 +471,7 @@ You should see:
 
 ---
 
-### Terminal 4 — (Optional) Campaign Scheduler
+### Terminal 5 — (Optional) Campaign Scheduler
 
 The scheduler handles time-based campaign sends. It is embedded in the API process by default. If you want to run it separately:
 
@@ -471,6 +490,8 @@ python scheduler.py
 |---|---|---|
 | Frontend | http://localhost:3000 | Main application |
 | Backend API | http://localhost:8000 | REST API |
+| Email Worker | *(Background)* | Sends emails via SES |
+| Data Worker  | *(Background)* | Processes CSV imports |
 | API Docs | http://localhost:8000/docs | Interactive Swagger UI |
 | API Health | http://localhost:8000/health | Health check (DB + version) |
 
@@ -557,8 +578,11 @@ Each service prints to its own terminal window. To save to log files:
 # Terminal 1 — API
 uvicorn main:app --reload --port 8000 > logs/api.log 2>&1
 
-# Terminal 2 — Worker
-python email_sender.py > logs/worker.log 2>&1
+# Terminal 2 — Email Worker
+python email_sender.py > logs/email_worker.log 2>&1
+
+# Terminal 3 — Data Worker
+python background_worker.py > logs/bg_worker.log 2>&1
 
 # Watch all logs
 tail -f logs/*.log
