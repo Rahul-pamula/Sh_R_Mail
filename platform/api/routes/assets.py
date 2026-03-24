@@ -1,35 +1,63 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from typing import List, Dict
-from services.asset_service import AssetService
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from services.storage import get_storage_provider
+from pydantic import BaseModel
+import uuid
+import httpx
+
+class MirrorRequest(BaseModel):
+    url: str
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
 
-def get_asset_service():
-    return AssetService()
-
 @router.post("/upload")
-async def upload_asset(
-    files: List[UploadFile] = File(...),
-    service: AssetService = Depends(get_asset_service)
-):
-    """
-    Upload one or more assets for use in the editor.
-    """
-    uploaded_urls = []
-    for file in files:
-        url = await service.upload_asset(file)
-        uploaded_urls.append(url)
+async def upload_asset(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed.")
     
-    # Return format expected by GrapesJS Asset Manager (often simpler to return list of objects)
-    # But usually it expects: { data: [ { src: 'url' } ] }
-    return {"data": uploaded_urls}
+    storage = get_storage_provider()
+    
+    # Generate a unique filename to avoid collisions
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    unique_filename = f"{uuid.uuid4()}.{ext}"
+    
+    try:
+        print(f"DEBUG: Received upload request for {file.filename}")
+        url = await storage.upload(file, unique_filename)
+        print(f"DEBUG: Resource uploaded. URL: {url}")
+        return {"url": url, "filename": unique_filename}
+    except Exception as e:
+        print(f"ERROR in upload_asset: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server Upload Error: {str(e)}")
 
-@router.get("")
-async def list_assets(
-    service: AssetService = Depends(get_asset_service)
-):
-    """
-    List all available assets.
-    """
-    assets = service.get_assets()
-    return assets
+@router.post("/mirror")
+async def mirror_asset(request: MirrorRequest):
+    storage = get_storage_provider()
+    try:
+        print(f"DEBUG: Attempting to mirror URL: {request.url}")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(request.url, follow_redirects=True, timeout=10.0)
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image: {response.status_code}")
+            
+            content_type = response.headers.get("Content-Type", "")
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL does not point to a valid image")
+            
+            # Generate filename
+            ext = content_type.split("/")[-1] if "/" in content_type else "png"
+            if ";" in ext: ext = ext.split(";")[0]
+            unique_filename = f"mirrored-{uuid.uuid4()}.{ext}"
+            
+            url = await storage.upload_bytes(response.content, unique_filename, content_type)
+            print(f"DEBUG: Mirrored to S3. New URL: {url}")
+            return {"url": url, "filename": unique_filename, "original_url": request.url}
+    except Exception as e:
+        print(f"ERROR in mirror_asset: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/list")
+async def list_assets():
+    storage = get_storage_provider()
+    return storage.list_files()

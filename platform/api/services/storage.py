@@ -1,9 +1,10 @@
 import os
 import shutil
+import io
 from abc import ABC, abstractmethod
 from fastapi import UploadFile
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 class StorageProvider(ABC):
     """
@@ -16,8 +17,8 @@ class StorageProvider(ABC):
         pass
 
     @abstractmethod
-    def list_files(self) -> List[Dict[str, str]]:
-        """Lists all files in the storage bucket."""
+    async def upload_bytes(self, content: bytes, key: str, content_type: str) -> str:
+        """Uploads raw bytes and returns public URL."""
         pass
 
     @abstractmethod
@@ -37,13 +38,15 @@ class LocalStorageProvider(StorageProvider):
 
     async def upload(self, file: UploadFile, key: str) -> str:
         file_path = self.base_path / key
-        
-        # Ensure we are at the start of the file
         await file.seek(0)
-        
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+        return f"{self.base_url}/{key}"
+
+    async def upload_bytes(self, content: bytes, key: str, content_type: str) -> str:
+        file_path = self.base_path / key
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
         return f"{self.base_url}/{key}"
 
     def list_files(self) -> List[Dict[str, str]]:
@@ -68,24 +71,76 @@ class LocalStorageProvider(StorageProvider):
         return False
 
 # Placeholder for S3 - This shows verify scalability
+import boto3
+from botocore.config import Config
+
 class S3StorageProvider(StorageProvider):
     """
-    Implementation for S3 Storage (AWS/Cloudflare R2/MinIO).
-    Ready for Production/Enterprise.
+    Implementation for S3-compatible Storage (AWS/Supabase/Cloudflare R2).
     """
-    def __init__(self, bucket_name: str, region: str, access_key: str, secret_key: str):
-        # In a real app, we would initialize boto3 client here
-        pass
+    def __init__(self, bucket_name: str, region: str, access_key: str, secret_key: str, endpoint_url: Optional[str] = None):
+        self.bucket_name = bucket_name
+        self.s3_client = boto3.client(
+            "s3",
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            endpoint_url=endpoint_url,
+            config=Config(signature_version='s3v4')
+        )
+        # For Supabase/S3-compatible, we often need to construct the public URL manually if not using signed URLs
+        # Extract the base host from endpoint_url if provided
+        self.base_url = endpoint_url.replace("/storage/v1/s3", "/storage/v1/object/public") if endpoint_url else ""
 
     async def upload(self, file: UploadFile, key: str) -> str:
-        # boto3.client.upload_fileobj(...)
-        raise NotImplementedError("S3 is not configured yet. Set STORAGE_TYPE=local for now.")
+        try:
+            await file.seek(0)
+            print(f"DEBUG: Attempting upload to S3. Bucket: {self.bucket_name}, Key: {key}")
+            self.s3_client.upload_fileobj(
+                file.file,
+                self.bucket_name,
+                key,
+                ExtraArgs={"ContentType": file.content_type}
+            )
+            print(f"DEBUG: Upload successful.")
+            
+            if self.base_url:
+                return f"{self.base_url}/{self.bucket_name}/{key}"
+            return f"https://{self.bucket_name}.s3.amazonaws.com/{key}"
+        except Exception as e:
+            print(f"DEBUG: S3 upload exception: {str(e)}")
+            raise e
+
+    async def upload_bytes(self, content: bytes, key: str, content_type: str) -> str:
+        try:
+            print(f"DEBUG: Attempting bytes upload to S3. Bucket: {self.bucket_name}, Key: {key}")
+            self.s3_client.upload_fileobj(
+                io.BytesIO(content),
+                self.bucket_name,
+                key,
+                ExtraArgs={"ContentType": content_type}
+            )
+            print(f"DEBUG: Bytes upload successful.")
+            
+            if self.base_url:
+                return f"{self.base_url}/{self.bucket_name}/{key}"
+            return f"https://{self.bucket_name}.s3.amazonaws.com/{key}"
+        except Exception as e:
+            print(f"DEBUG: S3 bytes upload exception: {str(e)}")
+            raise e
 
     def list_files(self) -> List[Dict[str, str]]:
-        raise NotImplementedError("S3 is not configured yet.")
+        response = self.s3_client.list_objects_v2(Bucket=self.bucket_name)
+        assets = []
+        for obj in response.get("Contents", []):
+            key = obj["Key"]
+            src = f"{self.base_url}/{self.bucket_name}/{key}" if self.base_url else f"https://{self.bucket_name}.s3.amazonaws.com/{key}"
+            assets.append({"src": src, "name": key, "type": "image"})
+        return assets
 
     def delete(self, key: str) -> bool:
-        raise NotImplementedError("S3 is not configured yet.")
+        self.s3_client.delete_object(Bucket=self.bucket_name, Key=key)
+        return True
 
 def get_storage_provider() -> StorageProvider:
     """Factory method to get the configured storage provider."""
@@ -93,10 +148,11 @@ def get_storage_provider() -> StorageProvider:
     
     if storage_type == "s3":
         return S3StorageProvider(
-            bucket_name=os.getenv("S3_BUCKET"),
-            region=os.getenv("S3_REGION"),
-            access_key=os.getenv("AWS_ACCESS_KEY_ID"),
-            secret_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+            bucket_name=os.getenv("S3_BUCKET", ""),
+            region=os.getenv("S3_REGION", ""),
+            access_key=os.getenv("AWS_ACCESS_KEY_ID", ""),
+            secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+            endpoint_url=os.getenv("S3_ENDPOINT", "")
         )
     
     return LocalStorageProvider()

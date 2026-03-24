@@ -115,6 +115,10 @@ async def _run_scheduler():
                 except Exception as e:
                     logger.error(f"[{cid}] Dispatch failed: {e}")
         except Exception as e:
+            if "Server disconnected" in str(e):
+                logging.getLogger("scheduler").warning("Supabase connection dropped. Retrying in 5s...")
+                await asyncio.sleep(5)
+                continue
             logging.getLogger("scheduler").error(f"Scheduler poll error: {e}")
         await asyncio.sleep(POLL)
 

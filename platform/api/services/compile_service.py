@@ -25,7 +25,7 @@ from typing import Any, Dict, List
 # XML / attribute helpers
 # ---------------------------------------------------------------------------
 
-def _esc(text: str) -> str:
+def _esc(text: Any) -> str:
     """Escape for safe inclusion in MJML/XML attributes and text nodes."""
     if not isinstance(text, str):
         text = str(text)
@@ -96,7 +96,7 @@ def _render_spacer(props: Dict[str, Any]) -> str:
 
 def _render_social(props: Dict[str, Any]) -> str:
     align = props.get("align", "center")
-    icons = props.get("icons", props.get("links", []))
+    icons = props.get("icons") or props.get("links") or []
     elements: List[str] = []
     for icon in icons:
         platform = icon.get("platform", icon.get("label", "twitter")).lower()
@@ -143,6 +143,79 @@ def _render_footer(props: Dict[str, Any]) -> str:
     )
 
 
+def _render_floating_text(props: Dict[str, Any]) -> str:
+    """Renders an absolutely positioned text box. Low email compatibility."""
+    x = props.get("x", 0)
+    y = props.get("y", 0)
+    width = props.get("width", 200)
+    bg = props.get("backgroundColor", "#ffffff")
+    border_color = props.get("borderColor", "transparent")
+    border_width = props.get("borderWidth", 0)
+    radius = props.get("borderRadius", 0)
+    padding = props.get("padding", 12)
+    fs = props.get("fontSize", 16)
+    color = props.get("color", "#374151")
+    content = props.get("content", "")
+
+    style = (
+        f"position:absolute; top:{y}px; left:{x}px; width:{width}px; "
+        f"background-color:{bg}; border:{border_width}px solid {border_color}; "
+        f"border-radius:{radius}px; padding:{padding}px; "
+        f"font-size:{fs}px; color:{color}; z-index:999; box-sizing:border-box;"
+    )
+    return f'<mj-raw><div style="{style}">{content}</div></mj-raw>'
+
+
+def _render_floating_image(props: Dict[str, Any]) -> str:
+    """Renders an absolutely positioned image box. Low email compatibility."""
+    src = _esc(props.get("src", ""))
+    alt = _esc(props.get("alt", "Image"))
+    x = props.get("x", 0)
+    y = props.get("y", 0)
+    width = props.get("width", 200)
+    radius = props.get("borderRadius", 0)
+    border_color = props.get("borderColor", "transparent")
+    border_width = props.get("borderWidth", 0)
+    padding = props.get("padding", 0)
+
+    container_style = (
+        f"position:absolute; top:{y}px; left:{x}px; width:{width}px; "
+        f"z-index:999; box-sizing:border-box;"
+    )
+    img_style = (
+        f"width:100%; height:auto; display:block; "
+        f"border-radius:{radius}px; border:{border_width}px solid {border_color}; "
+        f"padding:{padding}px;"
+    )
+    return f'<mj-raw><div style="{container_style}"><img src="{src}" alt="{alt}" style="{img_style}" /></div></mj-raw>'
+
+
+def _render_layout(props: Dict[str, Any]) -> str:
+    layout_type = props.get("layoutType", "2-col")
+    cols = props.get("columns", [])
+    gap = props.get("gap", 20)
+    padding = props.get("padding", 20)
+    hide_on_mobile = props.get("hideOnMobile")
+
+    mj_columns = []
+    width = "100%"
+    if layout_type == "2-col": width = "50%"
+    elif layout_type == "3-col": width = "33.33%"
+
+    for col in cols:
+        content = col.get("content", "")
+        # Minimalist column content for now as per frontend implementation
+        col_mjml = f'<mj-text padding="10px">{content}</mj-text>'
+        mj_columns.append(f'<mj-column width="{width}">{col_mjml}</mj-column>')
+
+    css_class = ' css-class="hide-on-mobile"' if hide_on_mobile else ""
+    return (
+        f'<mj-section padding="{padding}px 0px"{css_class}>\n'
+        f'  {"".join(mj_columns)}\n'
+        f'</mj-section>'
+    )
+
+
 BLOCK_RENDERERS: Dict[str, Any] = {
     "text":    _render_text,
     "image":   _render_image,
@@ -152,6 +225,9 @@ BLOCK_RENDERERS: Dict[str, Any] = {
     "social":  _render_social,
     "hero":    _render_hero,
     "footer":  _render_footer,
+    "floating-text": _render_floating_text,
+    "floating-image": _render_floating_image,
+    "layout":  _render_layout,
 }
 
 
@@ -160,35 +236,40 @@ BLOCK_RENDERERS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 def render_block(block: Dict[str, Any]) -> str:
+    """Renders a block into a complete MJML section/component."""
     b_type = block.get("type", "")
+    props = block.get("props", {})
     renderer = BLOCK_RENDERERS.get(b_type)
-    if renderer:
-        return renderer(block.get("props", {}))
-    return ""
+    if not renderer:
+        return ""
+    
+    mjml_content = renderer(props)
+    
+    # Special case: layout blocks manage their own mj-section
+    if b_type == "layout":
+        return mjml_content
 
-
-def render_column(column: Dict[str, Any]) -> str:
-    width = column.get("width", "")
-    width_attr = f'width="{width}%"' if width else ""
-    blocks_mjml = "\n".join(render_block(b) for b in column.get("blocks", []))
-    return f"<mj-column {width_attr}>\n{blocks_mjml}\n</mj-column>"
-
-
-def render_row(row: Dict[str, Any]) -> str:
-    settings = row.get("settings", {})
-    bg = settings.get("backgroundColor", "transparent")
-    pt = settings.get("paddingTop", 0)
-    pb = settings.get("paddingBottom", 0)
-    pl = settings.get("paddingLeft", 0)
-    pr = settings.get("paddingRight", 0)
-    padding = f"{pt}px {pr}px {pb}px {pl}px"
-
-    cols_mjml = "\n".join(render_column(c) for c in row.get("columns", []))
+    # Standard blocks get wrapped in a section/column
+    css_class = ' css-class="hide-on-mobile"' if props.get("hideOnMobile") else ""
     return (
-        f'<mj-section background-color="{_esc(bg)}" padding="{padding}">\n'
-        f'{cols_mjml}\n'
+        f'<mj-section padding="0px"{css_class}>\n'
+        f'  <mj-column width="100%">\n'
+        f'    {mjml_content}\n'
+        f'  </mj-column>\n'
         f'</mj-section>'
     )
+
+
+def render_zone(blocks: List[Dict[str, Any]], zone_name: str) -> str:
+    """Renders all blocks in a zone and joins them."""
+    if not blocks:
+        return ""
+    
+    parts = [f'<!-- {zone_name.upper()} ZONE -->']
+    for b in blocks:
+        parts.append(render_block(b))
+    
+    return "\n".join(parts)
 
 
 def render_design(design_json: Dict[str, Any]) -> str:
@@ -198,18 +279,29 @@ def render_design(design_json: Dict[str, Any]) -> str:
     width = theme.get("contentWidth", 600)
     font = _esc(theme.get("fontFamily", "Arial, sans-serif"))
 
-    rows_mjml = "\n".join(render_row(r) for r in design_json.get("rows", []))
+    # Render each zone
+    header_mjml = render_zone(design_json.get("headerBlocks", []), "header")
+    body_mjml = render_zone(design_json.get("bodyBlocks", []), "body")
+    footer_mjml = render_zone(design_json.get("footerBlocks", []), "footer")
 
     return f"""<mjml>
   <mj-head>
     <mj-attributes>
       <mj-all font-family="{font}" />
-      <mj-text padding="0px" />
-      <mj-image padding="0px" />
+      <mj-text padding="0px" color="{_esc(theme.get('paragraphColor', '#475569'))}" />
+      <mj-button border-radius="{theme.get('borderRadius', 8)}px" />
+      <mj-image padding="0px" border-radius="{theme.get('borderRadius', 0)}px" />
     </mj-attributes>
+    <mj-style>
+      @media only screen and (max-width:480px) {{
+        .hide-on-mobile {{ display: none !important; }}
+      }}
+    </mj-style>
   </mj-head>
   <mj-body background-color="{_esc(bg)}" width="{width}px">
-{rows_mjml}
+{header_mjml}
+{body_mjml}
+{footer_mjml}
   </mj-body>
 </mjml>"""
 
@@ -231,10 +323,11 @@ def compile_mjml_to_html(mjml_string: str) -> str:
         )
         if result.returncode != 0:
             raise RuntimeError(f"MJML compilation error: {result.stderr}")
-        return result.stdout
+        return result.stdout or ""
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +388,7 @@ def run_preflight_checks(
     if hits:
         warnings.append({
             "type": "spam_flag", "severity": "warning",
-            "message": f"Spam trigger words: {', '.join(hits[:3])}.",
+            "message": f"Spam trigger words found: {len(hits)}.",
         })
 
     return warnings

@@ -53,7 +53,7 @@ export default function TemplateBuilderPage({ params }: { params: { id: string }
         if (typeof window === "undefined") return;
 
         const grapesjs = require("grapesjs");
-        const presetNewsletter = require("grapesjs-preset-newsletter");
+        const presetMjml = require("grapesjs-mjml");
 
         const editor = grapesjs.init({
             container: containerRef.current,
@@ -61,10 +61,10 @@ export default function TemplateBuilderPage({ params }: { params: { id: string }
             height: '100vh',
             width: 'auto',
             storageManager: false, // We handle saving manually
-            plugins: [presetNewsletter],
+            plugins: [presetMjml],
             pluginsOpts: {
-                [presetNewsletter]: {
-                    modalTitleImport: "Import template",
+                [presetMjml]: {
+                    // MJML specific options if needed
                 }
             },
             assetManager: {
@@ -76,8 +76,10 @@ export default function TemplateBuilderPage({ params }: { params: { id: string }
             }
         });
 
-        // Set initial HTML if it exists
-        if (template.html_body) {
+        // Set initial HTML or JSON state if it exists
+        if (template.design_json && Object.keys(template.design_json).length > 0) {
+            editor.loadProjectData(template.design_json);
+        } else if (template.html_body) {
             editor.setComponents(template.html_body);
         }
 
@@ -155,6 +157,9 @@ export default function TemplateBuilderPage({ params }: { params: { id: string }
             // Get combined HTML & CSS
             const html = editorRef.current.getHtml();
             const css = editorRef.current.getCss();
+            
+            // Get the GrapesJS drag-and-drop state JSON (this is the Canva magic!)
+            const projectData = editorRef.current.getProjectData();
 
             // Generate a simple plain text fallback (strip tags)
             const tmpDiv = document.createElement("div");
@@ -173,7 +178,8 @@ export default function TemplateBuilderPage({ params }: { params: { id: string }
                 body: JSON.stringify({
                     name: template.name,
                     category: template.category,
-                    compiled_html: finalHtml,
+                    compiled_html: finalHtml, // The raw html string to send in emails
+                    design_json: projectData, // The raw JSON editor state
                     variables: template.variables
                 })
             });

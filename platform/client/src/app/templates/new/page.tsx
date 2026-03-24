@@ -7,29 +7,18 @@ import { ChevronLeft, Layout, Loader2 } from "lucide-react";
 
 const API_BASE = "http://localhost:8000";
 
-// ── Starter design JSON (empty canvas with one row) ────────────────────────
+// ── Starter design JSON (fully blank canvas) ────────────────────────────────
 const EMPTY_DESIGN = {
     theme: {
-        background: "#f3f4f6",
+        background: "#f8f9fb",
         contentWidth: 600,
-        fontFamily: "Arial, sans-serif",
-        primaryColor: "#4f46e5",
+        fontFamily: "'Inter', Arial, sans-serif",
+        primaryColor: "#6366F1",
     },
-    rows: [
-        {
-            id: "row-1",
-            settings: { backgroundColor: "#ffffff", paddingTop: 30, paddingBottom: 30 },
-            columns: [
-                {
-                    id: "col-1",
-                    width: 100,
-                    blocks: [
-                        { id: "blk-1", type: "text", props: { content: "Start editing your email here…", fontSize: 16, align: "center", color: "#6B7280" } },
-                    ],
-                },
-            ],
-        },
-    ],
+    headerBlocks: [],
+    bodyBlocks: [],
+    footerBlocks: [],
+    schema_version: "2.0.0",
 };
 
 export default function NewTemplatePage() {

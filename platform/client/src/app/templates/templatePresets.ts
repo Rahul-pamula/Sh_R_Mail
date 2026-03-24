@@ -141,7 +141,7 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
           id: "row-ann-b", settings: { backgroundColor: "#ffffff", paddingTop: 30, paddingBottom: 30 },
           columns: [{
             id: "col-ab", width: 100, blocks: [
-              { id: "ab-1", type: "text", props: { content: "We have an exciting update to share with you. Our platform has been upgraded with new powerful features that will help you work smarter.", fontSize: 15, align: "left", color: "#374151" } },
+              { id: "ab-1", type: "text", props: { content: "We have an exciting update to share with you. Our platform has been upgraded with new powerful features that will help you work smarter.", fontSize: 15, align: "left", color: "#475569" } },
               { id: "ab-2", type: "button", props: { text: "Learn More", url: "#", backgroundColor: "#7c3aed", color: "#ffffff", align: "center", borderRadius: 6, padding: 12 } },
             ]
           }],

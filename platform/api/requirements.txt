@@ -21,6 +21,8 @@ aio-pika>=9.3.0
 # Validation (Python 3.13 compatible)
 pydantic>=2.10.0
 email-validator>=2.1.0
+httpx>=0.27.0
+
 
 # SMTP Worker (Phase 3)
 aiosmtplib>=3.0.0

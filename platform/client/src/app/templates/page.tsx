@@ -21,7 +21,7 @@ interface Template {
     category: string;
     updated_at: string;
     compiled_html: string;
-    mjml_json?: { editor?: string;[key: string]: any };
+    design_json?: { editor?: string;[key: string]: any };
 }
 
 export default function TemplatesPage() {
@@ -91,7 +91,7 @@ export default function TemplatesPage() {
 
             if (res.ok) {
                 const data = await res.json();
-                router.push(`/templates/${data.id}/block`);
+                router.push(`/templates/${data.id}/builder`);
             } else {
                 alert("Failed to create template from preset");
             }
@@ -104,7 +104,7 @@ export default function TemplatesPage() {
     };
 
     const handleEdit = (id: string, editorType?: string) => {
-        router.push(`/templates/${id}/block`);
+        router.push(`/templates/${id}/builder`);
     };
 
     const handleDuplicate = async (e: React.MouseEvent, id: string) => {
@@ -337,7 +337,7 @@ export default function TemplatesPage() {
                             return (
                                 <div
                                     key={template.id}
-                                    onClick={() => handleEdit(template.id, template.mjml_json?.editor)}
+                                    onClick={() => handleEdit(template.id, template.design_json?.editor)}
                                     style={{
                                         border: "1px solid #374151",
                                         borderRadius: "8px",
