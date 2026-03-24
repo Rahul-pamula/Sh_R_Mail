@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 style="margin-top: 0; color: #F1F5F9;">You've been invited!</h2>
+<p style="color: #94A3B8;">
+  <strong>{{ inviter_name }}</strong> has invited you to join their workspace <strong>{{ workspace_name }}</strong> on Email Engine.
+</p>
+<a href="{{ invite_url }}" style="display: inline-block; margin: 24px 0; padding: 12px 24px; background: #10B981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
+  Accept Invitation
+</a>
+<p style="color: #64748B; font-size: 13px;">
+  This link expires in <strong>7 days</strong>.
+</p>
+{% endblock %}

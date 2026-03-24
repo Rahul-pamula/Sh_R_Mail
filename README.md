@@ -23,7 +23,8 @@
 12. [Running Database Migrations](#running-database-migrations)
 13. [Viewing Logs](#viewing-logs)
 14. [Project Docs & Progress Tracker](#project-docs--progress-tracker)
-15. [Contributing](#contributing)
+15. [Live Project Tracker](#live-project-tracker)
+16. [Contributing](#contributing)
 
 ---
 
@@ -621,6 +622,14 @@ explorer.exe "$(wslpath -w docs/progress.html)"
 ```
 
 Or just **double-click** `docs/progress.html` in your file browser.
+
+---
+
+## Live Project Tracker
+
+- **GitHub Pages URL:** https://rahul-pamula.github.io/Sh_R_Mail/progress.html
+- Served from `main` → `docs/` on GitHub Pages. Updates after each push to `main`.
+- If you see raw HTML instead of the page, re-check the Pages settings (branch=`main`, folder=`/docs`).
 
 ---
 

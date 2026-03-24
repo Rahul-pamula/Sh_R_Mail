@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 style="margin-top: 0; color: #F1F5F9;">Verify your email address</h2>
+<p style="color: #94A3B8;">
+  Thanks for signing up! Click the button below to verify your email address and complete your account setup.
+</p>
+<a href="{{ verify_url }}" style="display: inline-block; margin: 24px 0; padding: 12px 24px; background: #10B981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
+  Verify Email
+</a>
+<p style="color: #64748B; font-size: 13px;">
+  This link expires in <strong>24 hours</strong>.
+</p>
+{% endblock %}
