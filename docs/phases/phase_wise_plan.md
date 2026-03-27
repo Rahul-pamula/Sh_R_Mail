@@ -12,17 +12,54 @@ Each phase is divided into TWO parts:
 ---
 
 ## 🏗 CRITICAL ARCHITECTURE: DUAL EMAIL ENGINE
-To prevent platform/system emails from going to spam due to DMARC/Spoofing rules, the system uses TWO entirely separate email pipelines:
 
-1. **CENTRALIZED SYSTEM EMAILER (Queue-First via Gmail SMTP)**
-   - Uses `shrmail.app@gmail.com` via standard secure SMTP.
-   - Purpose: Handles critical platform-to-tenant communications (OTP verifications, sender confirmation, quota warnings, welcome emails, team invites).
-   - Why: Guarantees Inbox delivery for critical app functions without needing a verified custom domain.
+Before phases — explain this first:
 
-2. **TENANT CAMPAIGN EMAILER (Self-Hosted MTA / Transact Provider)**
-   - Uses the tenant's own verified custom domain (e.g. `sales@theircompany.com`).
-   - Purpose: Bulk marketing campaigns, newsletters, subscriber communications.
-   - Why: Isolates sender reputation and handles high-volume throughput.
+Our system sends two completely different types of emails:
+
+1. **System Emails** — OTPs, welcome emails, team invites, password reset → sent via `shrmail.app@gmail.com` (Gmail SMTP) — almost always lands in the inbox because Gmail has a trusted reputation.
+2. **Campaign Emails** — Bulk newsletters to thousands of subscribers → sent via the tenant's own verified domain (e.g. `sales@theircompany.com`) via **AWS SES** — isolates sender reputation per tenant.
+
+> **Why this matters:** This design means even if one tenant's campaign has deliverability issues or spam complaints, it never affects our platform's ability to deliver critical OTPs and system alerts to another user.
+
+### Architecture Flow
+
+```mermaid
+graph TD
+    classDef userNode fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:10px,ry:10px;
+    classDef coreApp fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef sysWorker fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef tenWorker fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef provider fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:10px,ry:10px;
+    classDef db fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff,rx:5px,ry:5px;
+    
+    User([Platform User / Tenant]) ::: userNode --> |Interacts with| App[Sh_R_Mail Platform] ::: coreApp
+    
+    subgraph App Logic
+        App --> Auth[Auth & Core Logistics] ::: coreApp
+        App --> Campaigns[Campaign Engine] ::: coreApp
+    end
+
+    subgraph Dual Processing Queues
+        Auth --> |"OTP, Invites, Password Resets"| SysQueue[(System Queue)] ::: db
+        Campaigns --> |"Newsletters, Bulk Promos"| TenantQueue[(Campaign Queue)] ::: db
+
+        SysQueue --> SysWorker[System Mail Worker] ::: sysWorker
+        TenantQueue --> TenantWorker[Tenant Mail Worker] ::: tenWorker
+    end
+
+    subgraph Email Delivery Providers
+        SysWorker --> |"shrmail.app@gmail.com"| Gmail[Gmail SMTP] ::: provider
+        TenantWorker --> |"sales@tenantdomain.com"| SES[AWS SES] ::: provider
+    end
+
+    Gmail --> |"Guaranteed Inbox Delivery"| Inbox1([User Inbox]) ::: userNode
+    SES --> |"Isolated Tenant Reputation"| Inbox2([Subscriber Inbox]) ::: userNode
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5;
+    class Dual Processing Queues dualBox;
+    class Email Delivery Providers dualBox;
+```
 
 ---
 
