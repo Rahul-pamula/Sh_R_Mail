@@ -162,6 +162,46 @@ graph TD
 - Accessible modal implementations with focus traps, escape-to-close, and visible outlines.
 - WCAG 2.1 AA color contrast validation and minimum 44x44px touch-target guidance enforced.
 
+**📋 Planned Tasks — Phase 0**
+- shadcn/ui installed and initialized
+- Inter font installed in root layout
+- Core dark-mode tokens exist in globals.css
+- Typography scale is fully defined
+- Semantic token set is complete
+- App no longer uses hardcoded colors or inline style-heavy UI
+- Design Tokens Documentation Page (internal token reference)
+- Loading skeletons on all list pages (contacts, campaigns, templates)
+- Dark / Light mode toggle (CSS variable swap)
+- Button.tsx
+- Badge.tsx
+- HealthDot.tsx
+- LoadingSpinner.tsx
+- StatCard.tsx
+- StatusBadge.tsx
+- ConfirmModal.tsx
+- Toast.tsx
+- PageHeader.tsx
+- DataTable.tsx
+- EmptyState.tsx
+- Breadcrumb.tsx
+- src/components/ui/index.ts
+- Tailwind config maps tokens to utility names
+- All mapped Tailwind token names resolve to actual CSS variables
+- Every destructive action uses ConfirmModal
+- Every async form submit uses loading state consistently
+- Every API success path uses toast feedback consistently
+- Every API error path uses toast feedback consistently
+- Every empty list uses EmptyState
+- Every list page has consistent search and filter behavior
+- Mobile navigation is complete end-to-end
+- Remove global *:focus { outline: none }
+- Modal accessibility is complete (focus trap + restore)
+- Icon-only buttons are fully labeled app-wide
+- 44x44 touch-target guidance is satisfied app-wide
+- Mailhog added to docker-compose.yml
+- scripts/seed_dev_data.py added
+- .env.example fully documents all required variables
+
 ---
 
 ## Phase 1 — Foundation, Auth, Tenant Identity & Onboarding
@@ -254,6 +294,33 @@ graph TD
 - Global `AuthContext` distributing verified session state across components.
 - Middleware executing route protection and redirecting unauthenticated traffic safely.
 
+**📋 Planned Tasks — Phase 1**
+- Custom email/password auth (bcrypt + custom JWT)
+- Tenant membership model (users, tenants, tenant_users)
+- Onboarding flow (4-step wizard + progressive endpoints)
+- JWT middleware (tenant_id, role, email, user_id verification)
+- Active-tenant guard exists
+- Workspace switching exists
+- /auth/me fully implemented
+- All onboarding endpoints use JWT-only tenant resolution consistently
+- Login page
+- Signup page
+- reCAPTCHA on Signup form
+- Onboarding wizard (workspace > use-case > integrations > scale > complete)
+- Interactive onboarding checklist on dashboard
+- Sidebar navigation layout
+- Auth context exists
+- Middleware redirects exist
+- Route protection is fully centralized and consistent
+- JWT carries tenant identity
+- X-Tenant-ID is validated against JWT when used
+- Onboarding tenants are blocked from active-tenant routes
+- Social Auth (Google, GitHub) via OAuth 2.0 / Supabase
+- Rate limiting on login + registration endpoints (per IP, per email)
+- Email verification required before onboarding completes
+- Short-lived access tokens (15-30 min) + silent refresh tokens
+- Token revocation via token_version counter (force-logout all devices)
+
 ---
 
 ## Phase 1.5 — Auth Hardening & Audit Logging
@@ -268,6 +335,28 @@ graph TD
 **[FRONTEND]**
 - Audit log viewer UI component allowing workspace owners to filter team actions chronologically.
 - 2FA setup screen rendering secure QR codes and validating TOTP generation.
+
+**📋 Planned Tasks — Phase 1.5**
+- Remove custom /auth/forgot-password endpoint
+- Remove custom /auth/reset-password endpoint
+- reCAPTCHA token verification endpoint/middleware
+- Audit logs table (who did what, when, on which record — metadata only)
+- Audit log table is write-only / immutable (no UPDATE or DELETE allowed)
+- Log severity levels: INFO / WARNING / CRITICAL on every log row
+- Auto-alert on CRITICAL log events (bulk delete >1000, suspicious login)
+- Configure Supabase Auth SMTP to use shrmail.app@gmail.com
+- Fix forgot-password page — Supabase Auth built-in reset email flow
+- Fix reset-password page — Supabase Auth password update
+- Test: sign up > verify email > login > forgot password > reset
+- Audit log viewer with severity filter (INFO / WARNING / CRITICAL)
+- MFA via TOTP for workspace admins
+- [AUDIT FIX 1] Cross-tenant webhook suppression — add tenant_id filter to _suppress_contact()
+- [AUDIT FIX 2] JWT refresh token model — 30-min access token + HttpOnly refresh cookie + token_version revocation
+- [AUDIT FIX 3] Lock CORS to FRONTEND_URL env var — no wildcard in production
+- [AUDIT FIX 4] Enable SSL cert verification in worker — remove ssl.CERT_NONE
+- [AUDIT FIX 5] Delete /contacts/upload + /test-send from main.py; remove dev scripts from repo root
+- [AUDIT FIX 6] Remove duplicate events router registration in main.py
+- [FRIEND AUDIT FIX 17] OAuth State Parameter — validate random state string in Google/GitHub OAuth flow
 
 ---
 
@@ -284,6 +373,19 @@ graph TD
 - Quick data export request functionality in Settings routing download instructions to email.
 - Restoration action flows permitting users to undelete soft-deleted items.
 - Specific consent and source columns visibly rendered in the contacts data table.
+
+**📋 Planned Tasks — Phase 1.6**
+- Data export API (async job — POST > job_id > poll > download ZIP)
+- Right to be forgotten: DELETE /contacts/{id}/anonymize (anonymize PII, keep row)
+- Soft delete pattern: deleted_at on contacts, campaigns, templates (30-day restore)
+- Consent tracking: consent_source, consent_date, consent_ip on contacts
+- Data retention policy: auto-flag contacts inactive >24 months for purge
+- Consent re-validation: exclude contacts with consent >24 months old
+- Do Not Contact (DNC) global suppression list (platform-level, blocks all emails)
+- Restore modal for soft-deleted items
+- Data export button in Settings
+- Consent column visible in contacts table
+- Privacy policy / Terms page linked from footer
 
 ---
 
@@ -372,6 +474,49 @@ graph TD
 - Dedicated Suppression List view exposing spam complaints and hard bounces.
 - Dynamic segment builder targeting specific field permutations.
 
+**📋 Planned Tasks — Phase 2**
+- CSV/XLSX ingestion
+- Real-time contact ingestion API (POST /v1/contacts for forms/CRM webhooks)
+- Email validation: syntax check + MX record check + disposable email detection
+- Contact scoring system (engaged / at-risk / inactive / risky)
+- Upload preview endpoint
+- Async import job creation
+- RabbitMQ background import worker
+- Import batch history
+- Deduplication (in-memory + Supabase upsert on tenant_id, email)
+- Contact status (subscribed, unsubscribed, bounced, complained)
+- Domain summary endpoint and email_domain storage
+- Batch-scoped domain filtering
+- Segmentation filters (filter by field/operator/value)
+- Bulk delete
+- Contact search endpoint (email, name, tag)
+- Contact update endpoint (email + custom fields)
+- Tags CRUD API (add/remove/list tags per contact)
+- Soft delete: deleted_at column on contacts (restore within 30 days)
+- Suppression list API (GET /contacts/suppression)
+- Export contacts API
+- FIX: GET /suppression route collision with /{contact_id} resolved
+- FIX: Suppression list jwt_payload arg bug fixed (was returning 0 results)
+- Contacts list page (table with search and pagination)
+- Import contacts modal with preview and mapping
+- Async import progress polling
+- Import history tab
+- Batch detail page
+- Batch detail domain filtering
+- Contact status badges (subscribed / unsubscribed / bounced)
+- Segment builder UI (filter by field, value)
+- Bulk action buttons (delete selected)
+- Contact detail editing (email + custom fields)
+- Contact detail page (individual contact activity)
+- Export contacts to CSV button
+- Tags UI (add/remove tags on contacts)
+- Suppression list page (view bounced/spam/unsubscribed contacts)
+- Campaign audience selection supports batch-domain targeting
+- Campaign audience selection supports multi-domain selection inside a batch
+- Duplicate resolution UI (show conflict, let tenant choose which values to keep)
+- Contact scoring badge visible in contacts list
+- [FRIEND AUDIT FIX 18] Streaming CSV Uploads — Replace pandas in-memory parser with async chunked byte stream parsing
+
 ---
 
 ## Phase 3 — Template Engine & AI Content Creation
@@ -455,6 +600,28 @@ graph TD
 - Send test email functionality seamlessly embedding custom merge-tag dummy data.
 - **AI Copywriting Assistant UI**: Magic-wand contextual buttons generating subject lines or rewriting paragraphs inline inside the editor canvas.
 
+**📋 Planned Tasks — Phase 3**
+- Template CRUD
+- Category
+- Persist compiled HTML from the active block editor
+- Preset gallery and preset-driven template creation
+- Template versioning (save history)
+- Plain text auto-generator (sync from HTML for spam filters)
+- Public View Online link (render template in browser without login)
+- Templates list page (grid of template cards with thumbnails)
+- Create template (blank canvas and preset entry flow)
+- Structured block editor (rows > columns > blocks)
+- Server-side compile preview (design_json > MJML > HTML)
+- Plain Text (Auto-generated) | Plain Text (Custom) tabs
+- Send test email button (enter email address > receive real email)
+- Duplicate template button
+- Category filter tabs on template list
+- Version history panel (see and restore older versions)
+- Dynamic placeholder guide (show list of {{merge_tags}} user can use)
+- Spam score checker (SpamAssassin-style heuristics before campaign send)
+- Mobile preview mode (375px viewport toggle in template editor)
+- Inbox preview simulation (Gmail, Outlook, Apple Mail rendering)
+
 ---
 
 ## Phase 4 — Campaign Orchestration
@@ -535,6 +702,26 @@ graph TD
 - Schedule picker allowing exact timezone-aware delivery planning.
 - "Send to 5% sample" interactive switch for risk-free trial runs.
 - Instant Pause and Cancel actions surfaced on active dashboard panels.
+
+**📋 Planned Tasks — Phase 4**
+- Campaign CRUD
+- Snapshot campaign content + dispatch intents at send time
+- Spintax + merge tags
+- Scheduled sending
+- Pause/resume campaign
+- Cancel campaign mid-send
+- Resend to unopened contacts
+- FIX: exclude_suppressed=True enforced in scheduler.py, main.py, campaigns.py
+- Campaigns list page (status badges, stats)
+- Create campaign wizard (details > audience > content > review)
+- Campaign detail page
+- Pre-send checklist UI
+- Schedule picker (date/time input for scheduled send)
+- Pause button / Cancel button on in-progress campaign
+- Send test email modal (enter email address, preview)
+- Automated pre-send validation (no subject / no unsub / blank body blocks send)
+- Send throttling control (configurable per-minute rate, ETA shown in UI)
+- Send to 5% sample first mode (review analytics before full broadcast)
 
 ---
 
@@ -618,6 +805,33 @@ graph TD
 - Clean Unsubscribe landing page capturing voluntary removal events effortlessly.
 - Re-subscribe form confirming reversal of accidental unsubscribes.
 
+**📋 Planned Tasks — Phase 5**
+- Worker loop (RabbitMQ consumer)
+- SMTP send via Mailtrap/SES
+- Dynamic SMTP TLS Handshake based on active Port (587 support)
+- Retry + dead-letter queue (nack on failure)
+- Unsubscribe link injected into every email (HMAC-signed token)
+- Physical business address in email footer (CAN-SPAM compliant)
+- Hard bounce > auto-mark contact as bounced (SES webhook)
+- Spam complaint > auto-mark contact as unsubscribed (SES webhook)
+- Daily send limit enforcement (per-tenant, resets at midnight, 429 on breach)
+- All dispatch paths enforce exclude_suppressed=True
+- Bounce classification: hard bounce suppresses, soft bounce retries 3x
+- Domain warmup automation (graduated daily limit increase over 30 days)
+- Send reputation scoring per tenant (auto-throttle on >2% bounce/>0.1% complaint)
+- FIX: Unsubscribe event logged to email_events with correct tenant_id
+- FIX: Re-subscribe sets status to 'subscribed' (was 'active')
+- FIX: Re-subscribe API uses NEXT_PUBLIC_API_URL (CORS resolved)
+- /unsubscribe as a public route (no sidebar/header)
+- Unsubscribe page: auto-close tab after 3 seconds + Close Window button
+- Re-subscribe option on unsubscribe page
+- Re-subscribe page: auto-close tab after 3 seconds + Close Window button
+- [AUDIT FIX 7] Soft vs hard bounce classification — parse SES bounceType
+- [AUDIT FIX 8] Real rolling bounce rate writer — write tenant:{id}:bounces:rolling to Redis
+- [AUDIT FIX 9] Move scheduler to standalone worker/scheduler.py — Redis SET NX EX 90 distributed lock
+- [FRIEND AUDIT FIX 19] Batch DB Updates in Worker — Refactor email_sender.py to batch dispatch row updates
+- [FRIEND AUDIT FIX 20] Native DB Connection — Switch worker from Supabase PostgREST HTTP client to asyncpg TCP connection pool
+
 ---
 
 ## Phase 6 — Observability & Analytics (Heatmaps & Time Tracking)
@@ -697,6 +911,24 @@ graph TD
 - **Click Heatmap Overlay Presentation**: Visually injecting heat maps directly onto the template preview canvas illustrating intense link engagement locations.
 - **Engagement Duration Card**: UI stat displaying average read times effectively.
 
+**📋 Planned Tasks — Phase 6**
+- Open tracking pixel endpoint (HMAC-signed) via Supabase Edge Function
+- Click tracking intentionally disabled (cost optimization)
+- SES bounce/complaint webhooks captured natively (bypass Edge Functions)
+- Stats aggregation (sent, opens, bounces, unsubscribes per campaign)
+- Source attribution (gmail_proxy, apple_mpp, outlook, yahoo, scanner, human)
+- FIX: Unsubscribes count cross-checks live contact status (re-subscriptions drop count)
+- Contact activity log (recipient timeline in analytics API)
+- Optional per-campaign click tracking (opt-in, stored in email_events)
+- CTR stat card when click tracking enabled (unique clicks / unique opens)
+- Engagement over time graph (opens/bounces/unsubs by hour, first 72h)
+- Campaign analytics page (Sent, Opens Unique, Opens Total, Bounces, Unsubscribes)
+- FIX: Recipient Activity 'Unsubscribed' column reflects live contact status
+- Proxy/Scanner breakdown panel (Gmail, Apple MPP, Outlook, Yahoo, Human)
+- FIX: Human-filtered toggle removed — all signals shown natively
+- Dashboard homepage sender health widget
+- Export analytics as CSV / PDF summary
+
 ---
 
 ## Phase 7 — Plan Enforcement & Billing
@@ -773,6 +1005,23 @@ graph TD
 - Beautiful Plan & Usage page projecting consumption visuals natively via animated progress bars.
 - Strategic warning banners displaying precisely at 80% usage and 100% capacity triggers.
 - Blocking overlays actively freezing specific forms when quotas permanently prevent initiation.
+
+**📋 Planned Tasks — Phase 7**
+- Plans table (free/starter/pro/enterprise with limits)
+- Monthly email sent counter per tenant
+- Block sends when quota exceeded
+- Contact count limit enforcement
+- 80% quota trigger (notification)
+- Worker-triggered email notifications via Centralized System Emailer
+- Plan & Usage page (progress bars for emails + contacts vs limit)
+- Upgrade plan modal (plan comparison table)
+- In-app banner when 80% quota reached
+- Blocked send page when quota maxed
+- 14-day free trial with Pro limits (no credit card required)
+- Overage pricing instead of hard blocking (per-email rate above quota)
+- Auto-downgrade to Free tier on subscription lapse (pause, not delete campaigns)
+- Grace period on failed payment (7 days, escalating reminder emails)
+- [AUDIT FIX 10] Wire quota gate to queue_campaign_dispatch()
 
 ---
 
@@ -857,6 +1106,28 @@ graph TD
 - Stringent Content-Security-Policy responses blocking inline execution preventing cross-site scripting natively.
 - UI Toasts dynamically connected to generic job endpoints simulating real-time progress for heavy tasks.
 
+**📋 Planned Tasks — Phase 7.5**
+- Docker (Dockerfiles for API, worker, client)
+- docker-compose.yml
+- Nginx config
+- SSL/HTTPS (Let's Encrypt guide in docs)
+- CI/CD pipeline (GitHub Actions)
+- Load & Spam Testing Setup (k6 + Mail-Tester integration)
+- Security Headers & Content Security Policy for all pages
+- API Rate Limiting (per-tenant, per-endpoint, burst protection)
+- Background Job Status Table (CSV import, GDPR export, campaign send)
+- Worker concurrency safety (locked_by column to prevent zombie tasks)
+- Idempotency guard (external_msg_id to prevent double-sends on retry)
+- GET /health on FastAPI (db + worker status)
+- GET /health on Worker (queue depth, last processed)
+- Centralized structured logging (ELK stack or Grafana Loki)
+- Sentry error tracking on FastAPI + Next.js frontend
+- Database backup strategy (daily, 30-day retention, monthly restore drill)
+- [AUDIT FIX 11] Uncomment Nginx block in docker-compose.yml; close ports 8000 and 3000 from public network
+- [AUDIT FIX 12] GitHub Actions CI/CD pipeline — lint + test + Docker build + deploy on merge to main
+- [AUDIT FIX 13] git rm frnds_contacts.csv, testmail_contacts.csv, platform/api/app.db; add *.csv and *.db to .gitignore
+- [FRIEND AUDIT FIX 21] Dynamic Config Loading — Replace Path(__file__) .env loading with robust config.py / pydantic-settings
+
 ---
 
 ## Phase 8 — Account Settings & Administration
@@ -938,6 +1209,24 @@ graph TD
 - Member invitation flow rendering distinct role assignment dropdowns intuitively.
 - Comprehensive API Dashboard detailing exact daily consumption and tracking rejection trends visually.
 
+**📋 Planned Tasks — Phase 7.6 (Testing & Codebase Hardening)**
+- [AUDIT FIX 14] Automated test suite — 20 priority tests: auth signup/login, _suppress_contact tenant isolation, unsub token roundtrip, dispatch contact count, quota gate, bounce classification
+- [AUDIT FIX 15] Migration file renumbering — resolve duplicate 012_* and 013_* filenames for safe fresh deployment
+- [AUDIT FIX 16] Remove dead Clerk config — delete CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY from docker-compose.yml and .env.example
+- [FRIEND AUDIT FIX 22] Repository Pattern / DAL — Abstract direct Supabase queries out of controllers into services/db.py
+- [FRIEND AUDIT FIX 23] Monolithic Worker Refactor — Split email_sender.py into modular layers (parsing, sending, injection, logging)
+
+**📋 Planned Tasks — Phase 8**
+- Settings landing page (/settings) with navigation cards
+- Secure sender verification logic dispatching short-lived OTP tokens
+- API Key management infrastructure storing hashes rather than plain text
+- Team workspace isolation logic (team vs agency data boundary matrices)
+- Fine-grained role evaluation checks (Viewer, Operator, Manager, Admin)
+- Organizational configuration panels for CAN-SPAM geographical details
+- Sender Identity Verification wizard (SPF/DKIM/DMARC DNS instructions)
+- Member invitation flow with role assignment dropdowns
+- API Key generation and revocation UI
+
 ---
 
 ## Phase 9 — Security, Compliance & Deliverability Infrastructure
@@ -1016,6 +1305,17 @@ graph TD
 - DNS Setup Instructions rendering exact copy-paste values for external providers natively.
 - Dedicated IP health monitoring widget.
 - GDPR Compliance / Opt-in consent log viewer.
+
+**📋 Planned Tasks — Phase 9**
+- Stripe integration with webhook-driven plan updates
+- Custom domain setup wizard (enter domain > get DNS records > verify)
+- Dedicated IP Allocation engine per high-tier tenant
+- Automated DNS Verification CRON (CNAME/TXT for DMARC/SPF/DKIM)
+- Bounce & Spam complaint SNS/SQS queue ingestion
+- Nightly pg_dump backups pushed AES-256 encrypted to S3 (30-day retention)
+- DNS Setup Instructions rendering copy-paste values for external providers
+- Dedicated IP health monitoring widget
+- IP warmup status page (daily send limit and progression)
 
 ---
 
@@ -1097,6 +1397,24 @@ graph TD
 - Multi-variant A/B creation UI integrating directly inside the campaign builder cleanly.
 - Visual canvas implementing drag-and-drop conditions creating Drip automated sequence flows.
 - **Strategy Chatbot RAG Widget**: Sliding sidebar chatbot specifically contextualized on the tenant's data enabling advanced interrogations ("Write me a follow-up heavily replicating the absolute best subject line we utilized in Q2").
+
+**📋 Planned Tasks — Phase 10**
+- A/B Testing: Two subject line variants sent to a split audience, winner auto-sent
+- Audience A/B split logic partitioning recipients (open-rate winner auto-selected)
+- Drip campaign orchestration via chronological state machines
+- Send-time optimization using historical recipient logs
+- Visual canvas drag-and-drop Drip sequence builder
+- Multi-variant A/B creation UI inside the campaign builder
+- Knowledge RAG Bot Service (Vector DB + LangChain orchestrator)
+- Semantic Search API (natural language > cosine-similarity search)
+- LLM Orchestration Layer (LangChain/LlamaIndex grounded responses)
+- Global AI Assistant Widget (floating chat module with conversation history)
+- Prompt Library UI (curated starter questions)
+- Segment / Filter Generator (natural language input auto-configures filters)
+- Deliverability Explainer Modal ("Explain this" button for SMTP bounce codes)
+- pgvector / Pinecone high-dimensional embedding store setup
+- Data Ingestion Pipeline (embed successful campaign HTML/subjects asynchronously)
+
 ---
 
 ## Phase 10.5 — AI & Deep RAG Integration
@@ -1193,6 +1511,17 @@ graph TD
 - Developer portal natively hosting interactive OpenAPI documentation components cleanly.
 - Webhook management interface facilitating specific event subscriptions visually.
 
+**📋 Planned Tasks — Phase 11**
+- A public REST API (/v1/send) for transactional email sending
+- /v1/send endpoint with JSON Schema payload validation
+- API Key Redis validation (authentication for external callers)
+- Webhook notification engine with exponential backoff retrier
+- Event subscription system (open, click, bounce, unsubscribe events)
+- Webhook Subscription Manager UI
+- Interactive Swagger OpenAPI documentation portal
+- API Consumption Dashboard (daily usage, rejection trends)
+- HubSpot / Salesforce CRM outbound webhook delivery
+
 ---
 
 ## Phase 12 — Enterprise Domain Auto-Discovery (JIT Provisioning)
@@ -1270,6 +1599,17 @@ graph TD
 - Custom waiting room interfaces reassuring unapproved employees cleanly.
 - Governance Portal rendering direct approval matrices prioritizing swift IT Administrator workflow ingestion natively.
 
+**📋 Planned Tasks — Phase 12**
+- Custom domain setup wizard (enter domain > get DNS records > verify)
+- JIT provisioning processor — intercepts recognized corporate domains
+- PDEP Filter — blocks free providers (Gmail, Yahoo) from discovery
+- VBD (Verification-Before-Disclosure) — requires OTP before confirming domain existence
+- Active Directory SSO integrations via SAML/LDAP bridges
+- Custom waiting room UI reassuring unapproved employees
+- IT Governance Portal with approval matrix for administrators
+- Automatic Role Assigner via RBAC post SSO login
+- SAML Configuration storage per enterprise tenant
+
 ---
 
 ## Phase 13 — Scale & Microservices
@@ -1343,6 +1683,18 @@ graph TD
 
 **[FRONTEND]**
 - Degraded-state conditional rendering preserving essential UI functionality even when sub-scale internal matrices disconnect slightly (e.g. allowing editing while analytics systems update).
+
+**📋 Planned Tasks — Phase 13**
+- Complete decomposition: Auth, Contacts, Delivery, Templates, Analytics into separate containers
+- Message bus replacement (database-polling > Redis-backed async workers)
+- Horizontal worker scaling (stateless workers, Docker Swarm / k8s replicas)
+- Circuit breaker on SES SMTP (fail fast on consecutive failures, auto-reset)
+- Blacklist verification CRON (MXToolbox API monitoring IP health)
+- Nginx/Kong API Gateway with conditional degradation rules
+- Platform health dashboard (Redis queue depth, worker status)
+- Cost monitoring dashboard (per-tenant SES cost vs plan revenue)
+- ClickHouse / TimescaleDB event analytics lake migration
+- Degraded-state UI conditional rendering (allow editing while analytics updates)
 
 ---
 
