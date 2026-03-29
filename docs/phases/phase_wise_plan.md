@@ -357,6 +357,11 @@ graph TD
 - [AUDIT FIX 5] Delete /contacts/upload + /test-send from main.py; remove dev scripts from repo root
 - [AUDIT FIX 6] Remove duplicate events router registration in main.py
 - [FRIEND AUDIT FIX 17] OAuth State Parameter — validate random state string in Google/GitHub OAuth flow
+- [GAP 1 — System Email Provider Risk] Track daily system email count in Redis key `system:emails:sent:{date}`
+- [GAP 1] Auto-trigger CRITICAL audit log when system email count exceeds 1,600/day (80% of Workspace limit)
+- [GAP 1] Add `SYSTEM_MAILER=gmail|ses` env flag — abstraction layer for future migration
+
+> ⚠️ **Gmail Risk Note:** `shrmail.app@gmail.com` is capped at ~2,000 emails/day on Workspace. At moderate signup volume (200 users/day triggering welcome + verification = 400 emails/day), this limit will be hit within months. **Migration target: Phase 9 — `mail.shrmail.app` via AWS SES.** See Phase 9 for full plan.
 
 ---
 
@@ -831,6 +836,38 @@ graph TD
 - [AUDIT FIX 9] Move scheduler to standalone worker/scheduler.py — Redis SET NX EX 90 distributed lock
 - [FRIEND AUDIT FIX 19] Batch DB Updates in Worker — Refactor email_sender.py to batch dispatch row updates
 - [FRIEND AUDIT FIX 20] Native DB Connection — Switch worker from Supabase PostgREST HTTP client to asyncpg TCP connection pool
+- [GAP 3 — Token Bucket Rate Limiter] Redis `tenant:{id}:send_tokens` hash — refill rate per plan (Free: 60/min, Starter: 600/min, Pro: 3,000/min, Enterprise: 18,000/min)
+- [GAP 3] Worker checks token bucket BEFORE each send; sleeps 0.5s if empty (never drops message)
+- [GAP 3] SES `ThrottlingException` handler with exponential backoff (1s → 2s → 4s → 8s)
+- [GAP 3] `emails_per_minute` configurable per tenant via plan defaults (stored in `plans` table)
+- [GAP 3] Campaign ETA calculator: `(remaining_dispatch_count / rate_limit_per_min)` exposed in campaign detail UI
+- [GAP 5 — Worker Decomposition Phase 1] Split `email_sender.py` (SMTP consumer) from `webhook_handler.py` (SES SNS bounce/complaint processor) — two separate processes
+- [GAP 7 — Bounce Classification Matrix] Parse `bounceType` + `bounceSubType` from SES SNS notification payload
+- [GAP 7] Permanent / NoEmail / MailboxDoesNotExist → IMMEDIATE suppress (no retry)
+- [GAP 7] Transient / MailboxFull → retry 3× over 24h with 8h intervals
+- [GAP 7] Transient / MessageTooLarge → mark event, skip (unsendable regardless of retries)
+- [GAP 7] Transient / ContentRejected or AttachmentRejected → mark event, send CRITICAL audit alert to tenant
+- [GAP 7] Transient / General → retry 3× over 72h
+- [GAP 7] Undetermined / General → retry 2×, then escalate to CRITICAL audit log
+- [GAP 7] Complaint (any subtype) → immediate unsubscribe (`status = 'unsubscribed'`)
+
+> 💡 **Worker Architecture Note (Gap 5):** This phase creates the initial worker. Full microservice decomposition into 5 focused workers (sender, webhook-handler, reputation-worker, warmup-scheduler, dispatch-logger) happens in **Phase 13**.
+
+---
+
+## Phase 5.5 — Event Data Archival Strategy (Gap 4)
+**WHY:** A 100k-recipient campaign instantly creates 100k+ rows. Over 1 year, the `email_events` table will grow to 100M+ rows, catastrophically degrading query performance. We must construct a tiered database isolation model immediately after launch.
+
+**[BACKEND]**
+- **Table Partitioning:** Refactor the primary `email_events` table using PostgreSQL `PARTITION BY RANGE (occurred_at)`.
+- **Auto-Partitioning CRON:** Automated job executing monthly to dynamically generate the next chronological partition table (e.g., `email_events_2025_03`).
+- **Data Pruning Preparation:** Establish the foundational schema required for Phase 13's ClickHouse rollout (90-day PostgreSQL retention window).
+
+**📋 Planned Tasks — Phase 5.5 (Event Archival)**
+- [GAP 4 — Event Archival Strategy] Refactor `email_events` schema to use `PARTITION BY RANGE (occurred_at)`
+- [GAP 4] Write PL/pgSQL function to auto-generate monthly partition tables
+- [GAP 4] Set up pg_cron (or worker CRON) to execute partition generation on the 25th of every month
+- [GAP 4] Scope all campaign analytic queries to explicitly utilize `occurred_at` indexes for partition pruning
 
 ---
 
@@ -928,6 +965,14 @@ graph TD
 - FIX: Human-filtered toggle removed — all signals shown natively
 - Dashboard homepage sender health widget
 - Export analytics as CSV / PDF summary
+- [GAP 2 — Click Tracking Architecture Fix] `campaigns.click_tracking_enabled` BOOLEAN column (default: `False`)
+- [GAP 2] Plan gate: only `plan IN ('pro', 'enterprise')` may enable click tracking on a campaign
+- [GAP 2] Worker: conditionally wraps links via `https://trk.shrmail.app/c/{hmac_signed_token}` in MJML compile step when `click_tracking_enabled=True`
+- [GAP 2] CTR stat card (`unique_clicks / unique_opens`) rendered ONLY when `click_tracking_enabled=True`
+- [GAP 2] Click Heatmap Overlay (Phase 10) depends on `click_tracking_enabled=True` data being present
+- [GAP 2] Free/Starter plans see an upgrade prompt when hovering the disabled click tracking toggle
+
+> 📌 **Click Tracking Design Decision:** Click tracking is intentionally OFF by default for cost and simplicity (Free/Starter). It is a **Pro/Enterprise feature**. This resolves the contradiction between "disabled for cost" and "CTR/heatmaps available" — both can be true when gated by plan.
 
 ---
 
@@ -1316,6 +1361,15 @@ graph TD
 - DNS Setup Instructions rendering copy-paste values for external providers
 - Dedicated IP health monitoring widget
 - IP warmup status page (daily send limit and progression)
+- [GAP 1 — System Email Migration] Register and verify `mail.shrmail.app` via AWS SES
+- [GAP 1] Migrate all system emails (OTP, audit alerts, notifications) off Gmail MVP onto `mail.shrmail.app`
+- [GAP 6 — Dedicated IP Warmup] Implement 30-day warmup automation CRON (`warmup_scheduler.py`)
+- [GAP 6] Days 1–3: 50 emails/day cap
+- [GAP 6] Days 4–7: 200 emails/day cap
+- [GAP 6] Days 8–14: 500 emails/day cap
+- [GAP 6] Days 15–21: 1,000 emails/day cap
+- [GAP 6] Days 22–30: 5,000 emails/day cap
+- [GAP 6] Day 31+: Full capacity granted conditionally (bounce < 2%, complaint < 0.1%)
 
 ---
 
@@ -1695,6 +1749,14 @@ graph TD
 - Cost monitoring dashboard (per-tenant SES cost vs plan revenue)
 - ClickHouse / TimescaleDB event analytics lake migration
 - Degraded-state UI conditional rendering (allow editing while analytics updates)
+- [GAP 4 — Event Archival Strategy] Migrate `email_events` > 90 days old from PostgreSQL to ClickHouse
+- [GAP 4] Rewrite analytics frontend queries to route historical trends (> 90d) to ClickHouse
+- [GAP 5 — Worker Decomposition Phase 2] Split Monolith into 5 dedicated micro-workers
+- [GAP 5] `email_sender.py` (Scales horizontally, purely pulls from queue and sends to AWS SES)
+- [GAP 5] `webhook_handler.py` (Ingests SNS bounce/complaint webhooks, scales horizontally)
+- [GAP 5] `reputation_worker.py` (Single-instance, aggregates bounce events into tenant rolling scores)
+- [GAP 5] `warmup_scheduler.py` (Single-instance CRON, advances daily IP limits)
+- [GAP 5] `dispatch_logger.py` (Batches successful sends into `email_events` database inserts optimally)
 
 ---
 
