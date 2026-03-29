@@ -862,6 +862,70 @@ graph TD
 ## Phase 8 — Account Settings & Administration
 **WHY:** Enables self-serve technical configuration for tenants removing the need for manual support intervention.
 
+### Phase 8 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef security fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph AdminUI [Tenant Settings Dashboard]
+        APIView[API Key Generation UI]
+        SenderView[Sender Email Setup]
+        TeamView[Workspace Isolation Selector]
+        
+        APIView --> TeamView
+        SenderView --> TeamView
+        class APIView frontend;
+        class SenderView frontend;
+        class TeamView frontend;
+    end
+
+    subgraph ProvisionAPI [Administration Logic]
+        OTP[Sender OTP Dispatcher]
+        KeyGen[Cryptographic API Key Gen]
+        AuthGate[Workspace RBAC Gate]
+        
+        SenderView --> |"Requests Verification"| OTP
+        APIView --> |"Requests Secret"| KeyGen
+        TeamView --> AuthGate
+        class OTP logic;
+        class KeyGen logic;
+        class AuthGate logic;
+    end
+
+    subgraph SecurityHash [Secret Resolution Layer]
+        Hasher[Bcrypt/Argon2 API Key Hasher]
+        TokenCache[Temporary OTP Redis Cache]
+        
+        KeyGen --> |"Plaintext"| Hasher
+        OTP <--> TokenCache
+        class Hasher security;
+        class TokenCache security;
+    end
+
+    subgraph ConfigData [Tenant State Configuration]
+        Senders[(Verified Senders Table)]
+        APIKeys[(Hashed API Keys Table)]
+        Workspaces[(Team Isolation Boundaries)]
+        
+        Hasher --> APIKeys
+        OTP --> |"Verifies"| Senders
+        AuthGate -.-> Workspaces
+        class Senders database;
+        class APIKeys database;
+        class Workspaces database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class AdminUI dualBox;
+    class ProvisionAPI dualBox;
+    class SecurityHash dualBox;
+    class ConfigData dualBox;
+```
+
 **[BACKEND]**
 - Secure sender verification logic dispatching short-lived OTP tokens confirming access over custom sender addresses.
 - API Key management infrastructure storing hashes rather than plain text.
@@ -876,18 +940,82 @@ graph TD
 
 ---
 
-## Phase 9 — Payments
-**WHY:** Monetization and invoicing structure completion.
+## Phase 9 — Security, Compliance & Deliverability Infrastructure
+**WHY:** Ensures emails reach the inbox natively without landing in spam, maintaining strict data compliance and backup integrity.
+
+### Phase 9 Architecture Flow
+
+```mermaid
+graph TD
+    classDef infra fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef pipeline fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef monitor fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph ComplianceUI [Domain & Legal Dashboard]
+        DNSView[DNS Setup Instructions <br> CNAME/TXT]
+        IPView[Dedicated IP Assignment]
+        ConsentView[Opt-in Consent Log Viewer]
+        
+        DNSView --> IPView
+        class DNSView frontend;
+        class IPView frontend;
+        class ConsentView frontend;
+    end
+
+    subgraph InfrastructureLayer [Routing & Identity]
+        DNSCRON[Automated DNS Verification CRON]
+        IPRouter[Dedicated IP Allocation Engine]
+        SNS[AWS SNS/SQS Bounce Queue]
+        
+        DNSView --> DNSCRON
+        IPView --> IPRouter
+        class DNSCRON infra;
+        class IPRouter infra;
+        class SNS infra;
+    end
+
+    subgraph DataProtection [Backup Automation]
+        BackupCRON[Nightly pg_dump DB Extract]
+        S3[AES-256 S3 Bucket Array]
+        Lifecycle[30-Day Retention Policy]
+        
+        BackupCRON --> S3
+        S3 --> Lifecycle
+        class BackupCRON monitor;
+        class S3 monitor;
+        class Lifecycle monitor;
+    end
+
+    subgraph TrustData [Verification Datastores]
+        Domains[(Verified Domains DB)]
+        Consent[(Compliance/Consent Logs)]
+        
+        DNSCRON --> |"Approves DKIM/SPF"| Domains
+        ConsentView <--> Consent
+        IPRouter -.-> Domains
+        SNS -.-> Consent
+        class Domains database;
+        class Consent database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class ComplianceUI dualBox;
+    class InfrastructureLayer dualBox;
+    class DataProtection dualBox;
+    class TrustData dualBox;
+```
 
 **[BACKEND]**
-- Stripe webhook processor directly translating payment successes into immediate database tier elevations.
-- Auto-invoice generation processing creating downloadable PDFs complete with exact tax representations (e.g. GST configurations).
-- Grace period enforcer staging warnings automatically across 7 days post-failure before degrading platform access.
+- Dedicated IP Allocation engine attaching isolated IPs per high-tier tenant.
+- Automated DNS Verification CRON constantly scanning CNAME/TXT records for DMARC/SPF/DKIM validity.
+- Bounce & Spam complaint SNS/SQS queue ingestion.
+- Nightly `pg_dump` backups natively pushing AES-256 encrypted payloads to S3 with 30-day retention policies.
 
 **[FRONTEND]**
-- Embedded checkout interfaces initiating subscriptions seamlessly.
-- Pricing module rendering clear tabular differences between functional tiers.
-- Billing history log enabling direct retrieval of historical invoices instantly.
+- DNS Setup Instructions rendering exact copy-paste values for external providers natively.
+- Dedicated IP health monitoring widget.
+- GDPR Compliance / Opt-in consent log viewer.
 
 ---
 
