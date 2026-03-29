@@ -122,8 +122,8 @@ graph TD
         SMTP_Gmail[Gmail Core SMTP]
         SMTP_SES[AWS SES Transact API]
         
-        Worker_System --> |shrmail.app@gmail.com| SMTP_Gmail
-        Worker_Tenant --> |sales@tenantdomain.com| SMTP_SES
+        Worker_System --> |"shrmail.app@gmail.com"| SMTP_Gmail
+        Worker_Tenant --> |"sales@tenantdomain.com"| SMTP_SES
     end
     class Queue_System queue;
     class Queue_Tenant queue;
