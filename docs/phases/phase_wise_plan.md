@@ -541,6 +541,71 @@ graph TD
 ## Phase 5 — Delivery Engine
 **WHY:** Connects the system to the internet via SMTP, automatically responding to bounces, spam complaints, and user unsubscriptions securely.
 
+### Phase 5 Architecture Flow
+
+```mermaid
+graph TD
+    classDef worker fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef external fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef api fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph DispatchWorker [RabbitMQ Delivery Worker]
+        RMQ[(RabbitMQ Queue)]
+        Injector[CAN-SPAM / HMAC Unsub Injector]
+        SMTP[Dynamic TLS SMTP Sender]
+        DLQ[(Dead Letter Queue)]
+        
+        RMQ --> Injector
+        Injector --> SMTP
+        SMTP -.-> |"Failure / Retry 3x"| DLQ
+        class RMQ worker;
+        class Injector worker;
+        class SMTP worker;
+        class DLQ worker;
+    end
+
+    subgraph ExternalProvider [Email Delivery Provider]
+        SES[AWS SES / Mailtrap]
+        Inbox[Recipient Inbox]
+        
+        SMTP --> |"Authenticates & Sends"| SES
+        SES --> Inbox
+        class SES external;
+        class Inbox external;
+    end
+
+    subgraph FeedbackLoop [Webhook Resolution API]
+        Webhook[SES Complaint/Bounce Receiver]
+        HardBounce[Hard Bounce Isolator]
+        Spam[Spam Complaint Isolator]
+        
+        SES -.-> |"Fires Event"| Webhook
+        Webhook --> HardBounce
+        Webhook --> Spam
+        class Webhook api;
+        class HardBounce api;
+        class Spam api;
+    end
+
+    subgraph ContactState [Contact Integrity DB]
+        Contacts[(Contacts Table)]
+        Reputation[(Tenant Reputation <br> Warmup Stats)]
+        
+        HardBounce --> |"Sets status=bounced"| Contacts
+        Spam --> |"Sets status=unsubscribed"| Contacts
+        HardBounce --> Reputation
+        class Contacts database;
+        class Reputation database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class DispatchWorker dualBox;
+    class ExternalProvider dualBox;
+    class FeedbackLoop dualBox;
+    class ContactState dualBox;
+```
+
 **[BACKEND]**
 - RabbitMQ consumer loop maintaining persistent connections, dynamically executing TLS handshakes, and nacking failures into Dead Letter Queues gracefully.
 - Legal footer injection statically appending CAN-SPAM compliant company addresses and HMAC-secure unsubscribe tokens.
@@ -557,6 +622,66 @@ graph TD
 
 ## Phase 6 — Observability & Analytics (Heatmaps & Time Tracking)
 **WHY:** Displays critical performance markers allowing users to judge campaign effectiveness accurately.
+
+### Phase 6 Architecture Flow
+
+```mermaid
+graph TD
+    classDef external fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef api fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph RecipientAction [Client Behaviors]
+        EmailOpen[Client Dislays 1x1 Pixel]
+        EmailClick[User Clicks Wrapped Link]
+        class EmailOpen external;
+        class EmailClick external;
+    end
+
+    subgraph TrackingEngine [Telemetry Resolution API]
+        Pixel[HMAC Pixel Validator]
+        LinkWrapper[Link Redirect Handler]
+        Attribution[User-Agent Attribution <br> Apple MPP / Gmail Proxy]
+        
+        EmailOpen --> Pixel
+        EmailClick --> LinkWrapper
+        Pixel --> Attribution
+        class Pixel api;
+        class LinkWrapper api;
+        class Attribution api;
+    end
+
+    subgraph AnalyticsData [Event Fast-Storage Matrix]
+        Events[(email_events Timeline)]
+        TimeSeries[72h Rolling Aggregation]
+        
+        Attribution --> Events
+        LinkWrapper --> Events
+        Events --> TimeSeries
+        class Events database;
+        class TimeSeries database;
+    end
+
+    subgraph AnalyticsUI [Frontend Stat Reporting]
+        StatCards[CTR & Overview Stat Cards]
+        Graphs[72H Time-Series Charts]
+        Proxy[Proxy vs Human Traffic Ring]
+        
+        TimeSeries --> StatCards
+        TimeSeries --> Graphs
+        TimeSeries --> Proxy
+        class StatCards frontend;
+        class Graphs frontend;
+        class Proxy frontend;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class RecipientAction dualBox;
+    class TrackingEngine dualBox;
+    class AnalyticsData dualBox;
+    class AnalyticsUI dualBox;
+```
 
 **[BACKEND]**
 - 1x1 image pixel endpoint logging secure opens, guarded by heuristic Bot Detection rules distinguishing Google/Apple privacy proxies from malicious scanners or true humans.
