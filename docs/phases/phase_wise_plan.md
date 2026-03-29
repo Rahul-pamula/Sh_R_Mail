@@ -377,6 +377,68 @@ graph TD
 ## Phase 3 — Template Engine & AI Content Creation
 **WHY:** Email content must be responsive, dynamic, and perfectly rendered across extreme client environments (Outlook, Gmail, Apple).
 
+### Phase 3 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef engine fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef ai fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph TemplateBuilder [Visual Block Editor]
+        Grid[Template Gallery & Presets]
+        Canvas[Drag-and-Drop Canvas <br> Rows/Cols/Blocks]
+        Preview[Mobile / Inbox Simulation UI]
+        
+        Grid --> Canvas
+        Canvas --> Preview
+        class Grid frontend;
+        class Canvas frontend;
+        class Preview frontend;
+    end
+
+    subgraph ContentEngine [Template Processing API]
+        Compiler[MJML compiler <br> JSON > HTML]
+        Plain[Plain-Text Auto-Generator]
+        Spam[Heuristic Spam Score Checker]
+        
+        Canvas -.-> |"Sends design_json"| Compiler
+        Compiler --> Plain
+        Compiler --> Spam
+        class Compiler engine;
+        class Plain engine;
+        class Spam engine;
+    end
+
+    subgraph AIModule [AI Generation Layer]
+        Prompt[LLM Proxy Service]
+        Tone[Tone / Rewrite Adjustments]
+        
+        Canvas --> |"Context Request"| Prompt
+        Prompt --> Tone
+        Tone -.-> |"Returns Text"| Canvas
+        class Prompt ai;
+        class Tone ai;
+    end
+
+    subgraph TemplateData [Storage & Versioning]
+        Templates[(Templates Table <br> design_json + HTML)]
+        Versions[(Version History <br> Snapshots)]
+        
+        Compiler --> Templates
+        Templates --> Versions
+        class Templates database;
+        class Versions database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class TemplateBuilder dualBox;
+    class ContentEngine dualBox;
+    class AIModule dualBox;
+    class TemplateData dualBox;
+```
+
 **[BACKEND]**
 - Layout preservation logic persistently tracking complex Template JSON constructs.
 - MJML processing pipeline compiling abstract blocks into highly compliant render-safe HTML.
@@ -397,6 +459,68 @@ graph TD
 
 ## Phase 4 — Campaign Orchestration
 **WHY:** Orchestrates the core action of filtering audiences, attaching content, validating legality, and queuing dispatches.
+
+### Phase 4 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef background fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph CampaignUI [Frontend Orchestration]
+        Wizard[Multi-Step Campaign Wizard]
+        Checklist[Pre-Send Validation UI]
+        Controls[Pause / Cancel Mid-Send]
+        
+        Wizard --> Checklist
+        Checklist --> Controls
+        class Wizard frontend;
+        class Checklist frontend;
+        class Controls frontend;
+    end
+
+    subgraph CampaignAPI [Campaign Processing Logic]
+        Snapshot[HTML Template Snapshot Generator]
+        Spintax[Spintax & Merge Tag Resolver]
+        Rate[Throttling / Send Rate Limit Engine]
+        
+        Checklist --> |"Triggers Dispatch"| Snapshot
+        Snapshot --> Spintax
+        Spintax --> Rate
+        class Snapshot logic;
+        class Spintax logic;
+        class Rate logic;
+    end
+
+    subgraph ScheduledWorker [Background Schedulers]
+        Cron[Schedule Poller <br> 60s Check]
+        DistLock[Redis Distributed Lock]
+        
+        Cron <--> DistLock
+        Cron --> |"Fires Due Campaigns"| Snapshot
+        class Cron background;
+        class DistLock background;
+    end
+
+    subgraph CampaignData [Orchestration Storage]
+        Campaigns[(Campaign Metadata)]
+        Intents[(Dispatch Intents <br> Per-Recipient Row)]
+        
+        Wizard --> Campaigns
+        Rate --> Intents
+        Campaigns --> Intents
+        class Campaigns database;
+        class Intents database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class CampaignUI dualBox;
+    class CampaignAPI dualBox;
+    class ScheduledWorker dualBox;
+    class CampaignData dualBox;
+```
 
 **[BACKEND]**
 - Snapshotting logic immutably locking campaign HTML and metadata exactly at send time.
