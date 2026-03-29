@@ -290,6 +290,73 @@ graph TD
 ## Phase 2 — Contacts Engine
 **WHY:** Contacts are the core dataset. This phase creates a stable, scalable lifecycle for importing, managing, suppressing, and tagging audiences.
 
+### Phase 2 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef api fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef worker fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph ContactsInterface [Frontend Contacts UI]
+        List[Contacts List & Search Grid]
+        Segments[Segment Builder & Tag UI]
+        ImportModal[CSV / XLSX Import <br> Modal & Mapper]
+        
+        List --> Segments
+        List --> ImportModal
+        class List frontend;
+        class Segments frontend;
+        class ImportModal frontend;
+    end
+
+    subgraph ContactsAPI [Contacts API Layer]
+        ContactCRUD[Contact CRUD & Filtering]
+        SyncInsert[Real-Time POST Insertion]
+        PreviewAPI[CSV Stream Previewer]
+        
+        ContactsInterface -.-> |"Search/Filter"| ContactCRUD
+        ImportModal --> |"Form Upload"| PreviewAPI
+        class ContactCRUD api;
+        class SyncInsert api;
+        class PreviewAPI api;
+    end
+
+    subgraph ImportWorker [RabbitMQ Async Worker]
+        Chunker[Async Byte Stream Parser]
+        Validator[MX / Syntax Validator]
+        DeDupe[In-Memory Deduplicator]
+        
+        PreviewAPI --> |"Dispatches Job"| Chunker
+        Chunker --> Validator
+        Validator --> DeDupe
+        class Chunker worker;
+        class Validator worker;
+        class DeDupe worker;
+    end
+
+    subgraph DataLayer [Storage & Data Integrity]
+        Contacts[(Contacts Table <br> Soft Delete)]
+        Tags[(Tags / Segments)]
+        Batches[(Import Batches)]
+        
+        ContactCRUD --> Contacts
+        DeDupe --> |"Upsert tenant_id+email"| Contacts
+        Contacts --> Tags
+        DeDupe --> Batches
+        class Contacts database;
+        class Tags database;
+        class Batches database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class ContactsInterface dualBox;
+    class ContactsAPI dualBox;
+    class ImportWorker dualBox;
+    class DataLayer dualBox;
+```
+
 **[BACKEND]**
 - High-performance, streaming CSV/XLSX ingestion running asynchronously via RabbitMQ to support gigabyte-scale datasets.
 - Real-time single contact insertion REST API designed for external CRM or web-form integrations.
