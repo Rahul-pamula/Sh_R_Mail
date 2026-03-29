@@ -702,6 +702,67 @@ graph TD
 ## Phase 7 — Plan Enforcement & Billing
 **WHY:** Regulates computational exhaustion, prevents abuse, and ties usage directly to recurring revenue tiers.
 
+### Phase 7 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef external fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph BillingUI [Frontend Subscription UI]
+        PlanPage[Plan & Usage Dashboards]
+        Banner[80% / 100% Limit Banners]
+        Upgrade[Upgrade Modals / Blockers]
+        
+        PlanPage --> Banner
+        Banner --> Upgrade
+        class PlanPage frontend;
+        class Banner frontend;
+        class Upgrade frontend;
+    end
+
+    subgraph QuotaEngine [Enforcement API Logic]
+        MonthCounter[Monthly Send Counter]
+        Gate[Dispatch Block Interceptor]
+        Overage[Overage Pricing Calculator]
+        
+        Upgrade --> |"Attempts Action"| Gate
+        Gate <--> MonthCounter
+        MonthCounter --> Overage
+        class MonthCounter logic;
+        class Gate logic;
+        class Overage logic;
+    end
+
+    subgraph StripeIntegration [Stripe Billing Handlers]
+        Webhook[Stripe Payment Webhooks]
+        GracePeriod[7-Day Grace Degradation]
+        
+        Webhook --> GracePeriod
+        class Webhook external;
+        class GracePeriod external;
+    end
+
+    subgraph BillingData [Subscription State DB]
+        Plans[(Plans Limits Matrix)]
+        Tenants[(Tenant Billing State)]
+        
+        Overage --> Tenants
+        GracePeriod --> Tenants
+        Gate -.-> |"Reads Max Limits"| Plans
+        class Plans database;
+        class Tenants database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class BillingUI dualBox;
+    class QuotaEngine dualBox;
+    class StripeIntegration dualBox;
+    class BillingData dualBox;
+```
+
 **[BACKEND]**
 - Quota limiting services tracking precise daily and monthly volumetric outputs per tenant against defined tier maximums.
 - Overage pricing intercept logic preventing hard-blocks while securely calculating micro-payments for excess bursts.
@@ -717,6 +778,73 @@ graph TD
 
 ## Phase 7.5 — Infrastructure & DevOps
 **WHY:** Solidifies architectural foundations ensuring deployment stability, fault tolerance, and developer sanity.
+
+### Phase 7.5 Architecture Flow
+
+```mermaid
+graph TD
+    classDef infra fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef security fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef monitor fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef pipeline fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph ContainerOrchestration [Docker Deployment]
+        Compose[docker-compose Framework]
+        Nginx[Nginx Reverse Proxy]
+        Services[FastAPI / Next.js / Worker Images]
+        
+        Compose --> Nginx
+        Nginx --> Services
+        class Compose infra;
+        class Nginx infra;
+        class Services infra;
+    end
+
+    subgraph CICDPipeline [Continuous Integration]
+        GitHub[GitHub Actions]
+        Tests[Test Suite & Linting Gate]
+        Deploy[Auto-Build & Push to Prod]
+        
+        GitHub --> Tests
+        Tests --> Deploy
+        Deploy -.-> |"Reloads"| Compose
+        class GitHub pipeline;
+        class Tests pipeline;
+        class Deploy pipeline;
+    end
+
+    subgraph SecurityDefense [Resilience & Stability]
+        SSL[Let's Encrypt Auto-TLS]
+        Idempotent[external_msg_id De-duper]
+        RateLimit[Tenant API DDoS Limiter]
+        
+        SSL --> Nginx
+        RateLimit --> Services
+        Idempotent --> Services
+        class SSL security;
+        class Idempotent security;
+        class RateLimit security;
+    end
+
+    subgraph ObservabilityLayer [DevOps Monitoring]
+        Sentry[Sentry UI / API Crash Logs]
+        ELK[Centralized Logs ELK/Loki]
+        Backup[Daily pg_dump Backups + 30d]
+        
+        Services --> Sentry
+        Services --> ELK
+        Backup -.-> |"Secures"| Services
+        class Sentry monitor;
+        class ELK monitor;
+        class Backup monitor;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class ContainerOrchestration dualBox;
+    class CICDPipeline dualBox;
+    class SecurityDefense dualBox;
+    class ObservabilityLayer dualBox;
+```
 
 **[BACKEND]**
 - Docker orchestration wrapping APIs, Frontend frameworks, Queues, and Caches synchronously.
