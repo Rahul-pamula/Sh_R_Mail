@@ -1198,6 +1198,68 @@ graph TD
 ## Phase 12 — Enterprise Domain Auto-Discovery (JIT Provisioning)
 **WHY:** Reduces extreme onboarding friction for massive organizations via automatic corporate-domain correlation.
 
+### Phase 12 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef security fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph EnterpriseUI [Corporate End-User Interfaces]
+        Onboard[Signup Interceptor]
+        WaitRoom[Employee Waiting Room UI]
+        AdminGov[IT Governance Approval Portal]
+        
+        Onboard --> WaitRoom
+        WaitRoom -.-> |"Awaits"| AdminGov
+        class Onboard frontend;
+        class WaitRoom frontend;
+        class AdminGov frontend;
+    end
+
+    subgraph JITDiscovery [Just-In-Time Provisioning API]
+        PDEP[Public Domain Exclusion <br> Gmail/Yahoo Drop]
+        VBD[Verification-Before-Disclosure <br> OTP Recon Shield]
+        Matcher[Corporate Domain Correlator]
+        
+        Onboard --> |"Enters @acme.com"| PDEP
+        PDEP --> VBD
+        VBD --> Matcher
+        class PDEP logic;
+        class VBD logic;
+        class Matcher logic;
+    end
+
+    subgraph SSOIntegration [Active Directory Auth]
+        SAML[SAML/LDAP Corporate Bridge]
+        RBAC[Automatic Role Assigner]
+        
+        Matcher --> SAML
+        SAML --> RBAC
+        RBAC --> AdminGov
+        class SAML security;
+        class RBAC security;
+    end
+
+    subgraph IdentityStorage [Enterprise Boundary State]
+        Tenants[(Workspace/Tenant Boundaries)]
+        SSOMeta[(SAML Configurations)]
+        
+        Matcher <--> Tenants
+        SAML <--> SSOMeta
+        class Tenants database;
+        class SSOMeta database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class EnterpriseUI dualBox;
+    class JITDiscovery dualBox;
+    class SSOIntegration dualBox;
+    class IdentityStorage dualBox;
+```
+
 **[BACKEND]**
 - JIT provisioning processor intercepting recognized corporate domains reliably.
 - PDEP Filter aggressively blocking free providers (Gmail, Yahoo) from discovery mechanisms.
@@ -1212,6 +1274,67 @@ graph TD
 
 ## Phase 13 — Scale & Microservices
 **WHY:** Separating bounded contexts logically when extreme transaction volumes demand independent scaling axes natively.
+
+### Phase 13 Architecture Flow
+
+```mermaid
+graph TD
+    classDef api fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef worker fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef external fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+
+    subgraph API Gateway [Nginx/Kong Routing]
+        Gateway[Central Reverse Proxy]
+        Degraded[Conditional Degradation Rules]
+        
+        Gateway --> Degraded
+        class Gateway external;
+        class Degraded external;
+    end
+
+    subgraph MicroserviceCluster [Decoupled Domain APIs]
+        AuthAPI[Authentication Container]
+        ContactAPI[Contacts & Segments Container]
+        RenderAPI[Template MJML Container]
+        AnalyticsAPI[Click/Open Tracking Container]
+        
+        Gateway --> AuthAPI
+        Gateway --> ContactAPI
+        Gateway --> RenderAPI
+        Gateway --> AnalyticsAPI
+        class AuthAPI api;
+        class ContactAPI api;
+        class RenderAPI api;
+        class AnalyticsAPI api;
+    end
+
+    subgraph AsynchronousBackplane [Redis/RabbitMQ Bus]
+        Redis[Redis In-Memory Cache/Locks]
+        RabbitMQ[Cross-Service Message Bus]
+        
+        ContactAPI <--> Redis
+        AnalyticsAPI --> |"Publishes Event"| RabbitMQ
+        class Redis worker;
+        class RabbitMQ worker;
+    end
+
+    subgraph DatabasePartitioning [Scale-Out Storage]
+        AuthDB[(Auth & Roles PostgreSQL)]
+        Lake[(ClickHouse / TimescaleDB <br> Event Analytics)]
+        
+        AuthAPI --> AuthDB
+        RabbitMQ --> |"Consumes to Lake"| Lake
+        class AuthDB database;
+        class Lake database;
+    end
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class API Gateway dualBox;
+    class MicroserviceCluster dualBox;
+    class AsynchronousBackplane dualBox;
+    class DatabasePartitioning dualBox;
+```
 
 **[BACKEND]**
 - Complete decomposition partitioning Auth, Contacts, Delivery, Templates, and Analytics functionally across separated containers.
