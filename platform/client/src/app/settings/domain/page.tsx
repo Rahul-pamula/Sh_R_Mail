@@ -7,13 +7,13 @@ import { useToast } from '@/components/ui';
 
 const API_BASE = 'http://127.0.0.1:8000';
 
-// Theme constants
+// Theme constants — all values reference CSS variables for light/dark support
 const colors = {
-    bg: '#0F1117',
-    card: 'rgba(255, 255, 255, 0.03)',
-    border: 'rgba(255, 255, 255, 0.08)',
-    text: '#F3F4F6',
-    textSecondary: '#9CA3AF',
+    bg: 'var(--bg-primary)',
+    card: 'var(--bg-card)',
+    border: 'var(--border)',
+    text: 'var(--text-primary)',
+    textSecondary: 'var(--text-muted)',
     primary: '#3B82F6',
     primaryHover: '#2563EB',
     danger: '#EF4444',
@@ -27,10 +27,10 @@ const colors = {
 const inputStyle = {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    border: `1px solid ${colors.border}`,
+    backgroundColor: 'var(--bg-input)',
+    border: `1px solid var(--border)`,
     borderRadius: '8px',
-    color: colors.text,
+    color: 'var(--text-primary)',
     fontSize: '14px',
     outline: 'none',
     transition: 'border-color 0.2s',
@@ -54,11 +54,11 @@ const btnPrimary = {
 const codeBlockStyle = {
     fontFamily: 'monospace',
     fontSize: '13px',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'var(--bg-hover)',
     padding: '8px 12px',
     borderRadius: '6px',
-    border: `1px solid rgba(255,255,255,0.05)`,
-    color: '#E5E7EB',
+    border: `1px solid var(--border)`,
+    color: 'var(--text-primary)',
     wordBreak: 'break-all' as any,
     display: 'flex',
     alignItems: 'center',
@@ -276,7 +276,7 @@ export default function DomainSettingsPage() {
                                     </div>
                                     <div>
                                         <h4 style={{ color: colors.success, margin: '0 0 4px', fontSize: '16px' }}>Domain Authenticated</h4>
-                                        <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
+                                        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
                                             Your domain is fully authenticated with DKIM and SPF. You are ready to start sending branded emails that reach the inbox.
                                         </p>
                                     </div>
@@ -284,7 +284,7 @@ export default function DomainSettingsPage() {
                             ) : (
                                 <div style={{ padding: '12px 16px', backgroundColor: colors.warningBg, border: `1px solid rgba(245,158,11,0.3)`, borderRadius: '8px', marginBottom: '24px' }}>
                                     <h4 style={{ color: colors.warning, margin: '0 0 4px', fontSize: '14px' }}>Verification Pending</h4>
-                                    <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: '13px' }}>
+                                    <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '13px' }}>
                                         It can take 10-45 minutes for DNS changes to propagate globally depending on your provider.
                                     </p>
                                 </div>
@@ -454,7 +454,7 @@ export default function DomainSettingsPage() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
                 }}>
                     <div style={{
-                        backgroundColor: '#1A1D24', padding: '24px', borderRadius: '12px',
+                        backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: '12px',
                         width: '100%', maxWidth: '400px', border: `1px solid ${colors.border}`
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
