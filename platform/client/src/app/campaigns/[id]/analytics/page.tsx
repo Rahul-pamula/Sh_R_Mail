@@ -88,7 +88,7 @@ export default function CampaignAnalyticsPage() {
         ← Back
       </button>
 
-      <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#FAFAFA", marginBottom: "16px" }}>
+      <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "16px" }}>
         Campaign Analytics
       </h1>
 
@@ -98,26 +98,26 @@ export default function CampaignAnalyticsPage() {
         </div>
       )}
 
-      {loading && <p style={{ color: "#A1A1AA" }}>Loading analytics…</p>}
+      {loading && <p style={{ color: "var(--text-secondary)" }}>Loading analytics…</p>}
 
       {!loading && stats && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", marginBottom: "20px" }}>
             {statCards.map((s) => (
-              <div key={s.label} style={{ padding: "14px", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px", background: "rgba(24,24,27,0.5)" }}>
-                <div style={{ fontSize: "12px", color: "#A1A1AA", marginBottom: "6px" }}>{s.label}</div>
-                <div style={{ fontSize: "22px", fontWeight: 700, color: "#FAFAFA" }}>{s.value}</div>
+              <div key={s.label} style={{ padding: "14px", border: "1px solid var(--border)", borderRadius: "10px", background: "var(--bg-card)" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>{s.label}</div>
+                <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)" }}>{s.value}</div>
                 {s.sub && <div style={{ fontSize: "12px", color: "#8B5CF6" }}>{s.sub}</div>}
               </div>
             ))}
           </div>
 
           <div style={{ marginBottom: "18px" }}>
-            <h3 style={{ color: "#A1A1AA", fontSize: "13px", marginBottom: "6px" }}>Proxy / scanner signals</h3>
+            <h3 style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "6px" }}>Proxy / scanner signals</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {Object.entries(sources || {}).map(([k, v]) => (
-                <div key={k} style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid rgba(63,63,70,0.35)", color: "#E4E4E7", background: "rgba(24,24,27,0.4)" }}>
-                  <span style={{ textTransform: "capitalize", marginRight: "6px", color: "#A1A1AA" }}>{k.replace('_', ' ')}</span>
+                <div key={k} style={{ padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)", color: "var(--text-primary)", background: "var(--bg-card)" }}>
+                  <span style={{ textTransform: "capitalize", marginRight: "6px", color: "var(--text-secondary)" }}>{k.replace('_', ' ')}</span>
                   <strong>{v}</strong>
                 </div>
               ))}
@@ -125,13 +125,13 @@ export default function CampaignAnalyticsPage() {
           </div>
 
           <div style={{ marginTop: "6px" }}>
-            <h2 style={{ fontSize: "16px", fontWeight: 600, color: "#E4E4E7", marginBottom: "10px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "10px" }}>
               Recipient Activity
             </h2>
-            <div style={{ overflowX: "auto", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px" }}>
+            <div style={{ overflowX: "auto", border: "1px solid var(--border)", borderRadius: "10px" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
-                  <tr style={{ background: "rgba(24,24,27,0.6)", color: "#A1A1AA" }}>
+                  <tr style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                     <th style={{ textAlign: "left", padding: "10px" }}>Email</th>
                     <th style={{ textAlign: "left", padding: "10px" }}>Name</th>
                     <th style={{ textAlign: "left", padding: "10px" }}>Status</th>
@@ -143,19 +143,19 @@ export default function CampaignAnalyticsPage() {
                 </thead>
                 <tbody>
                   {recipients.map((r) => (
-                    <tr key={r.dispatch_id} style={{ borderTop: "1px solid rgba(63,63,70,0.25)" }}>
-                      <td style={{ padding: "10px", color: "#E4E4E7" }}>{r.email}</td>
-                      <td style={{ padding: "10px", color: "#A1A1AA" }}>{r.name || "—"}</td>
-                      <td style={{ padding: "10px", color: "#A1A1AA", textTransform: "lowercase" }}>{r.status}</td>
+                    <tr key={r.dispatch_id} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "10px", color: "var(--text-primary)" }}>{r.email}</td>
+                      <td style={{ padding: "10px", color: "var(--text-secondary)" }}>{r.name || "—"}</td>
+                      <td style={{ padding: "10px", color: "var(--text-secondary)", textTransform: "lowercase" }}>{r.status}</td>
                       <td style={{ padding: "10px", color: r.opened ? "#22C55E" : "#71717A" }}>{r.opened ? "✓ Yes" : "No"}</td>
                       <td style={{ padding: "10px", color: r.bounced ? "#F87171" : "#71717A" }}>{r.bounced ? "✓ Yes" : "No"}</td>
                       <td style={{ padding: "10px", color: r.unsubscribed ? "#F59E0B" : "#71717A" }}>{r.unsubscribed ? "✓ Yes" : "No"}</td>
-                      <td style={{ padding: "10px", color: "#A1A1AA", fontSize: "12px" }}>{(r.sources || ["—"]).join(", ")}</td>
+                      <td style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px" }}>{(r.sources || ["—"]).join(", ")}</td>
                     </tr>
                   ))}
                   {recipients.length === 0 && (
                     <tr>
-                      <td colSpan={7} style={{ padding: "12px", textAlign: "center", color: "#71717A" }}>No recipient activity yet.</td>
+                      <td colSpan={7} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No recipient activity yet.</td>
                     </tr>
                   )}
                 </tbody>
