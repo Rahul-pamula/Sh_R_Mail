@@ -1,0 +1,52 @@
+==============================================================
+  EMAIL ENGINE — STARTUP + TESTING GUIDE (MONOLITH)
+==============================================================
+
+--------------------------------------------------------------
+STEP 0: START ALL SERVICES
+--------------------------------------------------------------
+
+Tracking API → Supabase Edge Functions (always on, no tunnel needed)
+  URL: https://iiweorjzoxcfaedsubxu.supabase.co/functions/v1
+  API_URL in .env is already set — nothing to start!
+
+Terminal 1 (API Server)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/api
+  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+Terminal 2 (Email Sender Worker)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
+  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  python email_sender.py
+
+Terminal 3 (Background Worker)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
+  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  python background_worker.py
+
+Terminal 4 (Scheduler)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
+  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  python scheduler.py
+
+Terminal 5 (Frontend)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/client
+  npm run dev
+
+Terminal 6 (Centralized System Email Worker)
+  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
+  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  python centralized_email_worker.py
+
+Open browser → http://localhost:3000
+
+--------------------------------------------------------------
+QUICK REFERENCE
+--------------------------------------------------------------
+Email worker logs       → Terminal 3 (email_sender.py)
+Background worker logs  → Terminal 4 (background_worker.py)
+Notification emails     → Your inbox
+Rate limit responses    → curl output (look for 429)
+DB state changes        → Supabase SQL Editor
+Open tracking issues    → Check tunnel is running + "Display images" clicked in Gmail 
