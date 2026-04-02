@@ -132,7 +132,7 @@ export default function RequestsPage() {
                                         <button
                                             disabled={isProcessing}
                                             onClick={() => handleAction(req.id, 'deny')}
-                                            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2 bg-zinc-500/10 text-zinc-400 hover:text-white hover:bg-zinc-700/50 border border-zinc-500/20 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50"
+                                            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2 bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] border border-[var(--border)] rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50"
                                             title="Deny request"
                                         >
                                             <XCircle className="w-4 h-4" /> Deny
