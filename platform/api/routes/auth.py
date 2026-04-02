@@ -17,6 +17,11 @@ from pydantic import BaseModel, EmailStr, Field
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
+import hmac
+import hashlib
+import base64
+import time
+import secrets
 from typing import Optional
 import uuid
 import os
@@ -602,6 +607,45 @@ GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:8000/au
 
 FRONTEND_CALLBACK_URL = os.getenv("FRONTEND_CALLBACK_URL", "http://localhost:3000/auth/callback")
 
+STATE_TTL_SECONDS = 600  # 10 minutes
+
+
+def _generate_oauth_state() -> str:
+    """
+    Create a short-lived, tamper-evident state token to prevent CSRF.
+    Encodes: random nonce + issued_at + HMAC signature using JWT secret.
+    """
+    nonce = secrets.token_urlsafe(16)
+    issued_at = int(time.time())
+    payload = f"{nonce}:{issued_at}"
+    sig = hmac.new(SECRET_KEY.encode("utf-8"), payload.encode(), hashlib.sha256).hexdigest()
+    token = f"{payload}:{sig}"
+    return base64.urlsafe_b64encode(token.encode()).decode()
+
+
+def _validate_oauth_state(state: Optional[str]) -> bool:
+    if not state:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(state.encode()).decode()
+        parts = decoded.split(":")
+        if len(parts) != 3:
+            return False
+        nonce, issued_at_str, signature = parts
+        issued_at = int(issued_at_str)
+    except Exception:
+        return False
+
+    expected_sig = hmac.new(
+        SECRET_KEY.encode("utf-8"),
+        f"{nonce}:{issued_at}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, signature):
+        return False
+    if time.time() - issued_at > STATE_TTL_SECONDS:
+        return False
+    return True
 
 @router.get("/google/login")
 async def google_login():
@@ -610,13 +654,24 @@ async def google_login():
         # We redirect back to frontend with error so the UI handles it gracefully
         return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=GoogleNotConfigured")
     
-    url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
+    state = _generate_oauth_state()
+    url = (
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        f"?client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+        "&response_type=code"
+        "&scope=openid%20email%20profile"
+        f"&state={state}"
+    )
     return RedirectResponse(url)
 
 
 @router.get("/google/callback")
-async def google_callback(code: str):
+async def google_callback(code: str, state: Optional[str] = None):
     """Handle Google OAuth Callback"""
+    if not _validate_oauth_state(state):
+        return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=InvalidState")
+
     async with httpx.AsyncClient() as client:
         # 1. Exchange code for access token
         token_res = await client.post(
@@ -657,13 +712,23 @@ async def github_login():
     if not GITHUB_CLIENT_ID:
         return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=GitHubNotConfigured")
         
-    url = f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri={GITHUB_REDIRECT_URI}&scope=user:email"
+    state = _generate_oauth_state()
+    url = (
+        "https://github.com/login/oauth/authorize"
+        f"?client_id={GITHUB_CLIENT_ID}"
+        f"&redirect_uri={GITHUB_REDIRECT_URI}"
+        "&scope=user:email"
+        f"&state={state}"
+    )
     return RedirectResponse(url)
 
 
 @router.get("/github/callback")
-async def github_callback(code: str):
+async def github_callback(code: str, state: Optional[str] = None):
     """Handle GitHub OAuth Callback"""
+    if not _validate_oauth_state(state):
+        return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=InvalidState")
+
     async with httpx.AsyncClient() as client:
         # 1. Exchange code for token
         token_res = await client.post(
@@ -758,7 +823,6 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         tenant_id = str(uuid.uuid4())
         
         # Generate random password since they use OAuth
-        import secrets
         password_hash = hash_password(secrets.token_urlsafe(32))
         
         # Create user
