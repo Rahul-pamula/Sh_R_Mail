@@ -13,7 +13,7 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; border: string }> = {
-    draft: { bg: "rgba(113,113,122,0.15)", color: "#A1A1AA", border: "rgba(113,113,122,0.3)" },
+    draft: { bg: "rgba(113,113,122,0.15)", color: "var(--text-secondary)", border: "rgba(113,113,122,0.3)" },
     sending: { bg: "rgba(59,130,246,0.12)", color: "#60A5FA", border: "rgba(59,130,246,0.3)" },
     sent: { bg: "rgba(34,197,94,0.12)", color: "#4ADE80", border: "rgba(34,197,94,0.3)" },
     paused: { bg: "rgba(234,179,8,0.12)", color: "#FDE047", border: "rgba(234,179,8,0.3)" },
@@ -100,7 +100,7 @@ export default function CampaignDetailsPage() {
 
     if (!campaign || campaign.detail) return (
         <div style={{ textAlign: "center", padding: "60px" }}>
-            <p style={{ color: "#71717A", fontSize: "14px" }}>Campaign not found.</p>
+            <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Campaign not found.</p>
             <Link href="/campaigns" style={{ color: "#3B82F6", fontSize: "13px" }}>← Back to Campaigns</Link>
         </div>
     );
@@ -125,7 +125,7 @@ export default function CampaignDetailsPage() {
     return (
         <div style={{ padding: "24px 32px", maxWidth: "1100px" }}>
             {/* Back */}
-            <Link href="/campaigns" style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#71717A", textDecoration: "none", marginBottom: "20px" }}>
+            <Link href="/campaigns" style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-muted)", textDecoration: "none", marginBottom: "20px" }}>
                 <ArrowLeft size={14} /> Back to Campaigns
             </Link>
 
@@ -133,12 +133,12 @@ export default function CampaignDetailsPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
                 <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
-                        <h1 style={{ fontSize: "22px", fontWeight: 600, color: "#FAFAFA", margin: 0 }}>{campaign.name}</h1>
+                        <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>{campaign.name}</h1>
                         <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}` }}>
                             {campaign.status}
                         </span>
                     </div>
-                    <p style={{ fontSize: "13px", color: "#71717A", margin: 0 }}>
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
                         {campaign.scheduled_at ? `Sent on ${new Date(campaign.scheduled_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}` : `Created ${new Date(campaign.created_at).toLocaleDateString()}`}
                     </p>
                 </div>
@@ -191,7 +191,7 @@ export default function CampaignDetailsPage() {
                     <button
                         onClick={handleDuplicate}
                         disabled={!!actionLoading}
-                        style={{ padding: "8px 14px", background: "rgba(24,24,27,0.6)", border: "1px solid rgba(63,63,70,0.4)", borderRadius: "8px", color: "#A1A1AA", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                        style={{ padding: "8px 14px", background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--text-secondary)", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                         {actionLoading === 'duplicate' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Copy size={13} />}
                         Duplicate
                     </button>
@@ -206,14 +206,14 @@ export default function CampaignDetailsPage() {
                 {metrics.map((m) => {
                     const Icon = m.icon;
                     return (
-                        <div key={m.label} style={{ padding: "18px 20px", background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px", backdropFilter: "blur(8px)" }}>
+                        <div key={m.label} style={{ padding: "18px 20px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px", backdropFilter: "blur(8px)" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                                <span style={{ fontSize: "11px", fontWeight: 500, color: "#71717A", textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</span>
+                                <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</span>
                                 <div style={{ width: "28px", height: "28px", borderRadius: "8px", background: `${m.color}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     <Icon size={13} color={m.color} />
                                 </div>
                             </div>
-                            <div style={{ fontSize: "24px", fontWeight: 700, color: "#FAFAFA", lineHeight: 1 }}>{m.value.toLocaleString()}</div>
+                            <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1 }}>{m.value.toLocaleString()}</div>
                             {m.sub && <div style={{ fontSize: "12px", color: m.color, marginTop: "4px", fontWeight: 500 }}>{m.sub}</div>}
                         </div>
                     );
@@ -227,8 +227,8 @@ export default function CampaignDetailsPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
                     {/* Activity Timeline placeholder */}
-                    <div style={{ padding: "20px 22px", background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px" }}>
-                        <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#E4E4E7", margin: "0 0 16px" }}>Activity Timeline</h3>
+                    <div style={{ padding: "20px 22px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                        <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px" }}>Activity Timeline</h3>
                         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
                             {[
                                 { label: "Delivered", pct: total ? (dispatched / total) * 100 : 0, color: "#4ADE80", val: dispatched },
@@ -237,47 +237,47 @@ export default function CampaignDetailsPage() {
                             ].map(bar => (
                                 <div key={bar.label}>
                                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
-                                        <span style={{ fontSize: "12px", color: "#A1A1AA" }}>{bar.label}</span>
-                                        <span style={{ fontSize: "12px", color: bar.color, fontWeight: 600 }}>{bar.val.toLocaleString()} <span style={{ color: "#52525B", fontWeight: 400 }}>({bar.pct.toFixed(1)}%)</span></span>
+                                        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{bar.label}</span>
+                                        <span style={{ fontSize: "12px", color: bar.color, fontWeight: 600 }}>{bar.val.toLocaleString()} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>({bar.pct.toFixed(1)}%)</span></span>
                                     </div>
-                                    <div style={{ height: "6px", background: "rgba(63,63,70,0.3)", borderRadius: "3px", overflow: "hidden" }}>
+                                    <div style={{ height: "6px", background: "var(--border)", borderRadius: "3px", overflow: "hidden" }}>
                                         <div style={{ height: "100%", width: `${bar.pct}%`, background: bar.color, borderRadius: "3px", transition: "width 0.6s ease" }} />
                                     </div>
                                 </div>
                             ))}
                         </div>
                         {total === 0 && (
-                            <p style={{ color: "#52525B", fontSize: "13px", textAlign: "center", padding: "16px 0 0", margin: 0 }}>No dispatch data yet — launch the campaign first</p>
+                            <p style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "16px 0 0", margin: 0 }}>No dispatch data yet — launch the campaign first</p>
                         )}
                     </div>
 
                     {/* Failed Deliveries */}
-                    <div style={{ padding: "20px 22px", background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px" }}>
-                        <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#E4E4E7", margin: "0 0 14px" }}>
+                    <div style={{ padding: "20px 22px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                        <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 14px" }}>
                             Failed Deliveries
                             {failedDispatch.length > 0 && <span style={{ marginLeft: "8px", padding: "2px 7px", borderRadius: "10px", fontSize: "11px", background: "rgba(239,68,68,0.12)", color: "#F87171", border: "1px solid rgba(239,68,68,0.2)" }}>{failedDispatch.length}</span>}
                         </h3>
                         {failedDispatch.length === 0 ? (
-                            <div style={{ textAlign: "center", padding: "24px 0", color: "#52525B", fontSize: "13px" }}>
+                            <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: "13px" }}>
                                 <div style={{ fontSize: "20px", marginBottom: "6px" }}>✅</div>
                                 No failed deliveries
                             </div>
                         ) : (
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                                 <thead>
-                                    <tr style={{ borderBottom: "1px solid rgba(63,63,70,0.3)" }}>
-                                        <th style={{ padding: "8px 0", textAlign: "left", fontWeight: 500, color: "#71717A" }}>Email</th>
-                                        <th style={{ padding: "8px 0", textAlign: "left", fontWeight: 500, color: "#71717A" }}>Reason</th>
+                                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                                        <th style={{ padding: "8px 0", textAlign: "left", fontWeight: 500, color: "var(--text-muted)" }}>Email</th>
+                                        <th style={{ padding: "8px 0", textAlign: "left", fontWeight: 500, color: "var(--text-muted)" }}>Reason</th>
                                         <th style={{ padding: "8px 0", width: "40px" }} />
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {failedDispatch.slice(0, 10).map((d: any) => (
-                                        <tr key={d.id} style={{ borderBottom: "1px solid rgba(63,63,70,0.2)" }}>
-                                            <td style={{ padding: "9px 0", color: "#E4E4E7" }}>{d.subscriber_email || d.subscriber_id}</td>
+                                        <tr key={d.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                                            <td style={{ padding: "9px 0", color: "var(--text-primary)" }}>{d.subscriber_email || d.subscriber_id}</td>
                                             <td style={{ padding: "9px 0", color: "#F87171", fontSize: "12px" }}>{d.error_log || "Unknown"}</td>
                                             <td style={{ padding: "9px 0", textAlign: "right" }}>
-                                                <button title="Retry" style={{ background: "none", border: "none", cursor: "pointer", color: "#71717A", padding: "2px" }}>
+                                                <button title="Retry" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "2px" }}>
                                                     <RotateCcw size={13} />
                                                 </button>
                                             </td>
@@ -290,8 +290,8 @@ export default function CampaignDetailsPage() {
                 </div>
 
                 {/* Right: Details Panel */}
-                <div style={{ padding: "20px 22px", background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px", height: "fit-content" }}>
-                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#E4E4E7", margin: "0 0 18px" }}>Campaign Details</h3>
+                <div style={{ padding: "20px 22px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px", height: "fit-content" }}>
+                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 18px" }}>Campaign Details</h3>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                         {[
@@ -300,14 +300,14 @@ export default function CampaignDetailsPage() {
                             { label: "Created", value: new Date(campaign.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
                         ].map(item => (
                             <div key={item.label}>
-                                <label style={{ fontSize: "11px", fontWeight: 500, color: "#52525B", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "4px" }}>{item.label}</label>
-                                <div style={{ fontSize: "13px", color: "#E4E4E7", lineHeight: 1.5 }}>{item.value}</div>
+                                <label style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "4px" }}>{item.label}</label>
+                                <div style={{ fontSize: "13px", color: "var(--text-primary)", lineHeight: 1.5 }}>{item.value}</div>
                             </div>
                         ))}
                     </div>
 
-                    <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid rgba(63,63,70,0.3)" }}>
-                        <button style={{ width: "100%", padding: "9px", background: "transparent", border: "1px solid rgba(63,63,70,0.4)", borderRadius: "8px", color: "#A1A1AA", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px" }}>
+                    <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+                        <button style={{ width: "100%", padding: "9px", background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--text-secondary)", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px" }}>
                             <Settings size={13} /> Configure
                         </button>
                     </div>
@@ -317,16 +317,16 @@ export default function CampaignDetailsPage() {
             {/* View Preview Modal */}
             {showPreview && (
                 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}>
-                    <div style={{ background: "#18181B", width: "90%", maxWidth: "800px", height: "85vh", borderRadius: "12px", border: "1px solid rgba(63,63,70,0.5)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid rgba(63,63,70,0.4)", background: "rgba(9,9,11,0.5)" }}>
+                    <div style={{ background: "var(--bg-primary)", width: "90%", maxWidth: "800px", height: "85vh", borderRadius: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Eye size={18} color="#8B5CF6" />
-                                <h3 style={{ margin: 0, color: "#FAFAFA", fontSize: "15px", fontWeight: 600 }}>Email Preview</h3>
-                                <span style={{ color: "#71717A", fontSize: "13px", marginLeft: "12px", borderLeft: "1px solid rgba(63,63,70,0.5)", paddingLeft: "12px" }}>
-                                    Subject: <span style={{ color: "#E4E4E7" }}>{campaign.subject}</span>
+                                <h3 style={{ margin: 0, color: "var(--text-primary)", fontSize: "15px", fontWeight: 600 }}>Email Preview</h3>
+                                <span style={{ color: "var(--text-muted)", fontSize: "13px", marginLeft: "12px", borderLeft: "1px solid var(--border)", paddingLeft: "12px" }}>
+                                    Subject: <span style={{ color: "var(--text-primary)" }}>{campaign.subject}</span>
                                 </span>
                             </div>
-                            <button onClick={() => setShowPreview(false)} style={{ background: "none", border: "none", color: "#A1A1AA", cursor: "pointer", padding: "4px" }}>
+                            <button onClick={() => setShowPreview(false)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", padding: "4px" }}>
                                 <X size={20} />
                             </button>
                         </div>
