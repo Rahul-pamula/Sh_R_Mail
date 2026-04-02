@@ -92,11 +92,11 @@ export default function EventsPage() {
                         <Zap size={18} color="#8B5CF6" />
                     </div>
                     <div>
-                        <h1 style={{ fontSize: "20px", fontWeight: 600, color: "#FAFAFA", margin: 0 }}>Events</h1>
-                        <p style={{ fontSize: "13px", color: "#71717A", margin: 0 }}>Campaign delivery activity</p>
+                        <h1 style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>Events</h1>
+                        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>Campaign delivery activity</p>
                     </div>
                 </div>
-                <button onClick={load} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(24,24,27,0.6)", border: "1px solid rgba(63,63,70,0.4)", borderRadius: "8px", color: "#A1A1AA", fontSize: "13px", cursor: "pointer" }}>
+                <button onClick={load} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--text-muted)", fontSize: "13px", cursor: "pointer" }}>
                     <RefreshCw size={13} /> Refresh
                 </button>
             </div>
@@ -107,14 +107,14 @@ export default function EventsPage() {
                     {statCards.map(c => {
                         const Icon = c.icon;
                         return (
-                            <div key={c.label} style={{ padding: "16px 18px", background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px" }}>
+                            <div key={c.label} style={{ padding: "16px 18px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                                    <span style={{ fontSize: "11px", color: "#71717A", textTransform: "uppercase", letterSpacing: "0.05em" }}>{c.label}</span>
+                                    <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{c.label}</span>
                                     <div style={{ width: "26px", height: "26px", borderRadius: "7px", background: `${c.color}15`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         <Icon size={12} color={c.color} />
                                     </div>
                                 </div>
-                                <div style={{ fontSize: "22px", fontWeight: 700, color: "#FAFAFA" }}>{(c.value ?? 0).toLocaleString()}</div>
+                                <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)" }}>{(c.value ?? 0).toLocaleString()}</div>
                             </div>
                         );
                     })}
@@ -122,11 +122,11 @@ export default function EventsPage() {
             )}
 
             {/* Campaign Activity Table */}
-            <div style={{ background: "rgba(24,24,27,0.5)", border: "1px solid rgba(63,63,70,0.35)", borderRadius: "10px", overflow: "hidden" }}>
+            <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
                 {/* Table header */}
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 110px 80px 80px 80px 90px 40px", gap: "8px", padding: "10px 18px", borderBottom: "1px solid rgba(63,63,70,0.3)", background: "rgba(9,9,11,0.3)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 110px 80px 80px 80px 90px 40px", gap: "8px", padding: "10px 18px", borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
                     {["Campaign", "Status", "Sent", "Failed", "Pending", "Last Activity", ""].map(h => (
-                        <span key={h} style={{ fontSize: "11px", fontWeight: 500, color: "#52525B", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+                        <span key={h} style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
                     ))}
                 </div>
 
@@ -136,8 +136,8 @@ export default function EventsPage() {
                     </div>
                 ) : campaigns.length === 0 ? (
                     <div style={{ textAlign: "center", padding: "48px" }}>
-                        <Zap size={28} color="#52525B" style={{ margin: "0 auto 10px", display: "block" }} />
-                        <p style={{ color: "#71717A", fontSize: "13px", margin: 0 }}>No campaigns yet. Launch one to see activity here.</p>
+                        <Zap size={28} color="var(--text-muted)" style={{ margin: "0 auto 10px", display: "block" }} />
+                        <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: 0 }}>No campaigns yet. Launch one to see activity here.</p>
                     </div>
                 ) : campaigns.map((camp, idx) => {
                     const ss = STATUS_STYLES[camp.status] || STATUS_STYLES.draft;
@@ -149,22 +149,22 @@ export default function EventsPage() {
                     const isLoadingThis = dispatchLoading === camp.id;
 
                     return (
-                        <div key={camp.id} style={{ borderBottom: idx < campaigns.length - 1 ? "1px solid rgba(63,63,70,0.2)" : "none" }}>
+                        <div key={camp.id} style={{ borderBottom: idx < campaigns.length - 1 ? "1px solid var(--border)" : "none" }}>
                             {/* Campaign row */}
                             <div
                                 onClick={() => toggleExpand(camp.id)}
                                 style={{ display: "grid", gridTemplateColumns: "2fr 110px 80px 80px 80px 90px 40px", gap: "8px", padding: "13px 18px", cursor: "pointer", transition: "background 0.15s", alignItems: "center" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(63,63,70,0.08)")}
+                                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                             >
                                 <div>
                                     <Link href={`/campaigns/${camp.id}`} onClick={e => e.stopPropagation()}
-                                        style={{ fontSize: "14px", fontWeight: 500, color: "#E4E4E7", textDecoration: "none" }}
+                                        style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)", textDecoration: "none" }}
                                         onMouseEnter={e => (e.currentTarget.style.color = "#60A5FA")}
-                                        onMouseLeave={e => (e.currentTarget.style.color = "#E4E4E7")}>
+                                        onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}>
                                         {camp.name}
                                     </Link>
-                                    <p style={{ fontSize: "11px", color: "#52525B", margin: "2px 0 0" }}>{camp.subject}</p>
+                                    <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "2px 0 0" }}>{camp.subject}</p>
                                 </div>
                                 <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: 600, textTransform: "capitalize", background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`, width: "fit-content" }}>
                                     {camp.status}
@@ -172,39 +172,38 @@ export default function EventsPage() {
                                 <span style={{ fontSize: "13px", color: "#4ADE80", fontWeight: 600 }}>
                                     {isLoadingThis ? "…" : rows.length > 0 ? dispatched.toLocaleString() : "—"}
                                 </span>
-                                <span style={{ fontSize: "13px", color: failed > 0 ? "#F87171" : "#52525B", fontWeight: failed > 0 ? 600 : 400 }}>
+                                <span style={{ fontSize: "13px", color: failed > 0 ? "#F87171" : "var(--text-muted)", fontWeight: failed > 0 ? 600 : 400 }}>
                                     {isLoadingThis ? "…" : rows.length > 0 ? failed.toLocaleString() : "—"}
                                 </span>
-                                <span style={{ fontSize: "13px", color: pending > 0 ? "#FDE047" : "#52525B" }}>
+                                <span style={{ fontSize: "13px", color: pending > 0 ? "#FDE047" : "var(--text-muted)" }}>
                                     {isLoadingThis ? "…" : rows.length > 0 ? pending.toLocaleString() : "—"}
                                 </span>
-                                <span style={{ fontSize: "12px", color: "#52525B" }}>{timeAgo(camp.updated_at || camp.created_at)}</span>
-                                <span style={{ color: "#52525B", display: "flex", justifyContent: "center" }}>
+                                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{timeAgo(camp.updated_at || camp.created_at)}</span>
+                                <span style={{ color: "var(--text-muted)", display: "flex", justifyContent: "center" }}>
                                     {isLoadingThis ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </span>
                             </div>
 
-                            {/* Expanded dispatch rows — grouped by status, capped at 10 */}
+                            {/* Expanded dispatch rows */}
                             {isExpanded && rows.length > 0 && (
-                                <div style={{ borderTop: "1px solid rgba(63,63,70,0.2)", background: "rgba(9,9,11,0.3)", padding: "8px 18px 12px 36px" }}>
+                                <div style={{ borderTop: "1px solid var(--border)", background: "var(--bg-hover)", padding: "8px 18px 12px 36px" }}>
                                     <div style={{ display: "flex", gap: "16px", marginBottom: "10px", paddingTop: "8px" }}>
                                         <span style={{ fontSize: "12px", color: "#4ADE80" }}>✔ {dispatched} delivered</span>
                                         {failed > 0 && <span style={{ fontSize: "12px", color: "#F87171" }}>✖ {failed} failed</span>}
                                         {pending > 0 && <span style={{ fontSize: "12px", color: "#FDE047" }}>⏳ {pending} queued</span>}
-                                        <span style={{ fontSize: "12px", color: "#52525B" }}>· {rows.length} total recipients</span>
+                                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>· {rows.length} total recipients</span>
                                     </div>
-                                    {/* Show failed rows only (most actionable) */}
                                     {rows.filter((r: any) => r.status === "FAILED").slice(0, 5).map((r: any) => (
-                                        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "5px 0", borderTop: "1px solid rgba(63,63,70,0.15)" }}>
+                                        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "5px 0", borderTop: "1px solid var(--border)" }}>
                                             <XCircle size={12} color="#F87171" />
-                                            <span style={{ fontSize: "12px", color: "#A1A1AA" }}>{r.subscriber_id}</span>
+                                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{r.subscriber_id}</span>
                                             <span style={{ fontSize: "11px", color: "#F87171" }}>{r.error_log || "Unknown error"}</span>
                                         </div>
                                     ))}
                                     {failed === 0 && (
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 0" }}>
                                             <CheckCircle2 size={12} color="#4ADE80" />
-                                            <span style={{ fontSize: "12px", color: "#52525B" }}>All emails delivered successfully</span>
+                                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>All emails delivered successfully</span>
                                         </div>
                                     )}
                                 </div>
