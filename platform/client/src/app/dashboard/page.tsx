@@ -26,8 +26,8 @@ function HealthRow({ label, value, status, unit = '%' }: {
 }) {
     const color = HEALTH_COLORS[status];
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid rgba(63,63,70,0.2)' }}>
-            <span style={{ fontSize: 13, color: '#A1A1AA' }}>{label}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{label}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color }}>
                 {HEALTH_LABELS[status]} {value.toFixed(1)}{unit}
             </span>
@@ -342,13 +342,13 @@ export default function DashboardPage() {
 
                 {/* Sender Health Card */}
                 <div style={{
-                    marginTop: 32, background: 'rgba(24,24,27,0.6)', border: '1px solid rgba(63,63,70,0.35)',
+                    marginTop: 32, background: 'var(--bg-card)', border: '1px solid var(--border)',
                     borderRadius: 16, padding: '24px 28px'
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <TrendingUp size={18} color="#6366F1" />
-                            <h2 style={{ fontSize: 16, fontWeight: 600, color: '#E4E4E7', margin: 0 }}>Sender Health</h2>
+                            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Sender Health</h2>
                             {health?.overall && (
                                 <span style={{
                                     fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
@@ -360,10 +360,10 @@ export default function DashboardPage() {
                                 </span>
                             )}
                         </div>
-                        <div style={{ display: 'flex', gap: 24, fontSize: 13, color: '#71717A' }}>
-                            <span>Sent: <strong style={{ color: '#E4E4E7' }}>{health?.sent?.toLocaleString() ?? '—'}</strong></span>
-                            <span>Opens: <strong style={{ color: '#E4E4E7' }}>{health?.opens?.toLocaleString() ?? '—'}</strong></span>
-                            <span>Clicks: <strong style={{ color: '#E4E4E7' }}>{health?.clicks?.toLocaleString() ?? '—'}</strong></span>
+                        <div style={{ display: 'flex', gap: 24, fontSize: 13, color: 'var(--text-muted)' }}>
+                            <span>Sent: <strong style={{ color: 'var(--text-primary)' }}>{health?.sent?.toLocaleString() ?? '—'}</strong></span>
+                            <span>Opens: <strong style={{ color: 'var(--text-primary)' }}>{health?.opens?.toLocaleString() ?? '—'}</strong></span>
+                            <span>Clicks: <strong style={{ color: 'var(--text-primary)' }}>{health?.clicks?.toLocaleString() ?? '—'}</strong></span>
                         </div>
                     </div>
 
@@ -377,19 +377,19 @@ export default function DashboardPage() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 32 }}>
                             <div>
                                 <HealthRow label="Bounce Rate" value={health.rates.bounce_rate} status={health.health.bounce.status} />
-                                <p style={{ fontSize: 11, color: '#52525B', marginTop: 6 }}>Target: &lt;2% · Above 5% = critical</p>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Target: &lt;2% · Above 5% = critical</p>
                             </div>
                             <div>
                                 <HealthRow label="Spam Rate" value={health.rates.spam_rate} status={health.health.spam.status} />
-                                <p style={{ fontSize: 11, color: '#52525B', marginTop: 6 }}>Target: &lt;0.1% · Gmail threshold: 0.3%</p>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Target: &lt;0.1% · Gmail threshold: 0.3%</p>
                             </div>
                             <div>
                                 <HealthRow label="Open Rate" value={health.rates.open_rate} status={health.health.open.status} />
-                                <p style={{ fontSize: 11, color: '#52525B', marginTop: 6 }}>Target: &gt;20% · Below 10% = low engagement</p>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Target: &gt;20% · Below 10% = low engagement</p>
                             </div>
                         </div>
                     ) : (
-                        <p style={{ fontSize: 13, color: '#52525B', textAlign: 'center', padding: '16px 0' }}>
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>
                             Send your first campaign to see sender health metrics here.
                         </p>
                     )}
