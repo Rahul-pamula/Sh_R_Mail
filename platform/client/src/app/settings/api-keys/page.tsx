@@ -117,7 +117,7 @@ export default function ApiKeysSettings() {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <code className="flex-1 px-3 py-2 rounded-lg bg-black/30 text-emerald-300 text-xs font-mono break-all border border-emerald-500/20">
+                            <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-input)] text-emerald-600 dark:text-emerald-300 text-xs font-mono break-all border border-emerald-500/20">
                                 {newKey}
                             </code>
                             <button
@@ -213,7 +213,7 @@ export default function ApiKeysSettings() {
 
                 <div className="mt-4 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)]">
                     <p className="text-xs text-[var(--text-muted)]">
-                        <span className="font-medium text-[var(--text-secondary)]">Usage:</span> Include your API key in the <code className="bg-black/20 px-1 py-0.5 rounded text-blue-300">Authorization: Bearer ee_...</code> header when making API calls.
+                        <span className="font-medium text-[var(--text-secondary)]">Usage:</span> Include your API key in the <code className="bg-[var(--bg-input)] px-1 py-0.5 rounded text-[var(--accent)]">Authorization: Bearer ee_...</code> header when making API calls.
                     </p>
                 </div>
             </div>
