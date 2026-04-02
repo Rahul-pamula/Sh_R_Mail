@@ -146,13 +146,13 @@ export default function TemplatesPage() {
     const visiblePresets = showAllPresets ? TEMPLATE_PRESETS : TEMPLATE_PRESETS.slice(0, 6);
 
     return (
-        <div style={{ fontFamily: "Inter, sans-serif", color: "#E5E7EB", minHeight: "100vh", backgroundColor: "#0A0A0B" }}>
+        <div style={{ fontFamily: "Inter, sans-serif", color: "var(--text-primary)", minHeight: "100vh", backgroundColor: "var(--bg-primary)" }}>
 
             {/* ====== TEMPLATE GALLERY ====== */}
-            <div style={{ backgroundColor: "#111113", padding: "40px 0 32px", borderBottom: "1px solid #1F2937" }}>
+            <div style={{ backgroundColor: "var(--bg-card)", padding: "40px 0 32px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 48px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                        <h2 style={{ fontSize: "14px", fontWeight: 500, color: "#9CA3AF", margin: 0, letterSpacing: "0.2px" }}>
+                        <h2 style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-muted)", margin: 0, letterSpacing: "0.2px" }}>
                             Start a new email from a template
                         </h2>
                         {TEMPLATE_PRESETS.length > 6 && (
@@ -201,9 +201,9 @@ export default function TemplatesPage() {
                                         width: "100%",
                                         aspectRatio: "3/4",
                                         borderRadius: "8px",
-                                        border: "1px solid #374151",
+                                        border: "1px solid var(--border)",
                                         overflow: "hidden",
-                                        backgroundColor: "#1F2937",
+                                        backgroundColor: "var(--bg-hover)",
                                         transition: "all 0.15s cubic-bezier(0.4,0.0,0.2,1)",
                                         boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
                                         position: "relative"
@@ -213,7 +213,7 @@ export default function TemplatesPage() {
                                         e.currentTarget.style.boxShadow = "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)";
                                     }}
                                     onMouseLeave={(e) => {
-                                        e.currentTarget.style.borderColor = "#374151";
+                                        e.currentTarget.style.borderColor = "var(--border)";
                                         e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
                                     }}
                                 >
@@ -250,7 +250,7 @@ export default function TemplatesPage() {
                                         fontSize: "14px",
                                         fontWeight: 500,
                                         margin: "0 0 4px 0",
-                                        color: "#F3F4F6",
+                                        color: "var(--text-primary)",
                                         lineHeight: "20px",
                                         overflow: "hidden",
                                         textOverflow: "ellipsis",
@@ -260,7 +260,7 @@ export default function TemplatesPage() {
                                     </p>
                                     <p style={{
                                         fontSize: "12px",
-                                        color: "#9CA3AF",
+                                        color: "var(--text-muted)",
                                         margin: 0,
                                         textTransform: "capitalize",
                                         fontWeight: 400
@@ -278,8 +278,8 @@ export default function TemplatesPage() {
             <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "40px 48px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
                     <div>
-                        <h1 style={{ fontSize: "18px", fontWeight: 500, marginBottom: "4px", color: "#F9FAFB" }}>Recent email templates</h1>
-                        <p style={{ color: "#9CA3AF", fontSize: "14px", margin: 0, fontWeight: 400 }}>
+                        <h1 style={{ fontSize: "18px", fontWeight: 500, marginBottom: "4px", color: "var(--text-primary)" }}>Recent email templates</h1>
+                        <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0, fontWeight: 400 }}>
                             Owned by anyone · {total} template{total !== 1 ? "s" : ""}
                         </p>
                     </div>
@@ -298,20 +298,20 @@ export default function TemplatesPage() {
                                 padding: "10px 14px 10px 40px",
                                 width: "100%",
                                 borderRadius: "8px",
-                                border: "1px solid #374151",
+                                border: "1px solid var(--border)",
                                 fontSize: "14px",
                                 outline: "none",
-                                backgroundColor: "#111113",
-                                color: "#F3F4F6",
+                                backgroundColor: "var(--bg-input)",
+                                color: "var(--text-primary)",
                                 transition: "background-color 0.2s, border-color 0.2s"
                             }}
                             onFocus={(e) => {
-                                e.currentTarget.style.backgroundColor = "#1F2937";
+                                e.currentTarget.style.backgroundColor = "var(--bg-hover)";
                                 e.currentTarget.style.borderColor = "#3B82F6";
                             }}
                             onBlur={(e) => {
-                                e.currentTarget.style.backgroundColor = "#111113";
-                                e.currentTarget.style.borderColor = "#374151";
+                                e.currentTarget.style.backgroundColor = "var(--bg-input)";
+                                e.currentTarget.style.borderColor = "var(--border)";
                             }}
                         />
                     </div>
@@ -319,12 +319,12 @@ export default function TemplatesPage() {
 
                 {/* Template Grid */}
                 {loading ? (
-                    <div style={{ padding: "60px", textAlign: "center", color: "#9CA3AF", fontSize: "14px" }}>Loading templates...</div>
+                    <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>Loading templates...</div>
                 ) : filtered.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "80px 24px", backgroundColor: "#111113", borderRadius: "12px", border: "1px dashed #374151" }}>
-                        <FileText style={{ width: "48px", height: "48px", color: "#4B5563", marginBottom: "16px", strokeWidth: 1.5, marginLeft: "auto", marginRight: "auto" }} />
-                        <h3 style={{ fontSize: "16px", fontWeight: 500, margin: "0 0 8px 0", color: "#F3F4F6" }}>No templates yet</h3>
-                        <p style={{ color: "#9CA3AF", fontSize: "14px", margin: 0, maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
+                    <div style={{ textAlign: "center", padding: "80px 24px", backgroundColor: "var(--bg-card)", borderRadius: "12px", border: "1px dashed var(--border)" }}>
+                        <FileText style={{ width: "48px", height: "48px", color: "var(--text-muted)", marginBottom: "16px", strokeWidth: 1.5, marginLeft: "auto", marginRight: "auto" }} />
+                        <h3 style={{ fontSize: "16px", fontWeight: 500, margin: "0 0 8px 0", color: "var(--text-primary)" }}>No templates yet</h3>
+                        <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0, maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
                             Choose a template above to get started, or create one from scratch.
                         </p>
                     </div>
@@ -339,12 +339,12 @@ export default function TemplatesPage() {
                                     key={template.id}
                                     onClick={() => handleEdit(template.id, template.design_json?.editor)}
                                     style={{
-                                        border: "1px solid #374151",
+                                        border: "1px solid var(--border)",
                                         borderRadius: "8px",
                                         overflow: "hidden",
                                         cursor: "pointer",
                                         transition: "all 0.15s cubic-bezier(0.4,0.0,0.2,1)",
-                                        backgroundColor: "#1F2937",
+                                        backgroundColor: "var(--bg-card)",
                                         boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
                                     }}
                                     onMouseEnter={(e) => {
@@ -353,11 +353,11 @@ export default function TemplatesPage() {
                                     }}
                                     onMouseLeave={(e) => {
                                         e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
-                                        e.currentTarget.style.borderColor = "#374151";
+                                        e.currentTarget.style.borderColor = "var(--border)";
                                     }}
                                 >
                                     {/* Preview */}
-                                    <div style={{ height: "140px", backgroundColor: "#111113", borderBottom: "1px solid #374151", position: "relative", overflow: "hidden" }}>
+                                    <div style={{ height: "140px", backgroundColor: "var(--bg-hover)", borderBottom: "1px solid var(--border)", position: "relative", overflow: "hidden" }}>
                                         {hasRealHtml ? (
                                             <iframe
                                                 srcDoc={template.compiled_html}
@@ -373,7 +373,7 @@ export default function TemplatesPage() {
                                                 alignItems: "center",
                                                 justifyContent: "center",
                                                 gap: "6px",
-                                                color: "#6B7280"
+                                                color: "var(--text-muted)"
                                             }}>
                                                 <FileText size={24} strokeWidth={1.5} />
                                                 <span style={{ fontSize: "11px" }}>No preview</span>
@@ -392,7 +392,7 @@ export default function TemplatesPage() {
                                                 overflow: "hidden",
                                                 textOverflow: "ellipsis",
                                                 maxWidth: "160px",
-                                                color: "#F3F4F6"
+                                                color: "var(--text-primary)"
                                             }}>
                                                 {template.name}
                                             </h3>
@@ -401,7 +401,7 @@ export default function TemplatesPage() {
                                                     onClick={(e) => handleDuplicate(e, template.id)}
                                                     style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: "4px", borderRadius: "4px", display: "flex", transition: "background-color 0.2s" }}
                                                     title="Duplicate"
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#374151"}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--bg-hover)"}
                                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                                                 >
                                                     <Copy size={14} />
@@ -417,12 +417,12 @@ export default function TemplatesPage() {
                                                 </button>
                                             </div>
                                         </div>
-                                        <p style={{ fontSize: "13px", color: "#9CA3AF", margin: "0 0 12px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 12px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                             {template.subject}
                                         </p>
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "#9CA3AF" }}>
                                             <span>{new Date(template.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                            <span style={{ backgroundColor: "#374151", padding: "4px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: 500, textTransform: "capitalize", color: "#E5E7EB" }}>
+                                            <span style={{ backgroundColor: "var(--bg-hover)", padding: "4px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: 500, textTransform: "capitalize", color: "var(--text-secondary)" }}>
                                                 {template.category}
                                             </span>
                                         </div>
