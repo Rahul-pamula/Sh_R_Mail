@@ -41,7 +41,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
             <div className="flex items-center gap-4 flex-1">
                 <button 
                     onClick={() => setMobileMenuOpen?.()}
-                    className="md:hidden text-[var(--text-muted)] hover:text-white p-2 -ml-2 rounded-lg hover:bg-[var(--bg-secondary)]"
+                    className="md:hidden text-[var(--text-muted)] hover:text-[var(--text-primary)] p-2 -ml-2 rounded-lg hover:bg-[var(--bg-secondary)]"
                 >
                     <Menu className="w-5 h-5" />
                 </button>
@@ -69,7 +69,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
             {/* Right side: Notifications & Profile */}
             <div className="flex items-center gap-3 flex-1 justify-end relative" ref={dropdownRef}>
                 {/* Notifications Button */}
-                <button className="relative p-2 text-[var(--text-muted)] hover:text-white rounded-full hover:bg-[var(--bg-secondary)] transition-colors">
+                <button className="relative p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-full hover:bg-[var(--bg-secondary)] transition-colors">
                     <Bell className="w-5 h-5" />
                     {/* Notification Dot */}
                     <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-[var(--bg-primary)]"></span>
@@ -99,7 +99,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                         
                         {/* Header Info */}
                         <div className="px-4 py-3 border-b border-[var(--border)] mb-2">
-                            <p className="text-sm font-semibold text-white truncate">{user.fullName || 'User'}</p>
+                            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{user.fullName || 'User'}</p>
                             <p className="text-xs text-[var(--text-muted)] truncate mb-2">{user.email}</p>
                             
                             <div className="flex items-center gap-2 mt-1">
@@ -123,7 +123,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                             <Link 
                                 href="/settings/profile" 
                                 onClick={() => setIsProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
                                 <User className="w-4 h-4" /> Personal Profile
                             </Link>
@@ -131,7 +131,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                             <Link 
                                 href="/settings/organization" 
                                 onClick={() => setIsProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
                                 <Settings className="w-4 h-4" /> Workspace Settings
                             </Link>
@@ -139,7 +139,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                             <Link 
                                 href="/settings/billing" 
                                 onClick={() => setIsProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
                                 <CreditCard className="w-4 h-4" /> Account & Billing
                             </Link>
@@ -149,7 +149,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                                     setIsProfileOpen(false);
                                     logout();
                                 }}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-secondary)] rounded-lg transition-colors mt-1"
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors mt-1"
                             >
                                 <RefreshCw className="w-4 h-4" /> Switch Account
                             </button>
