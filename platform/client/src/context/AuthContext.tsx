@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 
 interface User {
     userId: string;
@@ -24,9 +25,13 @@ interface AuthContextType {
     refreshUserStatus: () => Promise<void>;
     updateUserContext: (updates: Partial<User>) => void;
     switchWorkspace: (tenantId: string) => Promise<void>;
+    /** Immediately updates the UI theme and debounces the backend save */
+    setThemePref: (theme: 'light' | 'dark' | 'system') => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const VALID_THEMES = new Set(['light', 'dark', 'system']);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -34,6 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
     const pathname = usePathname();
+    const { setTheme } = useTheme();
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Check for existing session on mount
     useEffect(() => {
@@ -46,6 +53,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const parsedUser = JSON.parse(userData);
                     setUser(parsedUser);
                     setIsAuthenticated(true);
+
+                    // ── Theme Sync ────────────────────────────────────────────
+                    // Step 1: localStorage was already applied by next-themes (instant, no flicker).
+                    // Step 2: Hydrate from backend — backend wins after login.
+                    try {
+                        const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (meRes.ok) {
+                            const meData = await meRes.json();
+                            const backendTheme = meData.theme_preference as string;
+                            // Strict whitelist — never pass arbitrary strings to setTheme
+                            if (VALID_THEMES.has(backendTheme)) {
+                                setTheme(backendTheme);
+                            }
+                        }
+                    } catch {
+                        // Silent: network errors should not break auth
+                    }
+                    // ─────────────────────────────────────────────────────────
 
                     // Redirect based on tenant status
                     if (parsedUser.tenantStatus === 'pending_join' && pathname !== '/waiting-room') {
@@ -63,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
 
         checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
 
@@ -203,11 +231,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = () => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user_data');
         document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
         document.cookie = 'tenant_status=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
         window.location.href = '/login';
+    };
+
+    /**
+     * setThemePref
+     * 1. Applies the theme to the UI instantly (next-themes handles localStorage).
+     * 2. Debounces the backend PATCH call by 500ms to avoid API spam.
+     * Never passes raw user input to setTheme — always validates first.
+     */
+    const setThemePref = (theme: 'light' | 'dark' | 'system') => {
+        if (!VALID_THEMES.has(theme)) return;
+        setTheme(theme); // Instant UI update
+
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(async () => {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me/theme`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ theme }),
+                });
+            } catch {
+                // Silent: theme change still applied locally even if API fails
+            }
+        }, 500);
     };
 
     const refreshUserStatus = async () => {
@@ -295,6 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 refreshUserStatus,
                 updateUserContext,
                 switchWorkspace,
+                setThemePref,
             }}
         >
             {children}
