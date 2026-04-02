@@ -1,15 +1,24 @@
 """
 AUDIT LOG SERVICE
-Phase 1.5 — Auth Security
+Phase 1.5 / 7.6 — Auth Security + Repository Architecture
 
-Provides a single write_log() function that any route can call.
+Public-facing wrapper around AuditRepository.
+Any route that needs to emit an audit event calls this module.
+
 PRIVACY RULE: Never log PII (email bodies, CSV content, passwords).
 Only log metadata: who did what, when, on which record.
-"""
 
-from datetime import datetime, timezone
+Supported action names (extend as needed):
+    auth.login                  auth.logout          auth.signup
+    auth.password_reset_request auth.password_reset_complete
+    auth.captcha_blocked        auth.rate_limit_blocked
+    contact.import              contact.delete       contact.restore
+    campaign.create             campaign.send        campaign.pause   campaign.cancel
+    template.create             template.delete
+    tenant.plan_change          tenant.upgrade
+"""
 from typing import Optional
-import uuid
+from repositories.audit_repository import AuditRepository
 
 
 async def write_log(
@@ -24,7 +33,7 @@ async def write_log(
     user_agent: Optional[str] = None,
 ) -> None:
     """
-    Write an audit log entry.
+    Convenience wrapper — writes an immutable audit log entry.
 
     Usage:
         await write_log(
@@ -35,40 +44,16 @@ async def write_log(
             resource_id=contact_id,
             metadata={"count": 1}  # non-PII only
         )
-
-    Actions to use:
-        auth.login         auth.logout       auth.signup
-        auth.password_reset_request         auth.password_reset_complete
-        contact.import     contact.delete    contact.restore
-        campaign.create    campaign.send     campaign.pause    campaign.cancel
-        template.create    template.delete
-        tenant.plan_change tenant.upgrade
     """
     from utils.supabase_client import db
-
-    try:
-        log_entry = {
-            "id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "action": action,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        if user_id:
-            log_entry["user_id"] = user_id
-        if resource_type:
-            log_entry["resource_type"] = resource_type
-        if resource_id:
-            log_entry["resource_id"] = resource_id
-        if metadata:
-            log_entry["metadata"] = metadata
-        if ip_address:
-            log_entry["ip_address"] = ip_address
-        if user_agent:
-            log_entry["user_agent"] = user_agent
-
-        db.client.table("audit_logs").insert(log_entry).execute()
-
-    except Exception as e:
-        # Never let audit log failures crash the main request
-        print(f"[AUDIT LOG ERROR] Failed to write log: {e}")
+    audit_repo = AuditRepository(db.client)
+    audit_repo.insert_log(
+        tenant_id=tenant_id,
+        action=action,
+        user_id=user_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        metadata=metadata,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
