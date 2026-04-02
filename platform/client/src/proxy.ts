@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Get auth token from cookies or localStorage (via header)
@@ -58,9 +58,10 @@ export const config = {
          * Match all request paths except:
          * - _next/static (static files)
          * - _next/image (image optimization files)
+         * - _next/data (RSC/SSR data payloads)
          * - favicon.ico (favicon file)
          * - public files (public folder)
          */
-        '/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$).*)',
+        '/((?!_next/static|_next/image|_next/data|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$).*)',
     ],
 };
