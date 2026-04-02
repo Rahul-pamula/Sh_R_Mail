@@ -40,7 +40,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                 />
             )}
             <aside
-                className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r border-[var(--border)] z-50 fixed md:relative h-screen bg-black/65 backdrop-blur-xl ${collapsed ? 'w-[72px]' : 'w-[260px]'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+                className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r border-[var(--border)] z-50 fixed md:relative h-screen bg-[var(--bg-card)] backdrop-blur-xl ${collapsed ? 'w-[72px]' : 'w-[260px]'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
             >
             {/* Logo Area */}
             <div className="h-20 flex items-center justify-between px-5 border-b border-[var(--border)]">
@@ -102,7 +102,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                                     className={`
                                         group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                                         ${isActive
-                                            ? 'text-white bg-[var(--accent)]/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-[var(--accent)]/20'
+                                            ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
                                             : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
                                     `}
                                     title={collapsed ? item.name : undefined}
