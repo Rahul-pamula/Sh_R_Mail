@@ -236,7 +236,7 @@ export default function TeamSettingsPage() {
                                 ) : (
                                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-md border ${m.role === 'owner' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                                         m.role === 'admin' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                                            'bg-[var(--bg-hover)] text-[var(--text-muted)] border-[var(--border)]'
                                         }`}>
                                         {m.role} {m.user_id === user?.userId && '(You)'}
                                     </span>
@@ -283,13 +283,13 @@ export default function TeamSettingsPage() {
                             return (
                                 <div key={inv.id} className="p-6 flex items-center justify-between">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700">
-                                            <Mail className="w-4 h-4 text-zinc-400" />
+                                        <div className="w-10 h-10 rounded-full bg-[var(--bg-hover)] flex items-center justify-center border border-[var(--border)]">
+                                            <Mail className="w-4 h-4 text-[var(--text-muted)]" />
                                         </div>
                                         <div>
                                             <p className="text-sm font-medium text-[var(--text-primary)]">{inv.email}</p>
                                             <p className="text-xs text-[var(--text-muted)]">
-                                                Invited as <span className="uppercase text-[10px] tracking-wider font-semibold text-zinc-300">{inv.role}</span>
+                                                Invited as <span className="uppercase text-[10px] tracking-wider font-semibold text-[var(--text-secondary)]">{inv.role}</span>
                                             </p>
                                         </div>
                                     </div>
@@ -298,7 +298,7 @@ export default function TeamSettingsPage() {
                                         {isExpired ? (
                                             <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Expired</span>
                                         ) : (
-                                            <span className="text-xs text-zinc-400">Expires {new Date(inv.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                            <span className="text-xs text-[var(--text-muted)]">Expires {new Date(inv.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                         )}
                                         
                                         {(isAdminOrOwner || inv.inviter_id === user?.userId) && (
@@ -333,7 +333,7 @@ export default function TeamSettingsPage() {
                                 <th className="px-6 py-4 font-semibold text-center w-[15%] text-amber-500">Owner</th>
                                 <th className="px-6 py-4 font-semibold text-center w-[15%] text-indigo-400">Admin</th>
                                 <th className="px-6 py-4 font-semibold text-center w-[15%] text-sky-400">Team Member</th>
-                                <th className="px-6 py-4 font-semibold text-center w-[15%] text-zinc-400">Agency Member</th>
+                                <th className="px-6 py-4 font-semibold text-center w-[15%] text-[var(--text-muted)]">Agency Member</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--border)]">
@@ -402,7 +402,7 @@ export default function TeamSettingsPage() {
                     <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-8 max-w-xl w-full shadow-2xl relative">
                         <button
                             onClick={() => setShowInviteModal(false)}
-                            className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors p-1"
+                            className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -411,7 +411,7 @@ export default function TeamSettingsPage() {
                             <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center justify-center mb-4 text-indigo-400">
                                 <Mail className="w-6 h-6" />
                             </div>
-                            <h2 className="text-xl font-bold text-white mb-1">Invite Team Member</h2>
+                            <h2 className="text-xl font-bold text-[var(--text-primary)] mb-1">Invite Team Member</h2>
                             <p className="text-[var(--text-muted)] text-sm leading-relaxed">
                                 An invitation link will be sent to their email. Set their role and access isolation mode below.
                             </p>
@@ -426,7 +426,7 @@ export default function TeamSettingsPage() {
                                     value={inviteEmail}
                                     onChange={e => setInviteEmail(e.target.value)}
                                     placeholder="colleague@company.com"
-                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                                    className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                                     autoFocus
                                 />
                             </div>
@@ -443,10 +443,10 @@ export default function TeamSettingsPage() {
                                                 onClick={() => setInviteRole(role)}
                                                 className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${inviteRole === role
                                                     ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]'
-                                                    : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800'
+                                                    : 'bg-[var(--bg-input)] border-[var(--border)] text-[var(--text-muted)] hover:border-indigo-500/40 hover:bg-[var(--bg-hover)]'
                                                     }`}
                                             >
-                                                <Shield className={`w-4 h-4 shrink-0 ${inviteRole === role ? 'text-indigo-400' : 'text-zinc-500'}`} />
+                                                <Shield className={`w-4 h-4 shrink-0 ${inviteRole === role ? 'text-indigo-400' : 'text-[var(--text-muted)]'}`} />
                                                 <div>
                                                     <div className="text-sm font-semibold capitalize bg-transparent">{role}</div>
                                                     <div className="text-[10px] leading-tight mt-0.5 opacity-80 bg-transparent">
@@ -467,10 +467,10 @@ export default function TeamSettingsPage() {
                                             onClick={() => setInviteIsolation('team')}
                                             className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${inviteIsolation === 'team'
                                                 ? 'bg-sky-500/10 border-sky-500 text-sky-300 shadow-[0_0_15px_rgba(14,165,233,0.15)]'
-                                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800'
+                                                : 'bg-[var(--bg-input)] border-[var(--border)] text-[var(--text-muted)] hover:border-sky-500/40 hover:bg-[var(--bg-hover)]'
                                                 }`}
                                         >
-                                            <Users className={`w-4 h-4 shrink-0 ${inviteIsolation === 'team' ? 'text-sky-400' : 'text-zinc-500'}`} />
+                                            <Users className={`w-4 h-4 shrink-0 ${inviteIsolation === 'team' ? 'text-sky-400' : 'text-[var(--text-muted)]'}`} />
                                             <div>
                                                 <div className="text-sm font-semibold bg-transparent">Team Mode</div>
                                                 <div className="text-[10px] leading-tight mt-0.5 opacity-80 bg-transparent">Shares workspace data</div>
@@ -482,10 +482,10 @@ export default function TeamSettingsPage() {
                                             onClick={() => setInviteIsolation('agency')}
                                             className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${inviteIsolation === 'agency'
                                                 ? 'bg-amber-500/10 border-amber-500 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                                                : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800'
+                                                : 'bg-[var(--bg-input)] border-[var(--border)] text-[var(--text-muted)] hover:border-amber-500/40 hover:bg-[var(--bg-hover)]'
                                                 }`}
                                         >
-                                            <Building2 className={`w-4 h-4 shrink-0 ${inviteIsolation === 'agency' ? 'text-amber-400' : 'text-zinc-500'}`} />
+                                            <Building2 className={`w-4 h-4 shrink-0 ${inviteIsolation === 'agency' ? 'text-amber-400' : 'text-[var(--text-muted)]'}`} />
                                             <div>
                                                 <div className="text-sm font-semibold bg-transparent">Agency Mode</div>
                                                 <div className="text-[10px] leading-tight mt-0.5 opacity-80 bg-transparent">Sees only own data</div>
