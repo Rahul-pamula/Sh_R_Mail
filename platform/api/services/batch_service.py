@@ -70,3 +70,25 @@ class BatchService:
 
         logger.info(f"[BATCH_DELETED] tenant={tenant_id} batch={batch_id} contacts_removed={deleted_count}")
         return deleted_count
+
+    @staticmethod
+    def recalc_batch_counts(tenant_id: str, batch_id: str) -> None:
+        """
+        Recalculate imported_count for a batch from current contacts.
+        Keeps failed_count/errors untouched (they reflect original import issues).
+        """
+        try:
+            count_res = db.client.table("contacts")\
+                .select("id", count="exact")\
+                .eq("tenant_id", tenant_id)\
+                .eq("import_batch_id", batch_id)\
+                .execute()
+            imported_count = count_res.count or 0
+            db.client.table("import_batches")\
+                .update({"imported_count": imported_count})\
+                .eq("tenant_id", tenant_id)\
+                .eq("id", batch_id)\
+                .execute()
+            logger.info(f\"[BATCH_RECALC] tenant={tenant_id} batch={batch_id} imported_count={imported_count}\")
+        except Exception as e:
+            logger.warning(f\"[BATCH_RECALC_FAIL] tenant={tenant_id} batch={batch_id} error={e}\")

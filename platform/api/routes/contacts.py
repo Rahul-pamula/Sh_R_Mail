@@ -278,7 +278,21 @@ async def bulk_delete_contacts(
     if len(body.contact_ids) > 1000:
         raise HTTPException(status_code=400, detail="Maximum 1000 contacts per bulk delete")
 
+    # Capture batch ids for recalculation
+    batch_ids = db.client.table("contacts")\
+        .select("import_batch_id")\
+        .eq("tenant_id", tenant_id)\
+        .in_("id", body.contact_ids)\
+        .execute()
+    batch_ids = {row.get("import_batch_id") for row in (batch_ids.data or []) if row.get("import_batch_id")}
+
     deleted_count = ContactService.delete_bulk(tenant_id, body.contact_ids)
+
+    # Recalc affected batches
+    from services.batch_service import BatchService
+    for b_id in batch_ids:
+        BatchService.recalc_batch_counts(tenant_id, b_id)
+
     return {"deleted_count": deleted_count}
 
 
@@ -503,6 +517,14 @@ async def export_contacts(tenant_id: str = Depends(require_active_tenant), _ = D
 async def delete_contact(contact_id: str, tenant_id: str = Depends(require_active_tenant), _ = Depends(require_admin_or_owner)):
     """Delete a single contact"""
     try:
+        # Fetch batch id before delete for recalculation
+        existing = db.client.table("contacts")\
+            .select("import_batch_id")\
+            .eq("id", contact_id)\
+            .eq("tenant_id", tenant_id)\
+            .single()\
+            .execute()
+
         result = db.client.table("contacts")\
             .delete()\
             .eq("id", contact_id)\
@@ -511,6 +533,12 @@ async def delete_contact(contact_id: str, tenant_id: str = Depends(require_activ
 
         if len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Contact not found")
+
+        # Recalc batch counts if this contact was part of a batch
+        batch_id = existing.data.get("import_batch_id") if existing.data else None
+        if batch_id:
+            from services.batch_service import BatchService
+            BatchService.recalc_batch_counts(tenant_id, batch_id)
 
         return {"status": "success", "message": "Contact deleted"}
     except HTTPException:
