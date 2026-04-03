@@ -354,15 +354,21 @@ export default function ContactsPage() {
                             const jr = await fetch(`${API_BASE}/contacts/jobs/${data.job_id}`, { headers: apiHeaders(token!) });
                             if (jr.ok) {
                                 const job = await jr.json();
+                                let skippedDup = 0;
+                                try {
+                                    const meta = job.meta ? JSON.parse(job.meta) : {};
+                                    skippedDup = meta.skipped_duplicates || 0;
+                                } catch { /* ignore meta parse errors */ }
                                 setJobProgress({ id: job.id, progress: job.progress, status: job.status, processed_items: job.processed_items || 0, total_items: job.total_items || acceptedRows, failed_items: job.failed_items || 0 });
                                 if (job.status === 'completed' || job.status === 'failed') {
                                     if (pollRef.current) clearInterval(pollRef.current);
                                     setImportResult({
-                                        total: acceptedRows,
+                                        total: job.total_items || acceptedRows,
                                         success: (job.processed_items || 0) - (job.failed_items || 0),
                                         failed: job.failed_items || 0,
                                         batch_id: data.batch_id,
-                                        skipped_blank: skippedBlank
+                                        skipped_blank: skippedBlank,
+                                        skipped_duplicates: skippedDup
                                     });
                                     setUploadStep(4);
                                     fetchStats();
@@ -374,7 +380,7 @@ export default function ContactsPage() {
                     }, 2000);
                 } else {
                     // Fallback: legacy synchronous response
-                    setImportResult({ ...data, total: acceptedRows, skipped_blank: skippedBlank });
+                    setImportResult({ ...data, total: acceptedRows, skipped_blank: skippedBlank, skipped_duplicates: data.skipped_duplicates || 0 });
                     setUploadStep(4);
                     fetchStats();
                     fetchContacts();
@@ -1281,6 +1287,7 @@ export default function ContactsPage() {
                                     <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.success, fontWeight: 500 }}>✓ Imported: {importResult.success}</p>
                                     {importResult.new !== undefined && <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>New: {importResult.new} | Updated: {importResult.updated}</p>}
                                     {importResult.skipped_blank > 0 && <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>Skipped blank rows: {importResult.skipped_blank}</p>}
+                                    {importResult.skipped_duplicates > 0 && <p style={{ margin: "0 0 4px", fontSize: "13px", color: colors.textSecondary }}>Skipped duplicates: {importResult.skipped_duplicates}</p>}
                                     {importResult.failed > 0 && <p style={{ margin: 0, fontSize: "13px", color: colors.danger }}>✗ Failed: {importResult.failed}</p>}
                                 </div>
 

@@ -2,6 +2,15 @@
   EMAIL ENGINE — STARTUP + TESTING GUIDE (MONOLITH)
 ==============================================================
 
+NOTE: The Python virtual environment lives at:
+  /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv
+
+  If it doesn't exist yet, create it once:
+    cd /Users/pamula/Desktop/Sh_R_Mail/platform/api
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+
 --------------------------------------------------------------
 STEP 0: START ALL SERVICES
 --------------------------------------------------------------
@@ -12,22 +21,25 @@ Tracking API → Supabase Edge Functions (always on, no tunnel needed)
 
 Terminal 1 (API Server)
   cd /Users/pamula/Desktop/Sh_R_Mail/platform/api
-  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
   uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Terminal 2 (Email Sender Worker)
   cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
-  python email_sender.py
+  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
+  # Tune throughput locally:
+  #   WORKER_PREFETCH_COUNT=10 → pull 10 messages at a time (faster)
+  #   WORKER_MAX_RETRIES=3     → retry each message up to 3 times
+  WORKER_PREFETCH_COUNT=10 WORKER_MAX_RETRIES=3 python email_sender.py
 
 Terminal 3 (Background Worker)
   cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
   python background_worker.py
 
 Terminal 4 (Scheduler)
   cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
   python scheduler.py
 
 Terminal 5 (Frontend)
@@ -36,7 +48,7 @@ Terminal 5 (Frontend)
 
 Terminal 6 (Centralized System Email Worker)
   cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/.venv/bin/activate
+  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
   python centralized_email_worker.py
 
 Open browser → http://localhost:3000
@@ -44,8 +56,8 @@ Open browser → http://localhost:3000
 --------------------------------------------------------------
 QUICK REFERENCE
 --------------------------------------------------------------
-Email worker logs       → Terminal 3 (email_sender.py)
-Background worker logs  → Terminal 4 (background_worker.py)
+Email worker logs       → Terminal 2 (email_sender.py)
+Background worker logs  → Terminal 3 (background_worker.py)
 Notification emails     → Your inbox
 Rate limit responses    → curl output (look for 429)
 DB state changes        → Supabase SQL Editor

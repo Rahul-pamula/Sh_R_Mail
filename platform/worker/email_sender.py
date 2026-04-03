@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
+PREFETCH_COUNT = int(os.getenv("WORKER_PREFETCH_COUNT", "10"))
+MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -359,18 +361,34 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage, holding
             await message.ack()
 
         except Exception as e:
-            logger.error(f"Worker Error processing message: {e}")
-            # Mark dispatch row as FAILED and auto-mark contact as bounced
+            attempts = int(message.headers.get("attempts", 0) if message.headers else 0)
+            logger.error(f"Worker Error processing message (attempt {attempts + 1}/{MAX_RETRIES}): {e}")
+
+            # Retry with capped attempts
+            if attempts + 1 < MAX_RETRIES:
+                try:
+                    new_msg = aio_pika.Message(
+                        body=message.body,
+                        headers={"attempts": attempts + 1},
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    )
+                    await message.channel.default_exchange.publish(new_msg, routing_key=QUEUE_NAME)
+                    await message.ack()
+                    return
+                except Exception as requeue_err:
+                    logger.error(f"Retry publish failed: {requeue_err}")
+
+            # Final failure path
             try:
-                dispatch_id = json.loads(message.body.decode()).get("dispatch_id")
-                recipient_id = json.loads(message.body.decode()).get("recipient_id")
+                decoded = json.loads(message.body.decode())
+                dispatch_id = decoded.get("dispatch_id")
+                recipient_id = decoded.get("recipient_id")
                 if dispatch_id:
                     db.table("campaign_dispatch")\
                         .update({"status": "FAILED", "error_log": str(e), "updated_at": "now()"})\
                         .eq("id", dispatch_id)\
                         .execute()
                 if recipient_id:
-                    # Hard bounce: auto-mark contact as bounced
                     db.table("contacts")\
                         .update({"status": "bounced"})\
                         .eq("id", recipient_id)\
@@ -378,7 +396,6 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage, holding
                     logger.warning(f"[{dispatch_id}] Contact {recipient_id} marked as bounced")
             except Exception as inner_e:
                 logger.error(f"Failed to mark failure in DB: {inner_e}")
-            # Negative Acknowledge — don't requeue (already marked FAILED)
             if not message.processed:
                 await message.nack(requeue=False)
 
@@ -388,8 +405,8 @@ async def main():
     
     async with connection:
         channel = await connection.channel()
-        # High granularity: fetch 1 message at a time to react instantly to Pauses/Cancels
-        await channel.set_qos(prefetch_count=1)
+        # Prefetch is configurable so we can balance throughput vs. pause/cancel latency
+        await channel.set_qos(prefetch_count=PREFETCH_COUNT)
         
         main_queue, holding_exchange = await setup_queues(channel)
         logger.info(f"Consuming from {QUEUE_NAME}. Waiting for messages...")

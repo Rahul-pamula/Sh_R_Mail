@@ -28,13 +28,29 @@ ssl_context.verify_mode = ssl.CERT_NONE
 
 async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contacts: list):
     """Processes a CSV import batch and streams progress to DB."""
-    total = len(contacts)
-    logger.info(f"[{job_id}] Started CSV import with {total} contacts.")
+    # Deduplicate across the entire file (not just per chunk)
+    seen = set()
+    unique_contacts = []
+    for c in contacts:
+        email = (c.get("email") or "").strip().lower()
+        if not email:
+            continue
+        if email in seen:
+            continue
+        seen.add(email)
+        unique_contacts.append(c)
+    deduped_count = len(unique_contacts)
+    skipped_duplicates = len(contacts) - deduped_count
+
+    total = deduped_count
+    logger.info(f"[{job_id}] Started CSV import with {total} unique contacts (skipped {skipped_duplicates} duplicates).")
     
     # Update Job status to processing
     db.client.table("jobs").update({
         "status": "processing",
         "progress": 0,
+        "total_items": total,
+        "meta": json.dumps({"skipped_duplicates": skipped_duplicates}),
         "updated_at": "now()"
     }).eq("id", job_id).execute()
 
@@ -45,7 +61,7 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
     errors = []
 
     for i in range(0, total, chunk_size):
-        chunk = contacts[i:i+chunk_size]
+        chunk = unique_contacts[i:i+chunk_size]
         
         # We mimic `ContactService.bulk_upsert` logic directly here to count successes safely
         # since bulk_upsert does all-at-once. For a really large file, streaming is better.
@@ -79,6 +95,7 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
         "processed_items": total,
         "failed_items": failed,
         "error_log": json.dumps(errors[:50]),  # Store top 50 errors only
+        "meta": json.dumps({"skipped_duplicates": skipped_duplicates}),
         "updated_at": "now()"
     }).eq("id", job_id).execute()
 
