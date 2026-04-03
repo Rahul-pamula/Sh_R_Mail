@@ -54,6 +54,11 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
         "updated_at": "now()"
     }).eq("id", job_id).execute()
 
+    # Aggregate counts
+    total_new = 0
+    total_updated = 0
+    total_skipped_dup = skipped_duplicates  # initial dedupe
+
     # Process in chunks of 50 to update UI progress quickly
     chunk_size = 50
     success = 0
@@ -69,6 +74,9 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
             res = ContactService.bulk_upsert(tenant_id, chunk, import_batch_id=batch_id)
             success += res.get("success", 0)
             failed += res.get("failed", 0)
+            total_new += res.get("new", 0) or 0
+            total_updated += res.get("updated", 0) or 0
+            total_skipped_dup += res.get("skipped_duplicates", 0) or 0
             errors.extend(res.get("errors", []))
         except Exception as e:
             failed += len(chunk)
@@ -89,13 +97,20 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
 
     # Wrap up Job
     batch_status = "completed" if success > 0 or failed == 0 else "failed"
+    job_meta = {
+        "skipped_duplicates": total_skipped_dup,
+        "new": total_new,
+        "updated": total_updated,
+        "skipped_pre_dedup": skipped_duplicates,
+    }
+
     db.client.table("jobs").update({
         "status": batch_status,
         "progress": 100,
         "processed_items": total,
         "failed_items": failed,
         "error_log": json.dumps(errors[:50]),  # Store top 50 errors only
-        "meta": json.dumps({"skipped_duplicates": skipped_duplicates}),
+        "meta": json.dumps(job_meta),
         "updated_at": "now()"
     }).eq("id", job_id).execute()
 
@@ -104,7 +119,13 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
         "imported_count": success,
         "failed_count": failed,
         "errors": json.dumps(errors),
-        "status": batch_status
+        "status": batch_status,
+        "meta": json.dumps({
+            **job_meta,
+            "total_processed": success + failed,
+            "failed": failed,
+            "success": success,
+        })
     }).eq("id", batch_id).eq("tenant_id", tenant_id).execute()
 
     logger.info(f"[{job_id}] Finished CSV import: {success} ok, {failed} failed.")

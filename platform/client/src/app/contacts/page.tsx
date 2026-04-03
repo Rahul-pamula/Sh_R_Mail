@@ -355,9 +355,13 @@ export default function ContactsPage() {
                             if (jr.ok) {
                                 const job = await jr.json();
                                 let skippedDup = 0;
+                                let metaNew = undefined as number | undefined;
+                                let metaUpdated = undefined as number | undefined;
                                 try {
                                     const meta = job.meta ? JSON.parse(job.meta) : {};
                                     skippedDup = meta.skipped_duplicates || 0;
+                                    metaNew = meta.new;
+                                    metaUpdated = meta.updated;
                                 } catch { /* ignore meta parse errors */ }
                                 setJobProgress({ id: job.id, progress: job.progress, status: job.status, processed_items: job.processed_items || 0, total_items: job.total_items || acceptedRows, failed_items: job.failed_items || 0 });
                                 if (job.status === 'completed' || job.status === 'failed') {
@@ -368,7 +372,9 @@ export default function ContactsPage() {
                                         failed: job.failed_items || 0,
                                         batch_id: data.batch_id,
                                         skipped_blank: skippedBlank,
-                                        skipped_duplicates: skippedDup
+                                        skipped_duplicates: skippedDup,
+                                        new: metaNew,
+                                        updated: metaUpdated
                                     });
                                     setUploadStep(4);
                                     fetchStats();
