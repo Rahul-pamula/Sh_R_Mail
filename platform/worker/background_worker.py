@@ -120,13 +120,20 @@ async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contact
         "failed_count": failed,
         "errors": json.dumps(errors),
         "status": batch_status,
-        "meta": json.dumps({
-            **job_meta,
-            "total_processed": success + failed,
-            "failed": failed,
-            "success": success,
-        })
     }).eq("id", batch_id).eq("tenant_id", tenant_id).execute()
+
+    # Best-effort meta update (skip silently if column doesn't exist)
+    try:
+        db.client.table("import_batches").update({
+            "meta": json.dumps({
+                **job_meta,
+                "total_processed": success + failed,
+                "failed": failed,
+                "success": success,
+            })
+        }).eq("id", batch_id).eq("tenant_id", tenant_id).execute()
+    except Exception as e:
+        logger.warning(f"[BATCH_META_SKIP] meta column missing? tenant={tenant_id} batch={batch_id} err={e}")
 
     logger.info(f"[{job_id}] Finished CSV import: {success} ok, {failed} failed.")
 
