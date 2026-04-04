@@ -124,6 +124,24 @@ class ContactService:
             existing_count += (result.count or 0)
         
         return existing_count
+    
+    @staticmethod
+    def _get_existing_email_set(tenant_id: str, emails: List[str]) -> set:
+        """Return a set of emails that already exist for this tenant."""
+        existing = set()
+        if not emails:
+            return existing
+        for i in range(0, len(emails), 100):
+            batch = emails[i:i+100]
+            result = db.client.table("contacts")\
+                .select("email")\
+                .eq("tenant_id", tenant_id)\
+                .in_("email", batch)\
+                .execute()
+            for row in result.data or []:
+                if row.get("email"):
+                    existing.add(row["email"])
+        return existing
 
     @staticmethod
     def get_contacts(
@@ -247,13 +265,15 @@ class ContactService:
         seen = set()
         unique_contacts = []
         for contact in valid_contacts:
-            if contact["email"] not in seen:
-                seen.add(contact["email"])
+            email_lower = contact["email"]
+            if email_lower not in seen:
+                seen.add(email_lower)
                 unique_contacts.append(contact)
         
         # Count how many already exist in DB → only NEW ones count against limit
         all_emails = [str(c["email"]) for c in unique_contacts if c.get("email")]
-        existing_count = ContactService._count_existing_emails(tenant_id, all_emails)
+        existing_emails = ContactService._get_existing_email_set(tenant_id, all_emails)
+        existing_count = len(existing_emails)
         new_count = len(unique_contacts) - existing_count
         
         # Enforce plan limits on genuinely NEW contacts only
@@ -271,14 +291,30 @@ class ContactService:
         
         # Upsert in batches of BATCH_SIZE
         total_inserted = 0
+        total_updated = existing_count
         if unique_contacts:
             for i in range(0, len(unique_contacts), BATCH_SIZE):
-                batch = unique_contacts[i:i + BATCH_SIZE]  # type: ignore
+                batch_slice = unique_contacts[i:i + BATCH_SIZE]  # type: ignore
+                # Split into new vs existing so we don't overwrite import_batch_id for existing contacts
+                new_rows = []
+                existing_rows = []
+                for row in batch_slice:
+                    if row["email"] in existing_emails:
+                        r = row.copy()
+                        r.pop("import_batch_id", None)  # keep original batch association
+                        existing_rows.append(r)
+                    else:
+                        new_rows.append(row)
                 try:
-                    result = db.client.table("contacts")\
-                        .upsert(batch, on_conflict="tenant_id,email")\
-                        .execute()
-                    total_inserted += len(result.data) if result.data else 0
+                    if new_rows:
+                        result = db.client.table("contacts")\
+                            .upsert(new_rows, on_conflict="tenant_id,email")\
+                            .execute()
+                        total_inserted += len(result.data) if result.data else 0
+                    if existing_rows:
+                        db.client.table("contacts")\
+                            .upsert(existing_rows, on_conflict="tenant_id,email")\
+                            .execute()
                 except Exception as e:
                     logger.error(f"[IMPORT_ERROR] tenant={tenant_id} batch_chunk={i//BATCH_SIZE + 1} error={str(e)}")
                     return {
@@ -291,7 +327,7 @@ class ContactService:
 
         return {
             "total": len(contacts),
-            "success": total_inserted,
+            "success": total_inserted + existing_count,
             "new": new_count,
             "updated": existing_count,
             "skipped_duplicates": len(valid_contacts) - len(unique_contacts),
