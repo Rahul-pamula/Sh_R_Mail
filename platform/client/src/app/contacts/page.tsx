@@ -489,7 +489,6 @@ export default function ContactsPage() {
         fontSize: "14px",
         fontWeight: 500 as const,
         color: active ? colors.accent : colors.textSecondary,
-        borderBottom: active ? `2px solid ${colors.accent}` : "2px solid transparent",
         background: "none",
         border: "none",
         borderBottomWidth: "2px",
