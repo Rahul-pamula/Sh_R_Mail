@@ -60,6 +60,7 @@ interface Batch {
     failed_count: number;
     errors: any[];
     created_at: string;
+    meta?: any;
 }
 
 // ===== ErrorRow Component =====
@@ -959,7 +960,9 @@ export default function ContactsPage() {
                         <thead>
                             <tr style={{ backgroundColor: colors.bgMuted, borderBottom: `1px solid ${colors.border}` }}>
                                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>File Name</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Imported</th>
+                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>New</th>
+                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Existing</th>
+                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Skipped (dup)</th>
                                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Failed</th>
                                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Total Rows</th>
                                 <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Import Date</th>
@@ -976,58 +979,67 @@ export default function ContactsPage() {
                                         <p>No imports yet</p>
                                     </td>
                                 </tr>
-                            ) : batches.map((b) => (
-                                <React.Fragment key={b.id}>
-                                    <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                                        <td style={{ padding: "10px 16px", color: colors.text, fontWeight: 500 }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <FileText style={{ width: "14px", height: "14px", color: colors.textSecondary }} />
-                                                <Link
-                                                    href={`/contacts/batch/${b.id}`}
-                                                    style={{ color: colors.accent, textDecoration: "none", fontWeight: 500 }}
-                                                    onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-                                                    onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
-                                                >
-                                                    {b.file_name}
-                                                </Link>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: "10px 16px", color: colors.success, fontWeight: 500 }}>{b.imported_count}</td>
-                                        <td style={{ padding: "10px 16px" }}>
-                                            {(b.failed_count || 0) > 0 ? (
-                                                <button
-                                                    onClick={() => setExpandedBatch(expandedBatch === b.id ? null : b.id)}
-                                                    style={{
-                                                        background: colors.dangerBg,
-                                                        border: `1px solid ${colors.dangerBorder}`,
-                                                        borderRadius: "12px",
-                                                        padding: "2px 10px",
-                                                        fontSize: "13px",
-                                                        color: colors.danger,
-                                                        fontWeight: 600,
-                                                        cursor: "pointer",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: "4px"
-                                                    }}
-                                                >
-                                                    {b.failed_count} failed
-                                                    <span style={{ fontSize: "10px" }}>{expandedBatch === b.id ? "▲" : "▼"}</span>
+                            ) : batches.map((b) => {
+                                const meta = b.meta ? (typeof b.meta === "string" ? JSON.parse(b.meta) : b.meta) : {};
+                                const newCount = meta.new ?? b.imported_count ?? 0;
+                                const updatedCount = meta.updated ?? 0;
+                                const skippedDup = meta.skipped_duplicates ?? 0;
+                                const failedCount = b.failed_count || 0;
+                                const totalRows = b.total_rows ?? (meta.total_processed || (newCount + updatedCount + failedCount + skippedDup));
+                                return (
+                                    <React.Fragment key={b.id}>
+                                        <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                                            <td style={{ padding: "10px 16px", color: colors.text, fontWeight: 500 }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                    <FileText style={{ width: "14px", height: "14px", color: colors.textSecondary }} />
+                                                    <Link
+                                                        href={`/contacts/batch/${b.id}`}
+                                                        style={{ color: colors.accent, textDecoration: "none", fontWeight: 500 }}
+                                                        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                                                        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+                                                    >
+                                                        {b.file_name}
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: "10px 16px", color: colors.success, fontWeight: 600 }}>{newCount}</td>
+                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{updatedCount}</td>
+                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{skippedDup}</td>
+                                            <td style={{ padding: "10px 16px" }}>
+                                                {failedCount > 0 ? (
+                                                    <button
+                                                        onClick={() => setExpandedBatch(expandedBatch === b.id ? null : b.id)}
+                                                        style={{
+                                                            background: colors.dangerBg,
+                                                            border: `1px solid ${colors.dangerBorder}`,
+                                                            borderRadius: "12px",
+                                                            padding: "2px 10px",
+                                                            fontSize: "13px",
+                                                            color: colors.danger,
+                                                            fontWeight: 600,
+                                                            cursor: "pointer",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: "4px"
+                                                        }}
+                                                    >
+                                                        {failedCount} failed
+                                                        <span style={{ fontSize: "10px" }}>{expandedBatch === b.id ? "▲" : "▼"}</span>
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ color: colors.textSecondary }}>0</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{totalRows}</td>
+                                            <td style={{ padding: "10px 16px", color: colors.textSecondary, fontSize: "13px" }}>
+                                                {new Date(b.created_at).toLocaleDateString()} {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            </td>
+                                            <td style={{ padding: "10px 16px" }}>
+                                                <button onClick={() => setShowBatchDelete(b)} style={{ ...btnOutline, fontSize: "13px", padding: "6px 12px", color: colors.danger, borderColor: colors.dangerBorder }}>
+                                                    <Trash2 style={{ width: "13px", height: "13px" }} /> Delete Batch
                                                 </button>
-                                            ) : (
-                                                <span style={{ color: colors.textSecondary }}>0</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{b.total_rows}</td>
-                                        <td style={{ padding: "10px 16px", color: colors.textSecondary, fontSize: "13px" }}>
-                                            {new Date(b.created_at).toLocaleDateString()} {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                        </td>
-                                        <td style={{ padding: "10px 16px" }}>
-                                            <button onClick={() => setShowBatchDelete(b)} style={{ ...btnOutline, fontSize: "13px", padding: "6px 12px", color: colors.danger, borderColor: colors.dangerBorder }}>
-                                                <Trash2 style={{ width: "13px", height: "13px" }} /> Delete Batch
-                                            </button>
-                                        </td>
-                                    </tr>
+                                            </td>
+                                        </tr>
                                     {/* Expanded error details */}
                                     {expandedBatch === b.id && b.errors && (Array.isArray(b.errors) ? b.errors : JSON.parse(b.errors as any)).length > 0 && (
                                         <tr>
@@ -1082,8 +1094,9 @@ export default function ContactsPage() {
                                             </td>
                                         </tr>
                                     )}
-                                </React.Fragment>
-                            ))}
+                                    </React.Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

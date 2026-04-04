@@ -39,7 +39,7 @@ class BatchService:
         List all import batches for a tenant, newest first.
         """
         result = db.client.table("import_batches")\
-            .select("id, file_name, total_rows, imported_count, failed_count, errors, status, created_at")\
+            .select("id, file_name, total_rows, imported_count, failed_count, errors, status, created_at, meta")\
             .eq("tenant_id", tenant_id)\
             .order("created_at", desc=True)\
             .execute()
@@ -89,6 +89,6 @@ class BatchService:
                 .eq("tenant_id", tenant_id)\
                 .eq("id", batch_id)\
                 .execute()
-            logger.info(f\"[BATCH_RECALC] tenant={tenant_id} batch={batch_id} imported_count={imported_count}\")
+            logger.info(f"[BATCH_RECALC] tenant={tenant_id} batch={batch_id} imported_count={imported_count}")
         except Exception as e:
-            logger.warning(f\"[BATCH_RECALC_FAIL] tenant={tenant_id} batch={batch_id} error={e}\")
+            logger.warning(f"[BATCH_RECALC_FAIL] tenant={tenant_id} batch={batch_id} error={e}")
