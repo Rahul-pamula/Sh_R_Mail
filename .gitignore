@@ -66,3 +66,5 @@ init
 # Build artifacts
 *.tsbuildinfo
 
+*.exe
+cloudflared*
