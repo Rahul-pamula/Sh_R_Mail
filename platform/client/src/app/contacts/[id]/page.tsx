@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, User, Mail, Calendar, Tag, Plus, X, ListCollapse, UserCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -42,8 +42,10 @@ interface ContactData {
     created_at: string;
 }
 
-export default function ContactDetailsPage({ params }: { params: { id: string } }) {
+export default function ContactDetailsPage() {
     const router = useRouter();
+    const params = useParams<{ id?: string }>();
+    const contactId = params?.id || "";
     const { token } = useAuth();
 
     const [contact, setContact] = useState<ContactData | null>(null);
@@ -64,7 +66,8 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
         async function fetchContact() {
             setLoading(true);
             try {
-                const res = await fetch(`${API_BASE}/contacts/${params.id}`, {
+                if (!contactId) return;
+                const res = await fetch(`${API_BASE}/contacts/${contactId}`, {
                     headers: apiHeaders(token!)
                 });
                 if (res.ok) {
@@ -84,7 +87,7 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
         }
 
         fetchContact();
-    }, [params.id, token]);
+    }, [contactId, token]);
 
     const handleAddTag = async () => {
         const newTag = tagInput.trim();
@@ -110,10 +113,11 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
     const saveTags = async (newTags: string[]) => {
         setUpdatingTags(true);
         try {
-            const res = await fetch(`${API_BASE}/contacts/${params.id}/tags`, {
-                method: "POST",
-                headers: {
-                    ...apiHeaders(token!),
+        if (!contactId) return;
+        const res = await fetch(`${API_BASE}/contacts/${contactId}/tags`, {
+            method: "POST",
+            headers: {
+                ...apiHeaders(token!),
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({ tags: newTags })
@@ -138,9 +142,10 @@ export default function ContactDetailsPage({ params }: { params: { id: string } 
             const sanitizedCustomFields = Object.fromEntries(
                 Object.entries(draftCustomFields).filter(([key, value]) => key.trim() && value.trim())
             );
-            const res = await fetch(`${API_BASE}/contacts/${params.id}`, {
-                method: "PATCH",
-                headers: {
+        if (!contactId) return;
+        const res = await fetch(`${API_BASE}/contacts/${contactId}`, {
+            method: "PATCH",
+            headers: {
                     ...apiHeaders(token),
                     "Content-Type": "application/json"
                 },
