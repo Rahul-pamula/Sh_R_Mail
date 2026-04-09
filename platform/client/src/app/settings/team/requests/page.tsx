@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { UserPlus, CheckCircle2, XCircle, ShieldAlert, Slash } from 'lucide-react';
 
@@ -22,19 +22,24 @@ export default function RequestsPage() {
     const [requests, setRequests] = useState<JoinRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const requestsAbortRef = useRef<AbortController | null>(null);
 
     const fetchRequests = async () => {
         if (!token) return;
         setLoading(true);
         try {
+            if (requestsAbortRef.current) requestsAbortRef.current.abort();
+            const controller = new AbortController();
+            requestsAbortRef.current = controller;
             const res = await fetch(`${API_BASE}/team/requests`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                signal: controller.signal
             });
             if (res.ok) {
                 setRequests(await res.json());
             }
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            if (e.name !== 'AbortError') console.error(e);
         } finally {
             setLoading(false);
         }
@@ -42,6 +47,7 @@ export default function RequestsPage() {
 
     useEffect(() => {
         fetchRequests();
+        return () => requestsAbortRef.current?.abort();
     }, [token]);
 
     const handleAction = async (requestId: string, action: 'approve' | 'deny' | 'blacklist') => {

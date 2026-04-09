@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Users, Mail, UserPlus, X, Trash2, CheckCircle2, AlertTriangle, Shield, Clock, Building2, Save, Loader2, Check } from 'lucide-react';
 
@@ -36,6 +36,8 @@ export default function TeamSettingsPage() {
     const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
     const [inviteIsolation, setInviteIsolation] = useState<'team' | 'agency'>('team');
     const [inviteStatus, setInviteStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+    const membersAbortRef = useRef<AbortController | null>(null);
+    const invitesAbortRef = useRef<AbortController | null>(null);
 
     // Currently logged-in user's role
     const myRole = members.find(m => m.user_id === user?.userId)?.role || 'member';
@@ -44,15 +46,22 @@ export default function TeamSettingsPage() {
         if (!token) return;
         setLoading(true);
         try {
+            if (membersAbortRef.current) membersAbortRef.current.abort();
+            if (invitesAbortRef.current) invitesAbortRef.current.abort();
+            const memCtrl = new AbortController();
+            const invCtrl = new AbortController();
+            membersAbortRef.current = memCtrl;
+            invitesAbortRef.current = invCtrl;
+
             const [memRes, invRes] = await Promise.all([
-                fetch(`${API_BASE}/team/members`, { headers: { Authorization: `Bearer ${token}` } }),
-                fetch(`${API_BASE}/team/invites`, { headers: { Authorization: `Bearer ${token}` } })
+                fetch(`${API_BASE}/team/members`, { headers: { Authorization: `Bearer ${token}` }, signal: memCtrl.signal }),
+                fetch(`${API_BASE}/team/invites`, { headers: { Authorization: `Bearer ${token}` }, signal: invCtrl.signal })
             ]);
 
             if (memRes.ok) setMembers(await memRes.json());
             if (invRes.ok) setInvites(await invRes.json());
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            if (e.name !== 'AbortError') console.error(e);
         } finally {
             setLoading(false);
         }
@@ -60,6 +69,10 @@ export default function TeamSettingsPage() {
 
     useEffect(() => {
         fetchTeam();
+        return () => {
+            membersAbortRef.current?.abort();
+            invitesAbortRef.current?.abort();
+        };
     }, [token]);
 
     const handleSendInvite = async (e: React.FormEvent) => {
