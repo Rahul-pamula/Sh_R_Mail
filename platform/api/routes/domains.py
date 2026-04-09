@@ -39,7 +39,11 @@ def get_ses_client():
 @router.get("/")
 async def list_domains(tenant_id: str = Depends(require_active_tenant)):
     """List all domains for the active tenant"""
-    res = db.client.table("domains").select("*").eq("tenant_id", tenant_id).order("created_at", desc=True).execute()
+    res = db.client.table("domains")\
+        .select("id, domain_name, status, created_at")\
+        .eq("tenant_id", tenant_id)\
+        .order("created_at", desc=True)\
+        .execute()
     return {"data": res.data}
 
 @router.post("/")
