@@ -79,14 +79,21 @@ DATABASE_URL=postgresql://postgres.xxx:xxx@aws...
 RABBITMQ_URL=amqps://user:pass@host.cloudamqp.com/vhost
 
 # ── 3. Tenant Email Dispatch (AWS SES) ──────────────────────
+# From email is resolved dynamically from each tenant's verified sender at runtime.
 SMTP_HOST=email-smtp.ap-southeast-2.amazonaws.com
 SMTP_PORT=587
 SMTP_USERNAME=your_ses_username
 SMTP_PASSWORD=your_ses_password
-SMTP_FROM_EMAIL=shrmail.app@gmail.com
-SMTP_FROM_NAME=Email Engine
 
-# ── 4. Centralized System Mailer (Gmail) ────────────────────
+# ── 4. Centralized System Mailer (Gmail SMTP) ────────────────
+# NOTE: We currently use Gmail SMTP for all system/transactional emails
+# (welcome emails, OTPs, password resets, team invites) because we do not
+# yet own a dedicated domain for Sh_R_Mail. Gmail SMTP provides reliable
+# inbox delivery in the interim.
+#
+# FUTURE MIGRATION: Once we acquire our own domain (e.g. shrmail.app),
+# this will be replaced with a dedicated transactional mail provider
+# (e.g. AWS SES via mail.shrmail.app) for full production-grade delivery.
 SYSTEM_SMTP_HOST=smtp.gmail.com
 SYSTEM_SMTP_PORT=587
 SYSTEM_SMTP_USERNAME=shrmail.app@gmail.com
@@ -94,10 +101,9 @@ SYSTEM_SMTP_PASSWORD=your_google_app_password
 SYSTEM_SMTP_FROM_EMAIL=shrmail.app@gmail.com
 SYSTEM_SMTP_FROM_NAME=Email Engine
 
-# ── 5. Authentication (Clerk & Next-Auth / Custom JWT) ──────
-CLERK_PUBLISHABLE_KEY=pk_test_xxxxxx
-CLERK_SECRET_KEY=sk_test_xxxxxxx
+# ── 5. Authentication (Custom JWT) ──────────────────────────
 JWT_SECRET_KEY=generate_a_long_hex_string_here
+# Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
 
 # ── 6. OAuth Providers ────────────────────────────────────────
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
