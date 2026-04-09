@@ -193,6 +193,9 @@ export default function ContactsPage() {
     // Phase 7.5: Job progress polling
     const [jobProgress, setJobProgress] = useState<{ id: string; progress: number; status: string; processed_items: number; total_items: number; failed_items: number } | null>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const contactsAbortRef = useRef<AbortController | null>(null);
+    const domainsAbortRef = useRef<AbortController | null>(null);
+    const batchesAbortRef = useRef<AbortController | null>(null);
 
     // Helper to get mapped column or empty
     const getMappedCol = (target: string) => {
@@ -212,47 +215,74 @@ export default function ContactsPage() {
     const fetchContacts = async () => {
         if (!token) return;
         setLoading(true);
+        if (contactsAbortRef.current) {
+            contactsAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        contactsAbortRef.current = controller;
         try {
             const params = new URLSearchParams({ page: String(page), limit: "20" });
             if (deferredSearch) params.set("search", deferredSearch);
             if (batchFilter) params.set("batch_id", batchFilter);
             if (domainFilter) params.set("domain", domainFilter);
-            const res = await fetch(`${API_BASE}/contacts/?${params}`, { headers: apiHeaders(token) });
+            const res = await fetch(`${API_BASE}/contacts/?${params}`, { headers: apiHeaders(token), signal: controller.signal });
             if (res.ok) {
                 const data = await res.json();
                 setContacts(data.data || []);
                 setTotalPages(data.meta?.total_pages || 0);
                 setTotal(data.meta?.total || 0);
             }
-        } catch (e) { console.error("Contacts error:", e); }
+        } catch (e: any) {
+            if (e.name !== "AbortError") {
+                console.error("Contacts error:", e);
+            }
+        }
         setLoading(false);
     };
 
     const fetchDomains = async () => {
         if (!token) return;
         setDomainsLoading(true);
+        if (domainsAbortRef.current) {
+            domainsAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        domainsAbortRef.current = controller;
         try {
             const params = new URLSearchParams({ limit: "10" });
             if (batchFilter) params.set("batch_id", batchFilter);
-            const res = await fetch(`${API_BASE}/contacts/domains?${params}`, { headers: apiHeaders(token) });
+            const res = await fetch(`${API_BASE}/contacts/domains?${params}`, { headers: apiHeaders(token), signal: controller.signal });
             if (res.ok) {
                 const data = await res.json();
                 setDomainStats(data.data || []);
             }
-        } catch (e) { console.error("Domains error:", e); }
+        } catch (e: any) {
+            if (e.name !== "AbortError") {
+                console.error("Domains error:", e);
+            }
+        }
         setDomainsLoading(false);
     };
 
     const fetchBatches = async () => {
         if (!token) return;
         setBatchesLoading(true);
+        if (batchesAbortRef.current) {
+            batchesAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        batchesAbortRef.current = controller;
         try {
-            const res = await fetch(`${API_BASE}/contacts/batches`, { headers: apiHeaders(token) });
+            const res = await fetch(`${API_BASE}/contacts/batches`, { headers: apiHeaders(token), signal: controller.signal });
             if (res.ok) {
                 const data = await res.json();
                 setBatches(data.data || []);
             }
-        } catch (e) { console.error("Batches error:", e); }
+        } catch (e: any) {
+            if (e.name !== "AbortError") {
+                console.error("Batches error:", e);
+            }
+        }
         setBatchesLoading(false);
     };
 
@@ -260,6 +290,14 @@ export default function ContactsPage() {
     useEffect(() => { fetchContacts(); }, [token, page, deferredSearch, batchFilter, domainFilter]);
     useEffect(() => { fetchDomains(); }, [token, batchFilter]);
     useEffect(() => { fetchBatches(); }, [token]);
+    useEffect(() => {
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+            contactsAbortRef.current?.abort();
+            domainsAbortRef.current?.abort();
+            batchesAbortRef.current?.abort();
+        };
+    }, []);
 
     // ===== Selection =====
     const toggleSelect = (id: string) => {

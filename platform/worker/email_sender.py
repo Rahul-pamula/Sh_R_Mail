@@ -367,6 +367,10 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage, holding
             # Retry with capped attempts
             if attempts + 1 < MAX_RETRIES:
                 try:
+                    # Small exponential backoff to avoid hammering SMTP/DB on transient errors
+                    delay = min(2 ** attempts, 30)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
                     new_msg = aio_pika.Message(
                         body=message.body,
                         headers={"attempts": attempts + 1},
