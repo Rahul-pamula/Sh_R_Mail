@@ -193,12 +193,3 @@ async def health_check():
         "db": db_status,
     }
 
-from utils.supabase_client import db
-
-@app.post("/fields")
-async def create_field(name: str, field_type: str, project_id: str = "default-project"):
-    return db.create_custom_field(project_id, name, field_type)
-
-@app.get("/fields")
-async def get_fields(project_id: str = "default-project"):
-    return db.get_custom_fields(project_id)

@@ -25,11 +25,12 @@ async def _get_channel() -> Any:
     global _rabbitmq_pool
     if _rabbitmq_pool is None or getattr(_rabbitmq_pool, "is_closed", True):
         import ssl
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
-        _rabbitmq_pool = await aio_pika.connect_robust(RABBITMQ_URL, ssl=ssl_context if "amqps" in RABBITMQ_URL else None)
+        _skip_tls = os.getenv("AMQP_SKIP_TLS_VERIFY", "false").lower() == "true"
+        ssl_ctx = ssl.create_default_context()
+        if _skip_tls:
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+        _rabbitmq_pool = await aio_pika.connect_robust(RABBITMQ_URL, ssl=ssl_ctx if "amqps" in RABBITMQ_URL else None)
     
     # Use getattr to bypass strict type checkers when aio_pika isn't resolved locally
     channel_coro = getattr(_rabbitmq_pool, "channel")

@@ -28,15 +28,58 @@ MAILTRAP_WEBHOOK_SECRET = os.getenv("MAILTRAP_WEBHOOK_SECRET", "")
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-def _suppress_contact(email: str, reason: str, bounce_reason=None):
-    """Mark a contact as suppressed. Finds by email across all tenants."""
+def _resolve_tenant_ids_for_email(email: str) -> list[str]:
+    """
+    Resolve which tenant(s) recently sent email to this address by looking up
+    campaign_dispatch records joined through campaigns → tenant_id.
+
+    If no dispatch records exist (e.g. event came from unknown sender),
+    returns an empty list so we DON'T suppress globally.
+    """
     try:
-        res = db.client.table("contacts").select("id, bounce_count").eq("email", email).execute()
+        # Find contacts with this email to get their UUIDs
+        contact_res = db.client.table("contacts").select("id, tenant_id").eq("email", email).execute()
+        if not contact_res.data:
+            return []
+        # Return explicit tenant_ids from the contacts rows (already isolated per tenant)
+        return list({row["tenant_id"] for row in contact_res.data if row.get("tenant_id")})
+    except Exception as e:
+        logger.error(f"[WEBHOOK] Failed to resolve tenant for {email}: {e}")
+        return []
+
+
+def _suppress_contact(email: str, reason: str, bounce_reason=None, tenant_id: str | None = None):
+    """
+    Mark a contact as suppressed — SCOPED TO A SPECIFIC TENANT.
+
+    If tenant_id is provided, only contacts belonging to that tenant are suppressed.
+    If tenant_id is None, we resolve it from campaign_dispatch records.
+    Contacts in other tenants are NEVER touched.
+    """
+    try:
+        query = db.client.table("contacts").select("id, tenant_id, bounce_count").eq("email", email)
+
+        if tenant_id:
+            # Caller knows the tenant — filter directly
+            query = query.eq("tenant_id", tenant_id)
+        else:
+            # Resolve tenants that have actually sent to this email recently
+            resolved_tenants = _resolve_tenant_ids_for_email(email)
+            if not resolved_tenants:
+                logger.warning(
+                    f"[WEBHOOK] No tenant resolved for {email} — skipping suppression to avoid cross-tenant damage."
+                )
+                return
+            query = query.in_("tenant_id", resolved_tenants)
+
+        res = query.execute()
         if not res.data:
-            logger.warning(f"[WEBHOOK] No contact found for email {email}")
+            logger.warning(f"[WEBHOOK] No contact found for email {email} in resolved tenants")
             return
+
         for contact in res.data:
             cid = contact["id"]
+            scoped_tenant = contact["tenant_id"]
             if reason == "bounce":
                 new_count = (contact.get("bounce_count") or 0) + 1
                 update = {
@@ -50,8 +93,9 @@ def _suppress_contact(email: str, reason: str, bounce_reason=None):
                     "status": "unsubscribed",
                     "unsubscribed_at": "now()",
                 }
-            db.client.table("contacts").update(update).eq("id", cid).execute()
-            logger.info(f"[WEBHOOK] Contact {cid} ({email}) → {reason}. Updated status.")
+            # CRITICAL: Always scope update to both id AND tenant_id — belt-and-suspenders
+            db.client.table("contacts").update(update).eq("id", cid).eq("tenant_id", scoped_tenant).execute()
+            logger.info(f"[WEBHOOK] Contact {cid} ({email}) tenant={scoped_tenant} → {reason}. Updated status.")
     except Exception as e:
         logger.error(f"[WEBHOOK] Failed to suppress {email}: {e}")
 

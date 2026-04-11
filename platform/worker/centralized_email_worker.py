@@ -48,9 +48,14 @@ SUBJECTS = {
     "sender_verification": "Verify your sender address — Email Engine"
 }
 
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# SSL context for RabbitMQ (amqps://) connections
+# Production: full cert verification (default). Dev: set AMQP_SKIP_TLS_VERIFY=true to bypass.
+_SKIP_TLS = os.getenv("AMQP_SKIP_TLS_VERIFY", "false").lower() == "true"
+ssl_context = ssl.create_default_context()
+if _SKIP_TLS:
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    logger.warning("⚠️  AMQP_SKIP_TLS_VERIFY=true — TLS cert verification DISABLED (dev-only mode)")
 
 async def setup_queues(channel: aio_pika.robust_channel.RobustChannel):
     """Declare main exchange, main queue, and DLX (Dead Letter Exchange)."""

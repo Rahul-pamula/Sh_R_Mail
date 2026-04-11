@@ -23,10 +23,16 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
 from services.notification_service import notify_campaign_completed, notify_bounce_alert
 
-# Fix: macOS Python 3.13 SSL — bypass cert verification for CloudAMQP
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# SSL context for RabbitMQ (amqps://) connections
+# Production: full cert verification (default). Dev: set AMQP_SKIP_TLS_VERIFY=true to bypass.
+_SKIP_TLS = os.getenv("AMQP_SKIP_TLS_VERIFY", "false").lower() == "true"
+ssl_context = ssl.create_default_context()
+if _SKIP_TLS:
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    import logging as _log; _log.getLogger("email_engine").warning(
+        "⚠️  AMQP_SKIP_TLS_VERIFY=true — TLS cert verification DISABLED (dev-only mode)"
+    )
 
 # Load environment variables from repo root
 ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"

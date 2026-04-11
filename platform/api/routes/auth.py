@@ -11,7 +11,7 @@ Security Features:
 - Immutable audit logging
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 import bcrypt
@@ -44,7 +44,8 @@ from repositories.audit_repository import AuditRepository
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
+REFRESH_TOKEN_EXPIRE_DAYS = 7     # 7 days
 
 PUBLIC_EMAIL_PROVIDERS = [
     "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", 
@@ -178,10 +179,38 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def _create_refresh_token(user_id: str, tenant_id: str) -> str:
+    from utils.supabase_client import db
+    token = secrets.token_urlsafe(64)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    db.client.table("refresh_tokens").insert({
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "token_hash": token_hash,
+        "expires_at": expires_at.isoformat()
+    }).execute()
+    
+    return token
+
+
+def _set_refresh_cookie(response, refresh_token: str):
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,     # Must be True in prod (HTTPS)
+        samesite="lax",  # Strict would require same-origin exactly
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/"
+    )
+
+
 # === Routes ===
 
 @router.post("/signup", response_model=AuthResponse)
-async def signup(request: Request, body_request: SignupRequest):
+async def signup(request: Request, body_request: SignupRequest, response: Response):
     """
     Create a new user account and tenant.
 
@@ -290,6 +319,10 @@ async def signup(request: Request, body_request: SignupRequest):
         # 6. Update last login via repository
         user_repo.update_last_login(user_id, datetime.now(timezone.utc).isoformat())
 
+        # Create refresh token & set cookie
+        refresh_token = _create_refresh_token(user_id, tenant_id)
+        _set_refresh_cookie(response, refresh_token)
+
         # 7. Send email verification link
         from services.email_service import send_email_verification
         import secrets
@@ -325,7 +358,7 @@ async def signup(request: Request, body_request: SignupRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(request: Request, body_request: LoginRequest):
+async def login(request: Request, body_request: LoginRequest, response: Response):
     """
     Authenticate an existing user.
 
@@ -435,6 +468,10 @@ async def login(request: Request, body_request: LoginRequest):
 
     # Update last login via repository
     user_repo.update_last_login(user["id"], datetime.now(timezone.utc).isoformat())
+
+    # Create refresh token & set cookie
+    refresh_token = _create_refresh_token(user["id"], tenant_id)
+    _set_refresh_cookie(response, refresh_token)
 
     # Emit immutable audit log
     audit_repo.insert_log(
@@ -553,6 +590,7 @@ async def get_user_workspaces(jwt_payload: JWTPayload = Depends(require_authenti
 @router.post("/switch-workspace", response_model=AuthResponse)
 async def switch_workspace(
     body: SwitchWorkspaceRequest,
+    response: Response,
     jwt_payload: JWTPayload = Depends(require_authenticated_user)
 ):
     """Switch to a different workspace and receive a new JWT token."""
@@ -588,6 +626,10 @@ async def switch_workspace(
     
     access_token = create_access_token(token_data)
     
+    # Create new refresh token for this tenant & set cookie
+    refresh_token = _create_refresh_token(jwt_payload.user_id, body.tenant_id)
+    _set_refresh_cookie(response, refresh_token)
+    
     return AuthResponse(
         user_id=jwt_payload.user_id,
         tenant_id=body.tenant_id,
@@ -595,6 +637,104 @@ async def switch_workspace(
         onboarding_required=(tenant_status == "onboarding"),
         tenant_status=tenant_status
     )
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_token(request: Request, response: Response):
+    """Silent token refresh endpoint using HttpOnly cookie."""
+    from utils.supabase_client import db
+    
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+
+    # Find token in DB
+    try:
+        res = db.client.table("refresh_tokens").select("*").eq("token_hash", token_hash).execute()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    if not res.data:
+        response.delete_cookie("refresh_token", path="/")
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    token_record = res.data[0]
+    
+    if token_record.get("revoked"):
+        response.delete_cookie("refresh_token", path="/")
+        raise HTTPException(status_code=401, detail="Refresh token revoked")
+
+    expires_at = datetime.fromisoformat(token_record["expires_at"].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        db.client.table("refresh_tokens").delete().eq("id", token_record["id"]).execute()
+        response.delete_cookie("refresh_token", path="/")
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+
+    user_id = token_record["user_id"]
+    tenant_id = token_record["tenant_id"]
+
+    # Rotate refresh token (one-time use)
+    db.client.table("refresh_tokens").delete().eq("id", token_record["id"]).execute()
+
+    # Get user to construct payload and fetch fresh role/tenant_status
+    user_res = db.client.table("users").select("email, email_verified, is_active").eq("id", user_id).execute()
+    if not user_res.data or not user_res.data[0].get("is_active"):
+        response.delete_cookie("refresh_token", path="/")
+        raise HTTPException(status_code=401, detail="User account disabled or not found")
+    user = user_res.data[0]
+
+    tenant_user_res = db.client.table("tenant_users").select("role, isolation_model").eq("user_id", user_id).eq("tenant_id", tenant_id).execute()
+    if not tenant_user_res.data:
+        response.delete_cookie("refresh_token", path="/")
+        raise HTTPException(status_code=401, detail="User is no longer in this tenant")
+    
+    tenant_user = tenant_user_res.data[0]
+
+    tenant_res = db.client.table("tenants").select("status").eq("id", tenant_id).execute()
+    tenant_status = tenant_res.data[0]["status"] if tenant_res.data else "active"
+
+    token_data = {
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "email": user["email"],
+        "role": tenant_user["role"],
+        "isolation_model": tenant_user.get("isolation_model", "team")
+    }
+
+    new_access_token = create_access_token(token_data)
+    new_refresh_token = _create_refresh_token(user_id, tenant_id)
+    _set_refresh_cookie(response, new_refresh_token)
+
+    return AuthResponse(
+        user_id=user_id,
+        tenant_id=tenant_id,
+        token=new_access_token,
+        onboarding_required=(tenant_status == "onboarding"),
+        tenant_status=tenant_status,
+        email_verified=user.get("email_verified", False)
+    )
+
+@router.post("/logout")
+async def logout(request: Request, response: Response):
+    """Clears HttpOnly refresh cookie and deletes it from DB."""
+    from utils.supabase_client import db
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        try:
+            db.client.table("refresh_tokens").delete().eq("token_hash", token_hash).execute()
+        except Exception as e:
+            import logging
+            logging.getLogger("auth").warning(f"Failed to delete refresh token on logout: {e}")
+            
+    response.delete_cookie("refresh_token", path="/")
+    # Also delete the middleware cookies via API response for good measure if needed, but client deletes them too
+    response.delete_cookie("auth_token", path="/")
+    response.delete_cookie("tenant_status", path="/")
+    response.delete_cookie("email_verified", path="/")
+    return {"status": "logged_out"}
 
 
 # === OAuth Routes ===

@@ -21,10 +21,16 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
 EXCHANGE_NAME = "background_exchange"
 QUEUE_NAME = "background_tasks"
 
-# Fix: macOS Python 3.13 SSL — bypass cert verification for CloudAMQP
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# SSL context for RabbitMQ (amqps://) connections
+# Production: full cert verification (default). Dev: set AMQP_SKIP_TLS_VERIFY=true to bypass.
+_SKIP_TLS = os.getenv("AMQP_SKIP_TLS_VERIFY", "false").lower() == "true"
+ssl_context = ssl.create_default_context()
+if _SKIP_TLS:
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    import logging as _log; _log.getLogger("email_engine").warning(
+        "⚠️  AMQP_SKIP_TLS_VERIFY=true — TLS cert verification DISABLED (dev-only mode)"
+    )
 
 async def process_csv_import(job_id: str, tenant_id: str, batch_id: str, contacts: list):
     """Processes a CSV import batch and streams progress to DB."""

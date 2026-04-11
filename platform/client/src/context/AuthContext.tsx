@@ -21,10 +21,11 @@ interface AuthContextType {
     token: string | null;
     login: (email: string, password: string, redirectPath?: string) => Promise<void>;
     signup: (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string) => Promise<void>;
-    logout: () => void;
+    logout: () => Promise<void>;
     refreshUserStatus: () => Promise<void>;
     updateUserContext: (updates: Partial<User>) => void;
     switchWorkspace: (tenantId: string) => Promise<void>;
+    silentRefresh: () => Promise<string | null>;
     /** Immediately updates the UI theme and debounces the backend save */
     setThemePref: (theme: 'light' | 'dark' | 'system') => void;
 }
@@ -48,8 +49,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const token = localStorage.getItem('auth_token');
             const userData = localStorage.getItem('user_data');
 
+            let activeToken = token;
+
             if (token && userData) {
                 try {
+                    // Check token expiration
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const expiryTime = payload.exp * 1000;
+                    
+                    if (Date.now() >= expiryTime - 60000) {
+                        // Token expired or about to expire, attempt refresh
+                        activeToken = await silentRefresh();
+                        if (!activeToken) throw new Error('Session expired');
+                    }
+
                     const parsedUser = JSON.parse(userData);
                     setUser(parsedUser);
                     setIsAuthenticated(true);
@@ -59,12 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     // Step 2: Hydrate from backend — backend wins after login.
                     try {
                         const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
-                            headers: { Authorization: `Bearer ${token}` },
+                            headers: { Authorization: `Bearer ${activeToken}` },
                         });
                         if (meRes.ok) {
                             const meData = await meRes.json();
                             const backendTheme = meData.theme_preference as string;
-                            // Strict whitelist — never pass arbitrary strings to setTheme
                             if (VALID_THEMES.has(backendTheme)) {
                                 setTheme(backendTheme);
                             }
@@ -81,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         router.push('/onboarding/workspace');
                     }
                 } catch (e) {
+
                     console.error('Auth check error:', e);
                     localStorage.removeItem('auth_token');
                     localStorage.removeItem('user_data');
@@ -232,8 +245,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const logout = () => {
+    const silentRefresh = async (): Promise<string | null> => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
+                method: 'POST',
+                credentials: 'include', // Sends HttpOnly cookie
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('auth_token', data.token);
+                // We keep a small max-age just so middleware can pick it up. Standard session length.
+                document.cookie = `auth_token=${data.token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+                console.log('Silent token refresh successful');
+                return data.token;
+            } else {
+                throw new Error('Refresh failed');
+            }
+        } catch (err) {
+            console.error('Silent refresh failed:', err);
+            // Don't call logout() directly here to avoid redirect loops on public pages
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_data');
+            return null;
+        }
+    };
+
+    const logout = async () => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        
+        try {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (err) {
+            console.warn('Logout API call failed, proceeding to clear local state', err);
+        }
+
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user_data');
         document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
@@ -356,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 updateUserContext,
                 switchWorkspace,
                 setThemePref,
+                silentRefresh,
             }}
         >
             {children}
