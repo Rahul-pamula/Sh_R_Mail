@@ -486,7 +486,7 @@ graph TD
 - Contact scoring system (engaged / at-risk / inactive / risky)
 - Upload preview endpoint
 - Async import job creation
-- RabbitMQ background import worker
+- FastAPI BackgroundTasks CSV import worker
 - Import batch history
 - Deduplication (in-memory + Supabase upsert on tenant_id, email)
 - Contact status (subscribed, unsubscribed, bounced, complained)
@@ -1153,6 +1153,7 @@ graph TD
 
 **📋 Planned Tasks — Phase 7.5**
 - Docker (Dockerfiles for API, worker, client)
+- Docker Overhaul (Split workers, Standalone client, Env Alignment)
 - docker-compose.yml
 - Nginx config
 - SSL/HTTPS (Let's Encrypt guide in docs)
@@ -1260,6 +1261,7 @@ graph TD
 - [AUDIT FIX 16] Remove dead Clerk config — delete CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY from docker-compose.yml and .env.example
 - [FRIEND AUDIT FIX 22] Repository Pattern / DAL — Abstract direct Supabase queries out of controllers into services/db.py
 - [FRIEND AUDIT FIX 23] Monolithic Worker Refactor — Split email_sender.py into modular layers (parsing, sending, injection, logging)
+- [FRONTEND] Performance: Abort stale fetches on domains/team/contacts and Next 16 sync params fixing
 
 **📋 Planned Tasks — Phase 8**
 - Settings landing page (/settings) with navigation cards
@@ -1352,6 +1354,7 @@ graph TD
 - GDPR Compliance / Opt-in consent log viewer.
 
 **📋 Planned Tasks — Phase 9**
+- SaaS Pricing Localization (transition to INR & RBI-compliant structure)
 - Stripe integration with webhook-driven plan updates
 - Custom domain setup wizard (enter domain > get DNS records > verify)
 - Dedicated IP Allocation engine per high-tier tenant

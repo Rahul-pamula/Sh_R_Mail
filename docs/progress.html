@@ -560,9 +560,9 @@
         "desc": "After the user confirms the column mapping, an import job record is created in the database and handed off to the background worker — the API returns immediately."
       },
       {
-        "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> RabbitMQ background import worker",
+        "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> CSV Import via FastAPI BackgroundTasks",
         "done": true,
-        "desc": "A background process consumes import jobs from the queue and processes each CSV row — deduplicates contacts and inserts them in batches."
+        "desc": "Migrated CSV import process to FastAPI's native BackgroundTasks to prevent system hangs when worker is offline."
       },
       {
         "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Import batch history",
@@ -1240,6 +1240,11 @@
         "desc": "Dockerfile for each service (FastAPI backend, Python workers, Next.js frontend) so the entire stack runs in containers on any machine."
       },
       {
+        "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[DEVOPS]</span> Docker Overhaul (Split workers, Standalone client, Env Alignment)",
+        "done": true,
+        "desc": "Massive overhaul of docker-compose flows, aligning env vars, dynamically adding Jinja dependencies, splitting background workers, and enabling a standalone client setup."
+      },
+      {
         "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[DEVOPS]</span> docker-compose.yml",
         "done": true,
         "desc": "A single file that defines and starts all services together (API, worker, frontend, RabbitMQ, Redis, Nginx) with one command."
@@ -1363,6 +1368,11 @@
         "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRIEND AUDIT FIX 23]</span> Monolithic Worker Refactor — Split email_sender.py into modular layers (parsing, sending, injection, logging) (2d)",
         "done": false,
         "desc": "Refactoring: email_sender.py handles everything in one massive try/except block — message parsing, circuit breaking, unsubscribe link injection, SMTP sending, and DB updates. Fix: split into focused modules (message_parser.py, smtp_sender.py, tracking_injector.py, dispatch_logger.py)."
+      },
+      {
+        "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[FRONTEND]</span> Performance: Abort stale fetches on domains/team/contacts",
+        "done": true,
+        "desc": "Implemented abort controllers to cancel stale queries and speed up navigation, plus Next.js 16 sync params fixing (useParams)."
       }
     ]
   },
@@ -1469,6 +1479,11 @@
   {
     "title": "PHASE 9 — Payments (Stripe/Razorpay)",
     "tasks": [
+      {
+        "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BILLING]</span> SaaS Pricing Localization (INR)",
+        "done": true,
+        "desc": "Transitioned from USD-based pricing to a localized, fixed INR structure reflecting competitive Indian SaaS models."
+      },
       {
         "text": "<span class='text-xs font-bold text-indigo-400 mr-2 uppercase block sm:inline'>[BACKEND]</span> Stripe integration",
         "done": false,
