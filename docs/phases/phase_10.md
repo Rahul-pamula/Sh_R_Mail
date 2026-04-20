@@ -45,11 +45,11 @@ Add multi-variant and automated campaign capabilities without regressing deliver
 - Sequence explosions → cap max steps (e.g., 10) and enforce per-tenant daily send limits (Phase 7).
 
 ## Acceptance checklist (Phase 10)
-- [ ] Create/update/delete variants via API and UI; weights validated.
-- [ ] Dispatch writes `variant_id` and worker renders correct subject/body.
-- [ ] Winner auto-selection after window; remaining sends route to winner.
-- [ ] Sequences: define steps, enroll contacts, dispatch scheduled steps, support cancel/pause.
-- [ ] Analytics: variant-level open/click metrics visible in campaign analytics.
+- Create/update/delete variants via API and UI; weights validated.
+- Dispatch writes `variant_id` and worker renders correct subject/body.
+- Winner auto-selection after window; remaining sends route to winner.
+- Sequences: define steps, enroll contacts, dispatch scheduled steps, support cancel/pause.
+- Analytics: variant-level open/click metrics visible in campaign analytics.
 
 ---
 ## Technical Appendix (Engineering view)

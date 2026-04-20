@@ -35,11 +35,11 @@ Expose a stable public API (REST) and webhooks so tenants can automate sends, ma
 - Secrets: show API key only once; allow rotate & revoke; HMAC sign webhooks; timestamp + signature headers.
 
 ## Acceptance checklist
-- [ ] API key issuance, list, revoke, rotate; scopes enforced and rate limited per key.
-- [ ] Transactional send endpoint sends email, respects suppression & plan limits, records events.
-- [ ] Webhooks: configure URL + events, deliveries signed, retries/backoff, delivery log viewable.
-- [ ] OpenAPI spec available; developer docs page with examples.
-- [ ] Monitoring: 4xx/5xx metrics per key; alert on webhook failure rate.
+- API key issuance, list, revoke, rotate; scopes enforced and rate limited per key.
+- Transactional send endpoint sends email, respects suppression & plan limits, records events.
+- Webhooks: configure URL + events, deliveries signed, retries/backoff, delivery log viewable.
+- OpenAPI spec available; developer docs page with examples.
+- Monitoring: 4xx/5xx metrics per key; alert on webhook failure rate.
 
 ---
 ## Technical Appendix (Engineering view)
