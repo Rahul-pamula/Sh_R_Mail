@@ -1,402 +1,319 @@
-# Phase 1 - Technical Audit
+# Phase 1 — Developer Implementation Guide & Technical Audit
 
-> Audit date: 2026-03-15  
-> Scope: verified against repository code, not earlier markdown assumptions
-
----
-
-## 1. Audit Scope
-
-This audit covers the real implementation of the Phase 1 foundation:
-
-- authentication
-- password hashing and token issuance
-- tenant identity and membership
-- onboarding lifecycle
-- frontend session state
-- middleware and redirect guards
-- schema and migration support
-
-Reviewed code areas:
-
-- `platform/api/routes/auth.py`
-- `platform/api/routes/onboarding.py`
-- `platform/api/routes/password_reset.py`
-- `platform/api/utils/jwt_middleware.py`
-- `platform/api/utils/supabase_client.py`
-- `platform/api/main.py`
-- `platform/client/src/context/AuthContext.tsx`
-- `platform/client/src/middleware.ts`
-- `platform/client/src/app/login/page.tsx`
-- `platform/client/src/app/signup/page.tsx`
-- `platform/client/src/app/onboarding/*`
-- `platform/client/src/app/dashboard/page.tsx`
-- `migrations/002_progressive_onboarding.sql`
-- `migrations/021_onboarding_field_extensions.sql`
-- `migrations/022_campaign_runtime_alignment.sql`
-- `migrations/manual_apply_latest_runtime_sync.sql`
+> **Who is this for?** Any developer — beginner or senior — who needs to understand exactly how Phase 1 is built, what every file does, how the data flows, and how to implement or extend any part of it from scratch.
 
 ---
 
-## 2. Verified Tech Stack
+## 1. Phase 1 Complete Architecture Map
 
-### Backend foundation
+Read this Mermaid diagram before looking at any code. It shows exactly how every file and layer connects.
 
-- FastAPI
-- Pydantic
-- `python-jose` for JWT
-- `bcrypt` for password hashing
-- Supabase Python client
-- custom auth tables in Postgres
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,color:#fff;
+    classDef middleware fill:#f59e0b,stroke:#b45309,color:#fff;
+    classDef api fill:#10b981,stroke:#047857,color:#fff;
+    classDef db fill:#475569,stroke:#334155,color:#fff;
+    classDef utils fill:#8b5cf6,stroke:#5b21b6,color:#fff;
 
-### Frontend foundation
+    subgraph "Browser / Frontend"
+        A["login/page.tsx<br/>signup/page.tsx<br/>onboarding/*"]:::frontend
+        B["AuthContext.tsx<br/>(Global session state)"]:::frontend
+        C["middleware.ts<br/>(Edge route protection)"]:::middleware
+        A -->|"Stores JWT + user_data"| B
+        B -->|"Sets auth_token cookie"| C
+    end
 
-- Next.js App Router
-- React context for auth state
-- cookies plus localStorage session persistence
-- client redirects in auth context
-- Next.js middleware redirects at request time
+    subgraph "FastAPI Backend"
+        D["auth.py<br/>/auth/login, /signup, /refresh"]:::api
+        E["onboarding.py<br/>/onboarding/workspace etc."]:::api
+        F["jwt_middleware.py<br/>verify_jwt_token()<br/>require_active_tenant()<br/>require_authenticated_user()"]:::utils
+        D -->|"Issues JWT"| F
+        E -->|"Protected by"| F
+    end
 
-### Important architectural clarification
+    subgraph "Database Tables"
+        G[("users")]:::db
+        H[("tenants")]:::db
+        I[("tenant_users")]:::db
+        J[("refresh_tokens")]:::db
+        K[("onboarding_progress")]:::db
+        G --> I
+        H --> I
+        D -->|"Reads/Writes"| G
+        D -->|"Creates"| H
+        D -->|"Links"| I
+        D -->|"Stores"| J
+        E -->|"Updates"| K
+        E -->|"Updates status"| H
+    end
 
-The active auth system is:
-
-- custom users table
-- custom password hashes
-- custom JWTs
-
-It is not Supabase Auth as a managed identity provider.
-
----
-
-## 3. Architecture Implemented
-
-### 3.1 Identity model
-
-The identity model is built from:
-
-- `users`
-- `tenants`
-- `tenant_users`
-- `onboarding_progress`
-
-Behavior:
-
-- one user may belong to multiple tenants
-- role is stored in `tenant_users`
-- JWT carries current `tenant_id`
-- workspace switching issues a new tenant-scoped JWT
-
-### 3.2 Authentication model
-
-Auth path:
-
-- signup writes directly to project tables
-- login verifies `bcrypt` password hash
-- JWT signed with `HS256`
-- frontend stores JWT in localStorage and cookie
-- backend dependencies validate JWT on protected routes
-
-### 3.3 Tenant isolation model
-
-Isolation is enforced by:
-
-- tenant claim inside JWT
-- header-to-JWT tenant match validation
-- active tenant status guard
-- explicit tenant filters in application code
-
-Important note:
-
-This is application-enforced isolation, not active RLS enforcement.
-
-### 3.4 Onboarding model
-
-The codebase currently has two onboarding layers:
-
-- legacy progressive onboarding endpoints: `basic-info`, `compliance`, `intent`, `status`
-- active product onboarding wizard: `workspace`, `use-case`, `integrations`, `scale`, `complete`
-
-The authoritative activation state is `tenants.status`.
+    A -->|"POST /auth/login"| D
+    F -->|"Returns JWTPayload object"| E
+    C -->|"Reads auth_token cookie"| D
+```
 
 ---
 
-## 4. Implementation Verification
+## 2. Complete File Index — Phase 1
 
-## 4.1 Authentication
+Every file relevant to Phase 1 and what it does:
 
-### Verified implemented
-
-- signup route
-- login route
-- JWT creation
-- JWT verification
-- password hashing with `bcrypt`
-- account disable check via `is_active`
-- OAuth login entry points for Google and GitHub
-- email verification token generation
-- password reset route family
-- workspace switching route
-
-### Important code-level findings
-
-- signup creates email verification tokens and dispatches verification email
-- login chooses the first joined tenant membership
-- `pending_join` is a real tenant status flow in frontend and backend behavior
-- `/auth/me` is still a placeholder and not a true authenticated profile endpoint
-
-Technical finding:
-
-The auth foundation is broader than the old Phase 1 docs claim, but also less cleanly separated by phase.
-
----
-
-## 4.2 Password and token security
-
-### Verified
-
-- password hashing uses `bcrypt`
-- password verification uses hash comparison
-- JWT includes `user_id`, `tenant_id`, `email`, and `role`
-- JWT expiry is configured for 7 days
-- invalid token payloads are rejected
-
-### Risks and limitations
-
-- default secret fallback exists if `JWT_SECRET_KEY` is unset
-- 7-day JWT lifetime is long for bearer-token compromise risk
-- no token revocation system was verified
-
-Technical finding:
-
-The current system is acceptable for a custom MVP auth foundation, but not a hardened final production auth stack.
+| File | Layer | Role |
+|---|---|---|
+| `platform/api/routes/auth.py` | Backend | All auth endpoints: login, signup, refresh, logout, switch-workspace |
+| `platform/api/routes/onboarding.py` | Backend | Onboarding wizard step endpoints |
+| `platform/api/routes/password_reset.py` | Backend | Forgot password and reset password flows |
+| `platform/api/utils/jwt_middleware.py` | Backend | JWT validation and dependency injection guards |
+| `platform/api/utils/supabase_client.py` | Backend | Database connection singleton |
+| `platform/api/utils/rate_limiter.py` | Backend | IP + email composite rate limit enforcement |
+| `platform/api/utils/captcha.py` | Backend | Google reCAPTCHA verification |
+| `platform/api/repositories/user_repository.py` | Backend | Abstracted DB queries for `users` table |
+| `platform/api/repositories/auth_repository.py` | Backend | Abstracted DB queries for tenant membership |
+| `platform/api/repositories/audit_repository.py` | Backend | Writes immutable audit log rows |
+| `platform/client/src/context/AuthContext.tsx` | Frontend | Global React session state provider |
+| `platform/client/src/middleware.ts` | Frontend Edge | Next.js middleware for server-side route protection |
+| `platform/client/src/app/login/page.tsx` | Frontend | Login page UI |
+| `platform/client/src/app/signup/page.tsx` | Frontend | Signup page UI |
+| `platform/client/src/app/onboarding/*` | Frontend | 4-step onboarding wizard pages |
+| `platform/client/src/app/dashboard/page.tsx` | Frontend | Dashboard with onboarding checklist |
+| `migrations/002_progressive_onboarding.sql` | Database | Creates `users`, `tenants`, `tenant_users`, `onboarding_progress` |
+| `migrations/021_onboarding_field_extensions.sql` | Database | Adds extra onboarding columns |
+| `migrations/022_campaign_runtime_alignment.sql` | Database | Campaign runtime schema sync |
+| `migrations/manual_apply_latest_runtime_sync.sql` | Database | Catch-up SQL for environments that missed migrations |
 
 ---
 
-## 4.3 Multi-tenant identity and membership
+## 3. Database Schema — What We Built
 
-### Verified implemented
+### The Identity Model (3 Core Tables)
 
-- `tenant_users` is the membership junction table
-- role is attached to membership
-- login resolves current workspace from membership
-- `switch-workspace` issues a fresh JWT for a selected tenant
-- JIT enterprise domain flow can place users into pending join state
-- invitation-based join path is partially supported
+```sql
+-- Table 1: Individual users
+users (
+  id UUID PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,  -- bcrypt hash, never raw password
+  full_name TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  email_verified BOOLEAN DEFAULT FALSE,
+  token_version INTEGER DEFAULT 0  -- revocation counter
+)
 
-### Limitations
+-- Table 2: Companies/Workspaces
+tenants (
+  id UUID PRIMARY KEY,
+  company_name TEXT NOT NULL,
+  status TEXT DEFAULT 'onboarding'  -- 'onboarding' | 'active' | 'suspended'
+  -- status is THE authoritative gate. Active = unlocked. Anything else = blocked.
+)
 
-- default login still picks the first tenant by `joined_at`
-- there is no backend-native tenant picker during login
-- some comments in auth route still describe workspace switching as future even though it now exists
+-- Table 3: Junction — links a user to a tenant with a role
+tenant_users (
+  user_id UUID REFERENCES users(id),
+  tenant_id UUID REFERENCES tenants(id),
+  role TEXT DEFAULT 'member',  -- 'owner' | 'admin' | 'member'
+  joined_at TIMESTAMPTZ DEFAULT NOW()
+)
+```
 
-Technical finding:
+**Why this 3-table design?**
+- One user can belong to many companies (junction table)
+- Each membership has its own role (a consultant can be "owner" of their agency but "member" of a client's workspace)
+- `tenants.status` is the single gate that controls everything
 
-Multi-tenant identity is structurally present, but the UX and documentation still reflect an earlier single-tenant assumption in places.
-
----
-
-## 4.4 Tenant isolation and security controls
-
-### Verified implemented
-
-- JWT tenant claim is authoritative
-- optional `X-Tenant-ID` must match JWT if supplied
-- `require_active_tenant` blocks tenants not in `active` state
-- `require_authenticated_user` exists for authenticated non-active flows
-
-### Verified not implemented as active controls
-
-- RLS is not the primary enforcement layer
-- migrations explicitly describe RLS as future or commented-out work
-- service-role Supabase access bypasses RLS by default
-
-Technical finding:
-
-The current foundation uses strong application-layer tenant enforcement, but the old docs incorrectly present RLS as if it is already active and central.
-
----
-
-## 4.5 Onboarding implementation
-
-### Verified implemented
-
-Frontend wizard:
-
-- workspace
-- use case
-- integrations
-- scale
-- complete
-
-Backend support:
-
-- `/onboarding/workspace`
-- `/onboarding/use-case`
-- `/onboarding/integrations`
-- `/onboarding/scale`
-- `/onboarding/complete`
-
-Legacy support also exists:
-
-- `/onboarding/status`
-- `/onboarding/basic-info`
-- `/onboarding/compliance`
-- `/onboarding/intent`
-
-### Important inconsistencies
-
-- new onboarding routes mostly use JWT dependencies
-- `/onboarding/status` still depends on `X-Tenant-ID`
-- `/onboarding/intent` still depends on `X-Tenant-ID`
-- frontend wizard uses the new route family, not the legacy one
-
-Technical finding:
-
-The onboarding foundation works, but the API surface is internally inconsistent and still carries legacy paths that need cleanup or explicit retention.
+### The Refresh Token Table
+```sql
+refresh_tokens (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(id),
+  tenant_id UUID,
+  token_hash TEXT UNIQUE,  -- SHA-256 hash, never raw token
+  expires_at TIMESTAMPTZ,
+  revoked BOOLEAN DEFAULT FALSE
+)
+```
 
 ---
 
-## 4.6 Frontend auth state and route protection
+## 4. Authentication Flow — Step-by-Step
 
-### Verified implemented
+### Signup Flow (How to implement it)
 
-- `AuthContext` restores session from localStorage
-- auth token and tenant status are mirrored to cookies
-- client redirects handle onboarding and waiting-room flows
-- middleware blocks some protected routes without token
-- middleware redirects onboarding tenants away from protected routes
-- middleware redirects active users away from auth pages
+1. **Frontend** (`signup/page.tsx`) — User fills form and submits → sends `POST /auth/signup` with `{ email, password, full_name, tenant_name, captcha_token }`
 
-### Limitations
+2. **Backend** (`auth.py`) — On receiving the request:
+   - Calls `verify_captcha(captcha_token)` to validate with Google
+   - Hashes the password: `bcrypt.hashpw(password.encode(), bcrypt.gensalt())`
+   - Creates a `users` row with the hash
+   - Depending on the user's email domain, picks one of 3 tenant paths:
+     - **Normal owner flow:** Creates a `tenants` row with `status='onboarding'`, links via `tenant_users` with `role='owner'`  
+     - **Enterprise JIT flow:** Detects verified corporate domain, creates a `join_requests` row
+     - **Invite flow:** Finds pending team invitation, sets status to `pending_join`
+   - Signs a JWT: `jwt.encode({ user_id, tenant_id, email, role }, SECRET_KEY, algorithm="HS256")`
+   - Creates a refresh token, stores its SHA-256 hash in `refresh_tokens` table, sets it as an `HttpOnly` cookie
+   - Returns the JWT in the response body
 
-- route protection is split between middleware and client auth context
-- middleware covers only selected protected prefixes
-- some route decisions depend on client-set cookies after login
-- `AuthContext` and middleware do overlapping work
+3. **Frontend** — Stores JWT in `localStorage` and mirrors it into a readable cookie for middleware
 
-Technical finding:
+### Login Flow (How to implement it)
 
-The user flow works, but protection logic is duplicated and should eventually be centralized more clearly.
+1. **Frontend** sends `POST /auth/login` with `{ email, password }`
+2. **Backend** (`auth.py`):
+   - Looks up `users` by email
+   - Checks `bcrypt.checkpw(submitted_password, stored_hash)`
+   - Verifies `user.is_active == True`
+   - Finds the primary tenant via `tenant_users` ordered by `joined_at`
+   - Checks `tenants.status` to decide redirect destination
+   - Issues fresh JWT + refresh token pair
+3. **Frontend** (`AuthContext.tsx`) — Parses the JWT payload, sets React state, redirects based on `tenant_status`
 
----
+### Silent Refresh Flow (The Invisible Session Extension)
 
-## 4.7 Schema and migrations
+This is triggered automatically when the JWT is about to expire (within 60 seconds of expiry):
 
-### Verified implemented
-
-- progressive onboarding migration creates `users`, `tenant_users`, and `onboarding_progress`
-- tenant lifecycle columns exist
-- additional onboarding fields are added by migration
-- migration docs correctly describe `tenants.status` as authoritative
-- ordered top-level migration files now exist for the current onboarding/runtime schema
-- a manual catch-up SQL file exists for environments that missed recent runtime changes
-
-### Strong architecture note
-
-The migration and refinement docs are actually more accurate than the old Phase 1 markdown in one important respect:
-
-- `tenants.status` is the real source of truth
-- `onboarding_progress` is auxiliary
-
-That is the correct architectural rule.
-
-### Operational note
-
-Schema truth is now documented more accurately in the repository, but environment drift is still possible if a database was created from older bootstrap SQL and never received the later numbered migrations.
+1. `AuthContext.tsx` decodes the JWT payload: `JSON.parse(atob(token.split('.')[1]))`
+2. Checks `payload.exp * 1000 < Date.now() + 60000`
+3. If true, fires `POST /auth/refresh` — the `HttpOnly` cookie is automatically sent by the browser
+4. **Backend** (`auth.py`): Reads the cookie, hashes it (`SHA-256`), looks up the `refresh_tokens` table, validates it is not expired or revoked
+5. Deletes the old refresh token row (one-time use), issues a new refresh token + new JWT
+6. Frontend stores the new JWT silently — the user never knows a refresh happened
 
 ---
 
-## 5. Findings
+## 5. JWT Middleware — How the Guard System Works
 
-### [High] Phase 1 docs describe the wrong auth architecture
+File: `platform/api/utils/jwt_middleware.py`
 
-The old Phase 1 docs describe Supabase Auth and active RLS-backed security. The actual code uses custom auth tables, custom JWTs, `bcrypt`, and service-role Supabase access. This is the largest documentation mismatch in the phase.
+There are 4 guard functions. Every protected route must use one as a FastAPI `Depends()`:
 
-### [High] RLS is described as implemented but is still future-facing
+### Guard 1: `verify_jwt_token` — Base verification
+```python
+# Extracts token from "Authorization: Bearer <token>" header
+# Decodes the JWT using the shared SECRET_KEY
+# Returns a JWTPayload object: { user_id, tenant_id, email, role, isolation_model }
+# Raises HTTP 401 if token is missing, malformed, or expired
+```
+**Use on:** Any route that needs to know WHO is requesting.
 
-Migration files explicitly mark RLS as future or commented-out work. Representing RLS as the active data-security mechanism is inaccurate.
+### Guard 2: `require_authenticated_user` — Auth without status check
+```python
+# Wraps verify_jwt_token
+# Returns the JWTPayload for any authenticated user regardless of tenant status
+```
+**Use on:** Onboarding routes (user is authenticated but company is still in `onboarding`)
 
-### [Medium] Onboarding API is internally inconsistent
+### Guard 3: `require_active_tenant` — The main production gate
+```python
+# Runs verify_jwt_token first
+# Additionally checks: db.table("tenants").select("status").eq("id", tenant_id)
+# If status != "active" → HTTP 403 Forbidden
+# Also validates X-Tenant-ID header matches JWT (anti-spoofing)
+```
+**Use on:** Every campaign, contact, analytics, and template route.
 
-Some onboarding endpoints use JWT-based tenant identity while others still use `X-Tenant-ID`. That creates mixed trust models inside the same phase.
+### Guard 4: `require_admin_or_owner` — Role authorization
+```python
+# Wraps verify_jwt_token
+# Checks jwt_payload.role in ["admin", "owner"]
+# Returns HTTP 403 if the user is just a "member"
+```
+**Use on:** Team management, domain settings, billing routes.
 
-### [Medium] `/auth/me` is incomplete
-
-The route is still a placeholder and should not be treated as part of a finished auth foundation.
-
-### [Medium] Auth and redirect logic are duplicated across client and middleware
-
-The system works, but responsibility is spread across multiple layers and not fully unified.
-
-### [Medium] Phase boundary drift exists between Phase 1 and Phase 1.5
-
-The codebase already contains password reset, email verification, and social login hooks, while the phase docs still place many of those items entirely in Phase 1.5.
-
----
-
-## 6. Verified Phase 1 Status
-
-### Complete enough to count as foundation
-
-- custom auth foundation
-- tenant membership foundation
-- onboarding foundation
-- frontend auth state
-- route redirect foundation
-- sidebar-driven app shell
-
-### Not fully complete
-
-- architecture documentation accuracy
-- onboarding endpoint consistency
-- true `/auth/me` endpoint
-- clear RLS status
-- centralized route protection
-- clean phase boundary with Phase 1.5
-
-### Correct status label
-
-**Phase 1 is mostly complete, but not perfectly clean or fully documented.**
+### How to wire a guard onto any route:
+```python
+@router.get("/campaigns")
+async def list_campaigns(tenant_id: str = Depends(require_active_tenant)):
+    # At this point, we know:
+    # 1. The JWT is valid and not expired
+    # 2. The tenant is in 'active' status
+    # 3. The tenant_id variable is safe to use in DB queries
+    contacts = db.table("campaigns").select("*").eq("tenant_id", tenant_id).execute()
+```
 
 ---
 
-## 7. Recommended Completion Plan
+## 6. Frontend Session State — How `AuthContext.tsx` Works
 
-### Step 1 - fix architectural truth in docs
+`AuthContext.tsx` is the **global brain** of the frontend session. It runs once at app startup.
 
-- document custom JWT auth as the real Phase 1 implementation
-- remove inaccurate Supabase Auth and active-RLS claims
+### Startup Sequence (on every page load or refresh):
+1. Reads `auth_token` from `localStorage`
+2. Decodes the JWT payload: `JSON.parse(atob(token.split('.')[1]))`
+3. Checks if `payload.exp * 1000 < Date.now() - 60000` (is it expired or about to expire?)
+4. If expiring: calls `silentRefresh()` → `POST /auth/refresh` → stores new JWT
+5. Sets React state: `setUser(parsedUser)` and `setIsAuthenticated(true)`
+6. Calls `GET /auth/me` to sync the latest server-side profile (theme, role updates)
 
-### Step 2 - unify onboarding security
+### Data stored in localStorage:
+```javascript
+localStorage.setItem('auth_token', jwtString);
+localStorage.setItem('user_data', JSON.stringify({
+  userId, email, fullName, tenantId, tenantStatus, role
+}));
+```
 
-- convert remaining header-based onboarding endpoints to JWT tenant resolution
-- decide whether the legacy onboarding surface stays or is deprecated
+### Cookies set for Next.js middleware:
+```javascript
+document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+document.cookie = `tenant_status=${status}; path=/;`;
+```
+The cookie must use `SameSite=Lax` (not `Strict`) to allow OAuth redirect flows to work correctly.
 
-### Step 3 - finish auth cohesion
+---
 
-- implement `/auth/me`
-- align middleware and auth-context coverage
-- document workspace switching as implemented, not future
+## 7. Next.js Middleware Route Protection (`middleware.ts`)
 
-### Step 4 - clarify phase boundaries
+This runs **before any page is rendered**, at the Edge Network level.
 
-- keep Phase 1 as the identity and onboarding foundation
-- keep Phase 1.5 as hardening and cleanup
-- mark already-existing 1.5 code as partial implementation where appropriate
+### How it works:
+1. For every incoming request, Next.js middleware reads `request.cookies.get('auth_token')`
+2. If cookie is absent and the route is protected → `redirect('/login')`
+3. If cookie is present and the user is in `onboarding` status → `redirect('/onboarding/workspace')`
+4. If cookie is present and user is `active` visiting `/login` → `redirect('/dashboard')`
+
+### Protected prefixes checked by middleware:
+`/dashboard`, `/contacts`, `/campaigns`, `/templates`, `/analytics`, `/settings`, `/team`
 
 ---
 
-## 8. Final Verdict
+## 8. Onboarding State Machine
 
-Phase 1 has successfully created the real tenant-aware application foundation.
+### The 5 Steps:
 
-The correct engineering verdict is:
+| Step | Frontend Route | Backend Endpoint | What it writes |
+|---|---|---|---|
+| 1 | `/onboarding/workspace` | `POST /onboarding/workspace` | `tenants.company_name` |
+| 2 | `/onboarding/use-case` | `POST /onboarding/use-case` | `onboarding_progress.use_case` |
+| 3 | `/onboarding/integrations` | `POST /onboarding/integrations` | `onboarding_progress.integrations` |
+| 4 | `/onboarding/scale` | `POST /onboarding/scale` | `onboarding_progress.scale` |
+| 5 | `/onboarding/complete` | `POST /onboarding/complete` | **`tenants.status = 'active'`** |
 
-**Strong foundation implemented.**
-**Documentation accuracy, consistency, and hardening still need cleanup.**
+Step 5 is the state transition that unlocks the entire platform. `require_active_tenant` now passes. The user can use campaigns, contacts, everything.
 
 ---
-## Technical Appendix (Engineering view)
-- Endpoints, data model, RLS, and worker/queue behaviors summarized per phase.
-- See phase doc for full flow; audits now include concrete engineering artifacts to verify.
+
+## 9. Rate Limiting Implementation
+
+File: `platform/api/utils/rate_limiter.py`
+
+Uses a **composite key**: `f"{ip_address}:{email}"` — meaning both the IP AND the specific email being targeted must stay within limits. This prevents two attacks simultaneously:
+- IP rate limiting → stops botnets from hammering from one IP
+- Email rate limiting → stops distributed botnets from hammering one specific account across many IPs
+
+### How to apply it to any route:
+```python
+@router.post("/login")
+async def login(request: Request, body: LoginRequest):
+    await enforce_auth_rate_limit(request, body.email)  # raises HTTP 429 if exceeded
+    # ... rest of login logic
+```
+
+---
+
+## 10. Known Architectural Notes
+
+- **RLS is NOT the active enforcement layer.** Supabase is accessed via `SERVICE_ROLE_KEY`, which bypasses Row Level Security. Tenant isolation is enforced entirely in application code via JWT claims and `require_active_tenant`. RLS is planned for a future hardening phase.
+- **The refresh cookie `secure` flag** must be `False` in local development (`http://localhost`) and `True` in production (`https://`). We use `os.getenv("ENVIRONMENT") == "production"` to toggle this dynamically. If `secure=True` is hardcoded, the browser silently drops the cookie on local HTTP, causing the "Silent refresh failed" session expiry error.
+- **Legacy onboarding endpoints** (`/onboarding/status`, `/onboarding/intent`) still use `X-Tenant-ID` header resolution instead of JWT-derived tenant identity. These are kept for backwards compatibility but should not be used in new code.
+- **The `token_version` revocation counter** in the `users` table is the escape hatch for emergency session termination. Incrementing it instantly invalidates all active JWTs for that user.
