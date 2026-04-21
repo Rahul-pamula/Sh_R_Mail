@@ -13,7 +13,9 @@ In Phase 0, we built the **Frontend Visual Language** — the Buttons, the Toast
 
 Think of it this way: Phase 0 built the beautiful glass-and-steel exterior of a bank. Phase 1 builds the **vault, the security guards, the keycards, and the membership system** inside that bank. Before a single email can be sent, the platform must know *who you are*, *which company you belong to*, *what you are allowed to do*, and *what stage of setup your company is in*.
 
-Phase 1.5 then **hardens** that vault — adding security cameras (audit logs), alarm systems (auto-alerts), and two-factor locks. Phase 1.6 makes the vault **legally compliant** — ensuring we follow international privacy laws so a government audit doesn't shut down the business.
+Phase 1.5 then **hardens** that vault — adding security cameras (audit logs), alarm systems (auto-alerts), and two-factor locks.
+
+Phase 1.6 makes the vault **legally compliant** — ensuring we follow international privacy laws so a government audit doesn't shut down the business.
 
 If any part of this phase is skipped or broken, the entire platform collapses. Every feature in Phase 2 through Phase 13 depends entirely on this foundation being solid, secure, and reliable.
 
