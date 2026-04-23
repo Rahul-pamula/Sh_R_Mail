@@ -59,9 +59,9 @@ interface Batch {
     total_rows: number;
     imported_count: number;
     failed_count: number;
-    errors: any[];
+    status: string;
+    errors?: any;
     created_at: string;
-    meta?: any;
 }
 
 // ===== ErrorRow Component =====
@@ -339,8 +339,12 @@ export default function ContactsPage() {
                     const lower = col.toLowerCase().trim();
                     if (lower === "email" || lower === "email address" || lower === "e-mail") {
                         autoMap[col] = "email";
+                    } else if (lower === "first name" || lower === "firstname" || lower === "fname") {
+                        autoMap[col] = "first_name";
+                    } else if (lower === "last name" || lower === "lastname" || lower === "lname") {
+                        autoMap[col] = "last_name";
                     } else {
-                        // Default to skip to prevent clutter; users can enable as custom fields if they want
+                        // Default to skip
                         autoMap[col] = "skip";
                     }
                 });
@@ -361,10 +365,6 @@ export default function ContactsPage() {
         if (!file || !emailCol) return;
         setUploading(true);
         try {
-            const formData = new FormData();
-            formData.append("file", file);
-            const params = new URLSearchParams({ email_col: emailCol });
-
             // Build custom field mappings
             const customMappings: Record<string, string> = {};
             Object.entries(columnMappings).forEach(([csvCol, target]) => {
@@ -373,73 +373,106 @@ export default function ContactsPage() {
                     customMappings[fieldName] = csvCol;
                 }
             });
-            if (Object.keys(customMappings).length > 0) {
-                params.set("custom_mappings", JSON.stringify(customMappings));
-            }
 
-            const res = await fetch(`${API_BASE}/contacts/upload/import?${params}`, {
+            // 1. INITIALIZE (Get S3 Ticket)
+            const initRes = await fetch(`${API_BASE}/contacts/import/initialize?project_id=default`, {
                 method: "POST",
-                headers: apiHeaders(token!),
-                body: formData
+                headers: { ...apiHeaders(token!), "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filename: file.name,
+                    content_type: file.type || "text/csv",
+                    estimated_rows: rowCount
+                })
             });
-            if (res.ok) {
-                const data = await res.json();
-                const acceptedRows = data.accepted_rows || rowCount;
-                const skippedBlank = data.skipped_blank || 0;
-                // Phase 7.5: async job — start polling
-                if (data.job_id) {
-                    setJobProgress({ id: data.job_id, progress: 0, status: 'pending', processed_items: 0, total_items: acceptedRows, failed_items: 0 });
-                    setUploadStep(3); // New: progress polling step
-                    // Start polling
-                    pollRef.current = setInterval(async () => {
-                        try {
-                            const jr = await fetch(`${API_BASE}/contacts/jobs/${data.job_id}`, { headers: apiHeaders(token!) });
-                            if (jr.ok) {
-                                const job = await jr.json();
-                                let skippedDup = 0;
-                                let metaNew = undefined as number | undefined;
-                                let metaUpdated = undefined as number | undefined;
-                                try {
-                                    const meta = job.meta ? JSON.parse(job.meta) : {};
-                                    skippedDup = meta.skipped_duplicates || 0;
-                                    metaNew = meta.new;
-                                    metaUpdated = meta.updated;
-                                } catch { /* ignore meta parse errors */ }
-                                setJobProgress({ id: job.id, progress: job.progress, status: job.status, processed_items: job.processed_items || 0, total_items: job.total_items || acceptedRows, failed_items: job.failed_items || 0 });
-                                if (job.status === 'completed' || job.status === 'failed') {
-                                    if (pollRef.current) clearInterval(pollRef.current);
-                                    setImportResult({
-                                        total: job.total_items || acceptedRows,
-                                        success: (job.processed_items || 0) - (job.failed_items || 0),
-                                        failed: job.failed_items || 0,
-                                        batch_id: data.batch_id,
-                                        skipped_blank: skippedBlank,
-                                        skipped_duplicates: skippedDup,
-                                        new: metaNew,
-                                        updated: metaUpdated
-                                    });
-                                    setUploadStep(4);
-                                    fetchStats();
-                                    fetchContacts();
-                                    fetchDomains();
-                                }
-                            }
-                        } catch { /* polling error, will retry */ }
-                    }, 2000);
-                } else {
-                    // Fallback: legacy synchronous response
-                    setImportResult({ ...data, total: acceptedRows, skipped_blank: skippedBlank, skipped_duplicates: data.skipped_duplicates || 0 });
-                    setUploadStep(4);
-                    fetchStats();
-                    fetchContacts();
-                    fetchDomains();
-                }
-            } else {
-                const err = await res.json();
-                alert(err.detail || "Import failed");
+            
+            if (!initRes.ok) {
+                const err = await initRes.json();
+                throw new Error(err.detail || "Failed to initialize import");
             }
-        } catch (e) { alert("Import failed"); }
-        setUploading(false);
+            const initData = await initRes.json();
+
+            // 2. UPLOAD TO S3 (Direct via Signed URL using PUT)
+            const s3Res = await fetch(initData.upload_url, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": file.type || "text/csv"
+                },
+                body: file
+            });
+            
+            if (!s3Res.ok) throw new Error("Failed to upload file to storage");
+
+            // 3. SIGNAL PROCESS (Trigger RabbitMQ)
+            const processRes = await fetch(`${API_BASE}/contacts/import/process/${initData.job_id}`, {
+                method: "POST",
+                headers: { ...apiHeaders(token!), "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email_col: emailCol,
+                    first_name_col: getMappedCol("first_name") || null,
+                    last_name_col: getMappedCol("last_name") || null,
+                    custom_mappings: Object.keys(customMappings).length > 0 ? customMappings : null
+                })
+            });
+
+            if (!processRes.ok) throw new Error("Failed to start processing");
+
+            // 4. POLL FOR PROGRESS
+            setJobProgress({ 
+                id: initData.job_id, 
+                progress: 0, 
+                status: 'pending', 
+                processed_items: 0, 
+                total_items: rowCount, 
+                failed_items: 0 
+            });
+            setUploadStep(3); // Progress UI
+
+            pollRef.current = setInterval(async () => {
+                try {
+                    // Update this endpoint to poll the new import_jobs table
+                    const jr = await fetch(`${API_BASE}/contacts/jobs/${initData.job_id}`, { headers: apiHeaders(token!) });
+                    if (jr.ok) {
+                        const job = await jr.json();
+                        // For the new table, we expect: status, processed_rows, failed_rows, total_rows
+                        const processed = job.processed_rows || 0;
+                        const failed = job.failed_rows || 0;
+                        const total = job.total_rows || rowCount;
+                        const progressPct = total > 0 ? Math.round(((processed + failed) / total) * 100) : 0;
+                        
+                        setJobProgress({ 
+                            id: job.id, 
+                            progress: progressPct, 
+                            status: job.status, 
+                            processed_items: processed, 
+                            total_items: total, 
+                            failed_items: failed 
+                        });
+                        
+                        if (job.status === 'completed' || job.status === 'failed') {
+                            if (pollRef.current) clearInterval(pollRef.current);
+                            setImportResult({
+                                total: total,
+                                success: processed,
+                                failed: failed,
+                                batch_id: null, // Batches might be handled differently now
+                                skipped_blank: 0,
+                                skipped_duplicates: 0,
+                            });
+                            setUploadStep(4);
+                            fetchStats();
+                            fetchContacts();
+                            fetchDomains();
+                        }
+                    }
+                } catch { /* ignore polling errors */ }
+            }, 500);
+
+        } catch (e: any) { 
+            console.error(e);
+            alert(`Import failed: ${e.message}`); 
+        } finally {
+            setUploading(false);
+        }
     };
 
     const resetUpload = () => {
@@ -1096,12 +1129,13 @@ export default function ContactsPage() {
                                     </td>
                                 </tr>
                             ) : batches.map((b) => {
-                                const meta = b.meta ? (typeof b.meta === "string" ? JSON.parse(b.meta) : b.meta) : {};
-                                const newCount = meta.new ?? b.imported_count ?? 0;
-                                const updatedCount = meta.updated ?? 0;
-                                const skippedDup = meta.skipped_duplicates ?? 0;
+                                const importedCount = b.imported_count || 0;
                                 const failedCount = b.failed_count || 0;
-                                const totalRows = b.total_rows ?? (meta.total_processed || (newCount + updatedCount + failedCount + skippedDup));
+                                const totalRows = b.total_rows || (importedCount + failedCount);
+                                // We don't have skipped_duplicates or updated in separate columns yet,
+                                // so we'll just show 0 for these or handle them via future schema changes.
+                                const skippedDup = 0; 
+                                const updatedCount = 0;
                                 return (
                                     <React.Fragment key={b.id}>
                                         <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
@@ -1118,7 +1152,7 @@ export default function ContactsPage() {
                                                     </Link>
                                                 </div>
                                             </td>
-                                            <td style={{ padding: "10px 16px", color: colors.success, fontWeight: 600 }}>{newCount}</td>
+                                            <td style={{ padding: "10px 16px", color: colors.success, fontWeight: 600 }}>{importedCount}</td>
                                             <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{updatedCount}</td>
                                             <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{skippedDup}</td>
                                             <td style={{ padding: "10px 16px" }}>
@@ -1348,8 +1382,8 @@ export default function ContactsPage() {
                             </div>
                         )}
 
-                        {/* Step 3: Validation */}
-                        {uploadStep === 3 && (
+                        {/* Step 3: Validation (Only show if not polling) */}
+                        {uploadStep === 3 && !jobProgress && (
                             <div>
                                 <div style={{ padding: "16px", backgroundColor: colors.bgMuted, borderRadius: "8px", marginBottom: "16px" }}>
                                     <p style={{ margin: "0 0 10px", fontSize: "14px", fontWeight: 500, color: colors.text }}>Ready to import</p>
