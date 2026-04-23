@@ -18,8 +18,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] BG_W
 logger = logging.getLogger(__name__)
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
+QUEUE_NAME = "background_tasks_v4"
 EXCHANGE_NAME = "background_exchange"
-QUEUE_NAME = "background_tasks"
 
 # SSL context for RabbitMQ (amqps://) connections
 # Production: full cert verification (default). Dev: set AMQP_SKIP_TLS_VERIFY=true to bypass.
@@ -147,12 +147,9 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
                 )
                 await message.ack()
             else:
-                # CRITICAL: Unknown task types (e.g. 'contact_import' handled by import_worker)
-                # must be REQUEUED so the correct worker can process them.
-                # Silently ACKing here would cause the task to be lost forever.
-                logger.info(f"Task type '{task_type}' is not for this worker — requeuing for import_worker.")
+                logger.warning(f"Task type '{task_type}' is not for this worker. Moving to DLQ.")
                 if not message.processed:
-                    await message.nack(requeue=True)
+                    await message.nack(requeue=False)
                 
         except Exception as e:
             logger.error(f"Error processing background task: {e}")
@@ -168,7 +165,15 @@ async def main():
         await channel.set_qos(prefetch_count=1)
         
         exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
-        queue = await channel.declare_queue(QUEUE_NAME, durable=True)
+        # Match API declaration exactly
+        queue = await channel.declare_queue(
+            QUEUE_NAME, 
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": "dead_letter_exchange",
+                "x-dead-letter-routing-key": "task.failed"
+            }
+        )
         await queue.bind(exchange, routing_key="task.process")
         
         logger.info(f"Listening on queue {QUEUE_NAME}...")
