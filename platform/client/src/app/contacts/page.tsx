@@ -16,7 +16,9 @@ import {
     FileText,
     Download,
     Globe2,
-    Loader2
+    Loader2,
+    CheckCircle2,
+    XCircle
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -276,7 +278,8 @@ export default function ContactsPage() {
         const controller = new AbortController();
         batchesAbortRef.current = controller;
         try {
-            const res = await fetch(`${API_BASE}/contacts/batches`, { headers: apiHeaders(token), signal: controller.signal });
+            // Add timestamp to bypass browser caching of the batches list
+            const res = await fetch(`${API_BASE}/contacts/batches?t=${Date.now()}`, { headers: apiHeaders(token), signal: controller.signal });
             if (res.ok) {
                 const data = await res.json();
                 setBatches(data.data || []);
@@ -292,15 +295,23 @@ export default function ContactsPage() {
     useEffect(() => { fetchStats(); }, [token]);
     useEffect(() => { fetchContacts(); }, [token, page, deferredSearch, batchFilter, domainFilter]);
     useEffect(() => { fetchDomains(); }, [token, batchFilter]);
-    useEffect(() => { fetchBatches(); }, [token]);
     useEffect(() => {
+        // Initial fetch
+        fetchBatches();
+
+        // Background polling for import history (batches)
+        const historyInterval = setInterval(() => {
+            fetchBatches();
+        }, 3000);
+
         return () => {
+            clearInterval(historyInterval);
             if (pollRef.current) clearInterval(pollRef.current);
             contactsAbortRef.current?.abort();
             domainsAbortRef.current?.abort();
             batchesAbortRef.current?.abort();
         };
-    }, []);
+    }, [token]);
 
     // ===== Selection =====
     const toggleSelect = (id: string) => {
@@ -430,7 +441,8 @@ export default function ContactsPage() {
             pollRef.current = setInterval(async () => {
                 try {
                     // Update this endpoint to poll the new import_jobs table
-                    const jr = await fetch(`${API_BASE}/contacts/jobs/${initData.job_id}`, { headers: apiHeaders(token!) });
+                    // Add timestamp to bypass browser caching
+                    const jr = await fetch(`${API_BASE}/contacts/jobs/${initData.job_id}?t=${Date.now()}`, { headers: apiHeaders(token!) });
                     if (jr.ok) {
                         const job = await jr.json();
                         // For the new table, we expect: status, processed_rows, failed_rows, total_rows
@@ -454,18 +466,26 @@ export default function ContactsPage() {
                                 total: total,
                                 success: processed,
                                 failed: failed,
-                                batch_id: null, // Batches might be handled differently now
+                                batch_id: null,
                                 skipped_blank: 0,
                                 skipped_duplicates: 0,
                             });
                             setUploadStep(4);
+                            // Refresh all data
                             fetchStats();
                             fetchContacts();
                             fetchDomains();
+                            fetchBatches();
+                            // Second check after a tiny delay just to be 100% safe
+                            setTimeout(() => fetchBatches(), 1500);
                         }
+                    } else {
+                        console.error("Polling fetch failed:", jr.status);
                     }
-                } catch { /* ignore polling errors */ }
-            }, 500);
+                } catch (err) { 
+                    console.error("Polling error caught:", err);
+                }
+            }, 1000);
 
         } catch (e: any) { 
             console.error(e);
@@ -1104,157 +1124,74 @@ export default function ContactsPage() {
 
             {/* ===== TAB: Import History ===== */}
             {activeTab === "history" && (
-                <div style={{ border: `1px solid ${colors.border}`, borderRadius: "8px", overflow: "hidden" }}>
+                <div className="glass-panel shadow-card" style={{ 
+                    border: `1px solid ${colors.border}`, borderRadius: "12px", 
+                    overflow: "hidden", marginTop: "16px"
+                }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                         <thead>
-                            <tr style={{ backgroundColor: colors.bgMuted, borderBottom: `1px solid ${colors.border}` }}>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>File Name</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>New</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Existing</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Skipped (dup)</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Failed</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Total Rows</th>
-                                <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Import Date</th>
-                                <th style={{ padding: "10px 16px", width: "200px" }}></th>
+                            <tr style={{ backgroundColor: "var(--bg-hover)", borderBottom: `1px solid ${colors.border}` }}>
+                                <th style={{ padding: "16px 20px", textAlign: "left", fontWeight: 500, color: "var(--text-muted)" }}>File Name</th>
+                                <th style={{ padding: "16px 20px", textAlign: "left", fontWeight: 500, color: "var(--text-muted)" }}>Status</th>
+                                <th style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500, color: "var(--text-muted)" }}>New</th>
+                                <th style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500, color: "var(--text-muted)" }}>Failed</th>
+                                <th style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500, color: "var(--text-muted)" }}>Total</th>
+                                <th style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500, color: "var(--text-muted)" }}>Date</th>
+                                <th style={{ padding: "16px 20px", width: "100px" }}></th>
                             </tr>
                         </thead>
                         <tbody>
-                            {batchesLoading ? (
-                                <tr><td colSpan={6} style={{ padding: "32px", textAlign: "center", color: colors.textSecondary }}>Loading...</td></tr>
+                            {batchesLoading && batches.length === 0 ? (
+                                <tr><td colSpan={7} style={{ padding: "64px", textAlign: "center" }}><Loader2 className="spinner" /></td></tr>
                             ) : batches.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} style={{ padding: "48px", textAlign: "center", color: colors.textSecondary }}>
-                                        <FileText style={{ width: "24px", height: "24px", marginBottom: "8px", opacity: 0.4 }} />
-                                        <p>No imports yet</p>
+                                    <td colSpan={7} style={{ padding: "80px 40px", textAlign: "center" }}>
+                                        <FileText style={{ width: "48px", height: "48px", margin: "0 auto 16px", opacity: 0.2, color: "var(--text-muted)" }} />
+                                        <p style={{ color: "var(--text-muted)" }}>No import history found.</p>
                                     </td>
                                 </tr>
-                            ) : batches.map((b) => {
-                                const importedCount = b.imported_count || 0;
-                                const failedCount = b.failed_count || 0;
-                                const totalRows = b.total_rows || (importedCount + failedCount);
-                                // We don't have skipped_duplicates or updated in separate columns yet,
-                                // so we'll just show 0 for these or handle them via future schema changes.
-                                const skippedDup = 0; 
-                                const updatedCount = 0;
-                                return (
-                                    <React.Fragment key={b.id}>
-                                        <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                                            <td style={{ padding: "10px 16px", color: colors.text, fontWeight: 500 }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                    <FileText style={{ width: "14px", height: "14px", color: colors.textSecondary }} />
-                                                    <Link
-                                                        href={`/contacts/batch/${b.id}`}
-                                                        style={{ color: colors.accent, textDecoration: "none", fontWeight: 500 }}
-                                                        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-                                                        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
-                                                    >
-                                                        {b.file_name}
-                                                    </Link>
-                                                </div>
-                                            </td>
-                                            <td style={{ padding: "10px 16px", color: colors.success, fontWeight: 600 }}>{importedCount}</td>
-                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{updatedCount}</td>
-                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{skippedDup}</td>
-                                            <td style={{ padding: "10px 16px" }}>
-                                                {failedCount > 0 ? (
-                                                    <button
-                                                        onClick={() => setExpandedBatch(expandedBatch === b.id ? null : b.id)}
-                                                        style={{
-                                                            background: colors.dangerBg,
-                                                            border: `1px solid ${colors.dangerBorder}`,
-                                                            borderRadius: "12px",
-                                                            padding: "2px 10px",
-                                                            fontSize: "13px",
-                                                            color: colors.danger,
-                                                            fontWeight: 600,
-                                                            cursor: "pointer",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            gap: "4px"
-                                                        }}
-                                                    >
-                                                        {failedCount} failed
-                                                        <span style={{ fontSize: "10px" }}>{expandedBatch === b.id ? "▲" : "▼"}</span>
-                                                    </button>
-                                                ) : (
-                                                    <span style={{ color: colors.textSecondary }}>0</span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: "10px 16px", color: colors.textSecondary }}>{totalRows}</td>
-                                            <td style={{ padding: "10px 16px", color: colors.textSecondary, fontSize: "13px" }}>
-                                                {new Date(b.created_at).toLocaleDateString()} {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                            </td>
-                                            <td style={{ padding: "10px 16px", display: "flex", gap: "8px" }}>
-                                                <button
-                                                    onClick={() => handleBatchExport(b.id, b.file_name)}
-                                                    disabled={downloadingBatch === b.id}
-                                                    style={{ ...btnOutline, fontSize: "13px", padding: "6px 12px", width: "80px", display: "flex", justifyContent: "center" }}
-                                                >
-                                                    {downloadingBatch === b.id ? <Loader2 className="spinner" style={{ width: "13px", height: "13px" }} /> : <Download style={{ width: "13px", height: "13px" }} />}
-                                                    <span style={{ marginLeft: "4px" }}>Export</span>
-                                                </button>
-                                                <button onClick={() => setShowBatchDelete(b)} style={{ ...btnOutline, fontSize: "13px", padding: "6px 12px", color: colors.danger, borderColor: colors.dangerBorder }}>
-                                                    <Trash2 style={{ width: "13px", height: "13px" }} /> Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    {/* Expanded error details */}
-                                    {expandedBatch === b.id && b.errors && (Array.isArray(b.errors) ? b.errors : JSON.parse(b.errors as any)).length > 0 && (
-                                        <tr>
-                                            <td colSpan={6} style={{ padding: "0 16px 16px", backgroundColor: "var(--bg-card)" }}>
-                                                <div style={{
-                                                    border: `1px solid ${colors.dangerBorder}`,
-                                                    borderRadius: "8px",
-                                                    overflow: "hidden",
-                                                    marginTop: "8px"
-                                                }}>
-                                                    <div style={{
-                                                        padding: "10px 14px",
-                                                        backgroundColor: colors.dangerBg,
-                                                        borderBottom: `1px solid ${colors.dangerBorder}`,
-                                                        display: "flex",
-                                                        justifyContent: "space-between",
-                                                        alignItems: "center"
-                                                    }}>
-                                                        <span style={{ fontSize: "13px", fontWeight: 600, color: colors.danger }}>
-                                                            Failed Contacts — Edit and add to resolve
-                                                        </span>
-                                                    </div>
-                                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                                                        <thead>
-                                                            <tr style={{ backgroundColor: "var(--bg-hover)" }}>
-                                                                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: colors.textSecondary, width: "50px" }}>Row</th>
-                                                                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Email</th>
-                                                                <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500, color: colors.textSecondary }}>Reason</th>
-                                                                <th style={{ padding: "8px 12px", width: "80px" }}></th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {(Array.isArray(b.errors) ? b.errors : JSON.parse(b.errors as any)).map((err: any, idx: number) => (
-                                                                <ErrorRow
-                                                                    key={idx}
-                                                                    err={err}
-                                                                    idx={idx}
-                                                                    batchId={b.id}
-                                                                    token={token!}
-                                                                    colors={colors}
-                                                                    onResolved={() => {
-                                                                        fetchBatches();
-                                                                        fetchContacts();
-                                                                        fetchStats();
-                                                                        fetchDomains();
-                                                                    }}
-                                                                />
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                    </React.Fragment>
-                                );
-                            })}
+                            ) : batches.map((b) => (
+                                <tr key={b.id} style={{ borderBottom: `1px solid ${colors.border}`, transition: "background 150ms" }}>
+                                    <td style={{ padding: "16px 20px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                            <div style={{ 
+                                                width: "32px", height: "32px", borderRadius: "8px", 
+                                                backgroundColor: "rgba(59, 130, 246, 0.1)", 
+                                                display: "flex", alignItems: "center", justifyContent: "center" 
+                                            }}>
+                                                <FileText style={{ width: "16px", height: "16px", color: "var(--accent)" }} />
+                                            </div>
+                                            <span style={{ fontWeight: 600 }}>{b.file_name}</span>
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: "16px 20px" }}>
+                                        {b.status === "completed" ? (
+                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--success)", fontSize: "13px", fontWeight: 500 }}>
+                                                <CheckCircle2 style={{ width: "14px", height: "14px" }} /> Done
+                                            </div>
+                                        ) : b.status === "failed" ? (
+                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--danger)", fontSize: "13px", fontWeight: 500 }}>
+                                                <XCircle style={{ width: "14px", height: "14px" }} /> Failed
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--accent)", fontSize: "13px", fontWeight: 500 }}>
+                                                <Loader2 className="spinner" style={{ width: "14px", height: "14px" }} /> Importing...
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--success)", fontWeight: 700 }}>{b.imported_count}</td>
+                                    <td style={{ padding: "16px 20px", textAlign: "right", color: b.failed_count > 0 ? "var(--danger)" : "var(--text-muted)" }}>{b.failed_count}</td>
+                                    <td style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500 }}>{b.total_rows}</td>
+                                    <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--text-muted)", fontSize: "13px" }}>
+                                        {new Date(b.created_at).toLocaleDateString()}
+                                    </td>
+                                    <td style={{ padding: "16px 20px", textAlign: "right" }}>
+                                        <button onClick={() => setShowBatchDelete(b)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+                                            <Trash2 style={{ width: "16px", height: "16px" }} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
