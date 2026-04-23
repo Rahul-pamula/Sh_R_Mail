@@ -1,5 +1,5 @@
 /**
- * CENTRALIZED API CLIENT
+ * CENTRALIZED API CLIENT (Moved to native fetch, fully removing Axios)
  * 
  * 🔒 Security Guarantee:
  * - Every API request MUST include X-Tenant-ID header
@@ -9,114 +9,126 @@
  * 🎯 Usage:
  * - Import `api` from this file
  * - Use `api.get()`, `api.post()`, etc.
- * - NEVER use raw `fetch()` or `axios()` directly
  */
 
-import axios, { AxiosError } from 'axios';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Base API configuration
-export const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-    timeout: 30000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
+async function fetchWithInterceptor(endpoint: string, options: RequestInit = {}) {
+    // 1. Intercept Request: Inject Tenant ID
+    const storedUser = localStorage.getItem('email_engine_user');
 
-/**
- * Request Interceptor: Inject Tenant ID
- * 
- * This runs BEFORE every API request.
- * It ensures tenant context is always present.
- */
-api.interceptors.request.use(
-    (config) => {
-        // Get tenant ID from localStorage (synced with AuthContext)
-        const storedUser = localStorage.getItem('email_engine_user');
+    if (!storedUser) {
+        throw new Error('🚨 SECURITY: No authenticated user found. Blocking API call.');
+    }
 
-        if (!storedUser) {
-            throw new Error('🚨 SECURITY: No authenticated user found. Blocking API call.');
-        }
+    let tenantId: string | null = null;
+    let token: string | null = null;
 
-        let tenantId: string | null = null;
+    try {
+        const user = JSON.parse(storedUser);
+        tenantId = user.tenantId;
+        token = user.token || null;
+    } catch (e) {
+        throw new Error('🚨 SECURITY: Invalid user session. Blocking API call.');
+    }
 
+    if (!tenantId) {
+        throw new Error('🚨 SECURITY: Tenant ID missing. Blocking API call to prevent data leakage.');
+    }
+
+    // Set up headers securely
+    const headers = new Headers(options.headers || {});
+    
+    // Automatically set Content-Type to JSON if sending raw object data, unless they passed FormData
+    if (!headers.has('Content-Type') && !(typeof window !== 'undefined' && options.body instanceof FormData)) {
+        headers.set('Content-Type', 'application/json');
+    }
+
+    headers.set('X-Tenant-ID', tenantId);
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const fullUrl = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
+
+    console.log(`[API] ${options.method || 'GET'} ${fullUrl} | Tenant: ${tenantId}`);
+
+    // Execute Request
+    const response = await fetch(fullUrl, {
+        ...options,
+        headers
+    });
+
+    // 2. Intercept Response: Handle Errors like Axios did
+    if (!response.ok) {
+        const status = response.status;
+        let errorData = null;
         try {
-            const user = JSON.parse(storedUser);
-            tenantId = user.tenantId;
+            errorData = await response.json();
         } catch (e) {
-            throw new Error('🚨 SECURITY: Invalid user session. Blocking API call.');
+            errorData = await response.text();
         }
 
-        if (!tenantId) {
-            throw new Error('🚨 SECURITY: Tenant ID missing. Blocking API call to prevent data leakage.');
+        switch (status) {
+            case 400: console.error('[API] Bad Request:', errorData); break;
+            case 401:
+                console.error('[API] Unauthorized - redirecting to login');
+                localStorage.removeItem('email_engine_user');
+                if (typeof window !== 'undefined') window.location.href = '/login';
+                break;
+            case 403: console.error('[API] Forbidden - tenant access denied'); break;
+            case 404: console.error('[API] Not Found:', fullUrl); break;
+            case 500: console.error('[API] Server Error'); break;
+            default: console.error('[API] Error:', status, errorData);
         }
 
-        // Inject tenant header
-        config.headers['X-Tenant-ID'] = tenantId;
-
-        // Optional: Add auth token if you implement real auth later
-        // config.headers['Authorization'] = `Bearer ${user.token}`;
-
-        console.log(`[API] ${config.method?.toUpperCase()} ${config.url} | Tenant: ${tenantId}`);
-
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
+        // Emulate Axios error wrapper
+        const error = new Error(`Request failed with status code ${status}`) as any;
+        error.response = { status, data: errorData };
+        throw error;
     }
-);
 
-/**
- * Response Interceptor: Handle Errors
- * 
- * Centralized error handling for common scenarios.
- */
-api.interceptors.response.use(
-    (response) => {
-        return response;
-    },
-    (error: AxiosError) => {
-        if (error.response) {
-            const status = error.response.status;
-
-            // Handle common HTTP errors
-            switch (status) {
-                case 400:
-                    console.error('[API] Bad Request:', error.response.data);
-                    break;
-                case 401:
-                    console.error('[API] Unauthorized - redirecting to login');
-                    // Clear invalid session
-                    localStorage.removeItem('email_engine_user');
-                    window.location.href = '/login';
-                    break;
-                case 403:
-                    console.error('[API] Forbidden - tenant access denied');
-                    break;
-                case 404:
-                    console.error('[API] Not Found:', error.config?.url);
-                    break;
-                case 500:
-                    console.error('[API] Server Error');
-                    break;
-                default:
-                    console.error('[API] Error:', status, error.response.data);
-            }
-        } else if (error.request) {
-            console.error('[API] Network Error - no response received');
-        } else {
-            console.error('[API] Request Setup Error:', error.message);
-        }
-
-        return Promise.reject(error);
+    // Axios automatically parses JSON, so we emulate that
+    const contentType = response.headers.get('content-type');
+    let data;
+    if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+    } else {
+        data = await response.text();
     }
-);
+
+    return { data, status: response.status, headers: response.headers };
+}
+
+// Emulate the Axios API shape that your components are currently using:
+export const api = {
+    get: (url: string, config?: any) => fetchWithInterceptor(url, { method: 'GET', ...config }),
+    
+    post: (url: string, data?: any, config?: any) => fetchWithInterceptor(url, { 
+        method: 'POST', 
+        body: data instanceof FormData ? data : JSON.stringify(data), 
+        ...config 
+    }),
+    
+    patch: (url: string, data?: any, config?: any) => fetchWithInterceptor(url, { 
+        method: 'PATCH', 
+        body: data instanceof FormData ? data : JSON.stringify(data), 
+        ...config 
+    }),
+    
+    put: (url: string, data?: any, config?: any) => fetchWithInterceptor(url, { 
+        method: 'PUT', 
+        body: data instanceof FormData ? data : JSON.stringify(data), 
+        ...config 
+    }),
+    
+    delete: (url: string, config?: any) => fetchWithInterceptor(url, { method: 'DELETE', ...config })
+};
 
 /**
  * Type-safe API helpers
  */
 export const apiClient = {
-    // Campaigns
     campaigns: {
         list: () => api.get('/campaigns'),
         get: (id: string) => api.get(`/campaigns/${id}`),
@@ -126,19 +138,13 @@ export const apiClient = {
         send: (id: string, data: any) => api.post(`/campaigns/${id}/send`, data),
         preview: (id: string, contact?: any) => api.post(`/campaigns/${id}/preview`, contact),
     },
-
-    // Contacts
     contacts: {
         upload: (file: File, projectId: string) => {
             const formData = new FormData();
             formData.append('file', file);
-            return api.post(`/contacts/upload?project_id=${projectId}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            return api.post(`/contacts/upload?project_id=${projectId}`, formData);
         },
     },
-
-    // Analytics
     analytics: {
         getStats: (projectId: string) => api.get(`/webhooks/stats?project_id=${projectId}`),
     },

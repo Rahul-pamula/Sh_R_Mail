@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const { setTheme } = useTheme();
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isRefreshing = useRef<boolean>(false);
 
     // Check for existing session on mount
     useEffect(() => {
@@ -246,7 +247,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const silentRefresh = async (): Promise<string | null> => {
+        if (isRefreshing.current) {
+            console.log('Skipping silent refresh: already in progress');
+            return null;
+        }
+
+        isRefreshing.current = true;
         try {
+            console.log('Initiating silent token refresh...');
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
                 method: 'POST',
                 credentials: 'include', // Sends HttpOnly cookie
@@ -260,14 +268,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.log('Silent token refresh successful');
                 return data.token;
             } else {
-                throw new Error('Refresh failed');
+                const errorData = await response.json().catch(() => ({}));
+                console.warn('Refresh failed on server:', response.status, errorData);
+                throw new Error(errorData.detail || `Refresh failed with status ${response.status}`);
             }
         } catch (err) {
-            console.error('Silent refresh failed:', err);
+            console.error('Silent refresh failed error:', err);
             // Don't call logout() directly here to avoid redirect loops on public pages
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user_data');
             return null;
+        } finally {
+            isRefreshing.current = false;
         }
     };
 
