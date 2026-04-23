@@ -26,6 +26,11 @@ class StorageProvider(ABC):
         """Deletes a file by its key."""
         pass
 
+    @abstractmethod
+    def generate_presigned_post(self, key: str, content_type: str, expires_in: int = 3600) -> Dict:
+        """Generates a presigned URL/POST data for direct client-side upload."""
+        pass
+
 class LocalStorageProvider(StorageProvider):
     """
     Implementation for Local Disk Storage.
@@ -69,6 +74,14 @@ class LocalStorageProvider(StorageProvider):
             os.remove(file_path)
             return True
         return False
+
+    def generate_presigned_post(self, key: str, content_type: str, expires_in: int = 3600) -> Dict:
+        """Mock implementation for local storage."""
+        return {
+            "url": f"{self.base_url}/{key}",
+            "fields": {"key": key, "Content-Type": content_type},
+            "method": "PUT" # Local uses PUT via static serving usually, or a custom route
+        }
 
 # Placeholder for S3 - This shows verify scalability
 import boto3
@@ -141,6 +154,16 @@ class S3StorageProvider(StorageProvider):
     def delete(self, key: str) -> bool:
         self.s3_client.delete_object(Bucket=self.bucket_name, Key=key)
         return True
+
+    def generate_presigned_post(self, key: str, content_type: str, expires_in: int = 3600) -> Dict:
+        """Returns a presigned POST policy for direct S3 upload."""
+        return self.s3_client.generate_presigned_post(
+            Bucket=self.bucket_name,
+            Key=key,
+            Fields={"Content-Type": content_type},
+            Conditions=[{"Content-Type": content_type}],
+            ExpiresIn=expires_in
+        )
 
 def get_storage_provider() -> StorageProvider:
     """Factory method to get the configured storage provider."""
