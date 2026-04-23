@@ -179,19 +179,33 @@ async def process_contact_import(payload: dict):
         # Final Update
         total_processed = imported_rows + failed_rows
 
-        # 1. Update the Batch History table FIRST (so UI sees it immediately)
+        # 1. Update the Batch History table (Defensive update)
         try:
-            db.client.table("import_batches").update({
+            # Try full update first
+            payload = {
                 "status": "completed",
                 "imported_count": new_count,
                 "updated_count": updated_count,
                 "skipped_duplicates": skipped_duplicates,
                 "failed_count": failed_rows,
                 "total_rows": total_processed,
-                "errors": errors_for_ui[:200] # Store first 200 for UI
-            }).eq("id", job_id).execute()
-        except Exception as batch_err:
-            logger.warning(f"Failed to update import_batches history: {batch_err}")
+                "errors": errors_for_ui[:200]
+            }
+            res = db.client.table("import_batches").update(payload).eq("id", job_id).execute()
+        except Exception as e:
+            logger.warning(f"Failed full update for import_batches (likely missing columns): {e}")
+            # Fallback to standard columns only
+            try:
+                fallback_payload = {
+                    "status": "completed",
+                    "imported_count": imported_rows, # use old variable for total success
+                    "failed_count": failed_rows,
+                    "total_rows": total_processed,
+                    "errors": errors_for_ui[:200]
+                }
+                db.client.table("import_batches").update(fallback_payload).eq("id", job_id).execute()
+            except Exception as final_e:
+                logger.error(f"Critical failure updating import_batches: {final_e}")
 
         # 2. THEN signal job completion to the UI
         db.client.table("import_jobs").update({

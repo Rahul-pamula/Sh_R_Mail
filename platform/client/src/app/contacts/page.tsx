@@ -14,6 +14,7 @@ import {
     AlertTriangle,
     Check,
     FileText,
+    FileSpreadsheet,
     Download,
     Globe2,
     Loader2,
@@ -63,6 +64,7 @@ interface Batch {
     failed_count: number;
     status: string;
     errors?: any;
+    meta?: any;
     created_at: string;
 }
 
@@ -174,7 +176,14 @@ export default function ContactsPage() {
 
     // Batches
     const [batches, setBatches] = useState<Batch[]>([]);
-    const [batchesLoading, setBatchesLoading] = useState(false);
+    const [batchesLoading, setBatchesLoading] = useState(true);
+    const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+    const [batchDomains, setBatchDomains] = useState<DomainStat[]>([]);
+    const [batchDomainsLoading, setBatchDomainsLoading] = useState(false);
+    const [batchContacts, setBatchContacts] = useState<Contact[]>([]);
+    const [batchContactsLoading, setBatchContactsLoading] = useState(false);
+    const [batchSearch, setBatchSearch] = useState("");
+    const [batchDomainFilter, setBatchDomainFilter] = useState<string | null>(null);
     const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
 
     // Modals
@@ -295,23 +304,15 @@ export default function ContactsPage() {
     useEffect(() => { fetchStats(); }, [token]);
     useEffect(() => { fetchContacts(); }, [token, page, deferredSearch, batchFilter, domainFilter]);
     useEffect(() => { fetchDomains(); }, [token, batchFilter]);
+    
+    // Optimized Polling: Only poll history if specifically on that tab
     useEffect(() => {
-        // Initial fetch
-        fetchBatches();
-
-        // Background polling for import history (batches)
-        const historyInterval = setInterval(() => {
+        if (token && activeTab === "history") {
             fetchBatches();
-        }, 3000);
-
-        return () => {
-            clearInterval(historyInterval);
-            if (pollRef.current) clearInterval(pollRef.current);
-            contactsAbortRef.current?.abort();
-            domainsAbortRef.current?.abort();
-            batchesAbortRef.current?.abort();
-        };
-    }, [token]);
+            const interval = setInterval(fetchBatches, 8000); // Poll every 8 seconds to prevent "looping" logs
+            return () => clearInterval(interval);
+        }
+    }, [token, activeTab]);
 
     // ===== Selection =====
     const toggleSelect = (id: string) => {
@@ -597,6 +598,88 @@ export default function ContactsPage() {
     });
 
     const highlightedBatch = batches.find((entry) => entry.id === batchFilter) || null;
+
+    const handleSelectBatch = async (batch: Batch) => {
+        if (expandedBatch === batch.id) {
+            setExpandedBatch(null);
+            return;
+        }
+        
+        // 1. Instantly show the expanded row (loading state)
+        setExpandedBatch(batch.id);
+        setBatchDomainsLoading(true);
+        setBatchContactsLoading(true);
+        setBatchSearch("");
+        setBatchDomainFilter(null);
+        
+        try {
+            // 2. Fetch data
+            const [domainRes, contactRes] = await Promise.all([
+                fetch(`${API_BASE}/contacts/domains?batch_id=${batch.id}`, { headers: apiHeaders(token!) }),
+                fetch(`${API_BASE}/contacts/?batch_id=${batch.id}&limit=10`, { headers: apiHeaders(token!) })
+            ]);
+
+            const domainData = await domainRes.json();
+            const contactData = await contactRes.json();
+
+            setBatchDomains(domainData.data || []);
+            setBatchContacts(contactData.data || []);
+        } catch (e) {
+            console.error("Failed to fetch batch details", e);
+        } finally {
+            setBatchDomainsLoading(false);
+            setBatchContactsLoading(false);
+        }
+    };
+
+    const fetchBatchContacts = async (batchId: string, search: string, domain: string | null) => {
+        setBatchContactsLoading(true);
+        try {
+            const params = new URLSearchParams({
+                batch_id: batchId,
+                limit: "10",
+                ...(search ? { search } : {}),
+                ...(domain ? { domains: domain } : {})
+            });
+            const res = await fetch(`${API_BASE}/contacts/?${params}`, {
+                headers: apiHeaders(token!)
+            });
+            const data = await res.json();
+            setBatchContacts(data.data || []);
+        } catch (e) {
+            console.error("Failed to fetch batch contacts", e);
+        } finally {
+            setBatchContactsLoading(false);
+        }
+    };
+
+    // Debounced search for batch contacts
+    useEffect(() => {
+        if (expandedBatch) {
+            const timer = setTimeout(() => {
+                fetchBatchContacts(expandedBatch, batchSearch, batchDomainFilter);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [batchSearch, batchDomainFilter, expandedBatch]);
+
+    const handleExportBatch = async (batchId: string, fileName: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/contacts/export?batch_id=${batchId}`, {
+                headers: apiHeaders(token!)
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `export_${fileName.replace(/\.[^/.]+$/, "")}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } catch (e) {
+            alert("Failed to export batch.");
+        }
+    };
 
     const handleExport = async () => {
         if (!token) return;
@@ -1151,46 +1234,263 @@ export default function ContactsPage() {
                                     </td>
                                 </tr>
                             ) : batches.map((b) => (
-                                <tr key={b.id} style={{ borderBottom: `1px solid ${colors.border}`, transition: "background 150ms" }}>
-                                    <td style={{ padding: "16px 20px" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                            <div style={{ 
-                                                width: "32px", height: "32px", borderRadius: "8px", 
-                                                backgroundColor: "rgba(59, 130, 246, 0.1)", 
-                                                display: "flex", alignItems: "center", justifyContent: "center" 
-                                            }}>
-                                                <FileText style={{ width: "16px", height: "16px", color: "var(--accent)" }} />
+                                <React.Fragment key={b.id}>
+                                    <tr 
+                                        onClick={() => handleSelectBatch(b)}
+                                        style={{ 
+                                            borderBottom: `1px solid ${colors.border}`, 
+                                            cursor: "pointer", transition: "background 150ms",
+                                            backgroundColor: expandedBatch === b.id ? "rgba(59, 130, 246, 0.03)" : "transparent"
+                                        }}
+                                        onMouseEnter={(e) => { if (expandedBatch !== b.id) e.currentTarget.style.backgroundColor = "var(--bg-hover)"; }}
+                                        onMouseLeave={(e) => { if (expandedBatch !== b.id) e.currentTarget.style.backgroundColor = "transparent"; }}
+                                    >
+                                        <td style={{ padding: "16px 20px" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                <div style={{ 
+                                                    width: "32px", height: "32px", borderRadius: "8px", 
+                                                    backgroundColor: "rgba(59, 130, 246, 0.1)", 
+                                                    display: "flex", alignItems: "center", justifyContent: "center" 
+                                                }}>
+                                                    <FileSpreadsheet style={{ width: "16px", height: "16px", color: "var(--accent)" }} />
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleSelectBatch(b); }}
+                                                    style={{ 
+                                                        background: "none", border: "none", padding: 0,
+                                                        color: "var(--accent)", fontWeight: 700, fontSize: "14px",
+                                                        cursor: "pointer", textAlign: "left",
+                                                        textDecoration: "underline", textDecorationColor: "transparent",
+                                                        transition: "all 0.2s"
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.textDecorationColor = "var(--accent)"}
+                                                    onMouseLeave={(e) => e.currentTarget.style.textDecorationColor = "transparent"}
+                                                >
+                                                    {b.file_name}
+                                                </button>
                                             </div>
-                                            <span style={{ fontWeight: 600 }}>{b.file_name}</span>
-                                        </div>
-                                    </td>
-                                    <td style={{ padding: "16px 20px" }}>
-                                        {b.status === "completed" ? (
-                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--success)", fontSize: "13px", fontWeight: 500 }}>
-                                                <CheckCircle2 style={{ width: "14px", height: "14px" }} /> Done
+                                        </td>
+                                        <td style={{ padding: "16px 20px" }}>
+                                            {b.status === "completed" ? (
+                                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--success)", fontSize: "13px", fontWeight: 500 }}>
+                                                    <CheckCircle2 style={{ width: "14px", height: "14px" }} /> Done
+                                                </div>
+                                            ) : b.status === "failed" ? (
+                                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--danger)", fontSize: "13px", fontWeight: 500 }}>
+                                                    <XCircle style={{ width: "14px", height: "14px" }} /> Failed
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--accent)", fontSize: "13px", fontWeight: 500 }}>
+                                                    <Loader2 className="spinner" style={{ width: "14px", height: "14px" }} /> Importing...
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--success)", fontWeight: 700 }}>{b.imported_count}</td>
+                                        <td style={{ padding: "16px 20px", textAlign: "right", color: b.failed_count > 0 ? "var(--danger)" : "var(--text-muted)" }}>{b.failed_count}</td>
+                                        <td style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500 }}>{b.total_rows}</td>
+                                        <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--text-muted)", fontSize: "13px" }}>
+                                            {new Date(b.created_at).toLocaleDateString()}
+                                        </td>
+                                        <td style={{ padding: "16px 20px", textAlign: "right" }}>
+                                            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "12px" }}>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleExportBatch(b.id, b.file_name); }}
+                                                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", transition: "color 0.2s" }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.color = "var(--accent)"}
+                                                    onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+                                                    title="Export this batch"
+                                                >
+                                                    <Download style={{ width: "18px", height: "18px" }} />
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setShowBatchDelete(b); }} 
+                                                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", transition: "color 0.2s" }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.color = "var(--danger)"}
+                                                    onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+                                                    title="Delete this batch"
+                                                >
+                                                    <Trash2 style={{ width: "18px", height: "18px" }} />
+                                                </button>
                                             </div>
-                                        ) : b.status === "failed" ? (
-                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--danger)", fontSize: "13px", fontWeight: 500 }}>
-                                                <XCircle style={{ width: "14px", height: "14px" }} /> Failed
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--accent)", fontSize: "13px", fontWeight: 500 }}>
-                                                <Loader2 className="spinner" style={{ width: "14px", height: "14px" }} /> Importing...
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--success)", fontWeight: 700 }}>{b.imported_count}</td>
-                                    <td style={{ padding: "16px 20px", textAlign: "right", color: b.failed_count > 0 ? "var(--danger)" : "var(--text-muted)" }}>{b.failed_count}</td>
-                                    <td style={{ padding: "16px 20px", textAlign: "right", fontWeight: 500 }}>{b.total_rows}</td>
-                                    <td style={{ padding: "16px 20px", textAlign: "right", color: "var(--text-muted)", fontSize: "13px" }}>
-                                        {new Date(b.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td style={{ padding: "16px 20px", textAlign: "right" }}>
-                                        <button onClick={() => setShowBatchDelete(b)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
-                                            <Trash2 style={{ width: "16px", height: "16px" }} />
-                                        </button>
-                                    </td>
-                                </tr>
+                                        </td>
+                                    </tr>
+
+                                    {expandedBatch === b.id && (
+                                        <tr style={{ backgroundColor: "rgba(255,255,255,0.01)" }}>
+                                            <td colSpan={7} style={{ padding: "24px 40px", borderBottom: `1px solid ${colors.border}` }}>
+                                                <div className="fade-in">
+                                                    {/* Row 1: Summary Statistics Bar */}
+                                                    <div style={{ 
+                                                        display: "flex", gap: "24px", marginBottom: "20px", 
+                                                        padding: "16px", backgroundColor: "rgba(255,255,255,0.02)", 
+                                                        borderRadius: "10px", border: `1px solid ${colors.border}` 
+                                                    }}>
+                                                        <div>
+                                                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>New Contacts</div>
+                                                            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--success)" }}>{b.imported_count || 0}</div>
+                                                        </div>
+                                                        <div style={{ width: "1px", backgroundColor: colors.border }} />
+                                                        <div>
+                                                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Updated</div>
+                                                            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--accent)" }}>
+                                                                {(() => {
+                                                                    const meta = b.meta ? (typeof b.meta === "string" ? JSON.parse(b.meta) : b.meta) : {};
+                                                                    return meta.updated || 0;
+                                                                })()}
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ width: "1px", backgroundColor: colors.border }} />
+                                                        <div>
+                                                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Duplicates</div>
+                                                            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-muted)" }}>
+                                                                {(() => {
+                                                                    const meta = b.meta ? (typeof b.meta === "string" ? JSON.parse(b.meta) : b.meta) : {};
+                                                                    return meta.skipped_duplicates || 0;
+                                                                })()}
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ width: "1px", backgroundColor: colors.border }} />
+                                                        <div>
+                                                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Failed</div>
+                                                            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--danger)" }}>{b.failed_count || 0}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 2: Typo Warnings & Domain Filters */}
+                                                    {batchDomains.some(d => d.suggested_domain) && (
+                                                        <div style={{ 
+                                                            padding: "12px 16px", borderRadius: "10px", backgroundColor: "rgba(245,158,11,0.08)",
+                                                            border: "1px solid rgba(245,158,11,0.2)", color: "#FDE68A", fontSize: "12px",
+                                                            display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px"
+                                                        }}>
+                                                            <AlertTriangle style={{ width: "16px", height: "16px" }} />
+                                                            <span>
+                                                                Potential typos detected: {batchDomains.filter(d => d.suggested_domain).slice(0, 2).map(d => `${d.domain} → ${d.suggested_domain}`).join(", ")}
+                                                            </span>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="domain-filters-container" style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "20px" }}>
+                                                        <button 
+                                                            onClick={() => setBatchDomainFilter(null)}
+                                                            className={`domain-chip ${!batchDomainFilter ? 'active' : ''}`}
+                                                            style={{ 
+                                                                padding: "6px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 600,
+                                                                backgroundColor: !batchDomainFilter ? "var(--accent)" : "rgba(255,255,255,0.06)",
+                                                                color: !batchDomainFilter ? "white" : "var(--text-muted)", border: "1px solid rgba(255,255,255,0.05)", cursor: "pointer",
+                                                                transition: "all 0.2s"
+                                                            }}
+                                                        >
+                                                            All Domains
+                                                        </button>
+                                                        {batchDomains.map((d, idx) => (
+                                                            <button 
+                                                                key={`${d.domain}-${idx}`}
+                                                                onClick={() => setBatchDomainFilter(d.domain)}
+                                                                style={{ 
+                                                                    padding: "6px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 500,
+                                                                    backgroundColor: batchDomainFilter === d.domain ? "var(--accent)" : "rgba(255,255,255,0.06)",
+                                                                    color: batchDomainFilter === d.domain ? "white" : "var(--text-muted)", 
+                                                                    border: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                                                                    transition: "all 0.2s"
+                                                                }}
+                                                            >
+                                                                {d.domain} <span style={{ opacity: 0.5, fontSize: "10px" }}>{d.count}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "32px" }}>
+                                                        {/* Left Column: Contact List & Search */}
+                                                        <div>
+                                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                                                                <h3 style={{ fontSize: "14px", fontWeight: 600, margin: 0 }}>Imported Contacts</h3>
+                                                                <div style={{ position: "relative", width: "240px" }}>
+                                                                    <Search style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", width: "14px", height: "14px", color: "var(--text-muted)" }} />
+                                                                    <input 
+                                                                        placeholder="Search this batch..."
+                                                                        value={batchSearch}
+                                                                        onChange={(e) => setBatchSearch(e.target.value)}
+                                                                        style={{ 
+                                                                            width: "100%", padding: "6px 10px 6px 32px", fontSize: "12px",
+                                                                            backgroundColor: "rgba(0,0,0,0.2)", border: `1px solid ${colors.border}`,
+                                                                            borderRadius: "6px", color: "white", outline: "none"
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div style={{ maxHeight: "300px", overflowY: "auto", border: `1px solid ${colors.border}`, borderRadius: "8px" }}>
+                                                                {batchContactsLoading ? (
+                                                                    <div style={{ padding: "40px", textAlign: "center" }}><Loader2 className="spinner" /></div>
+                                                                ) : batchContacts.length === 0 ? (
+                                                                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>No contacts found.</div>
+                                                                ) : (
+                                                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                                                                        <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--bg-card)", zIndex: 10 }}>
+                                                                            <tr style={{ textAlign: "left", color: "var(--text-muted)", borderBottom: `1px solid ${colors.border}` }}>
+                                                                                <th style={{ padding: "10px 16px" }}>Email</th>
+                                                                                <th style={{ padding: "10px 16px" }}>Name</th>
+                                                                                <th style={{ padding: "10px 16px" }}>Status</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {batchContacts.map((c) => (
+                                                                                <tr key={c.id} style={{ borderBottom: `1px solid rgba(255,255,255,0.03)` }}>
+                                                                                    <td style={{ padding: "10px 16px", color: "var(--accent)", fontWeight: 500 }}>{c.email}</td>
+                                                                                    <td style={{ padding: "10px 16px" }}>{c.first_name || ""} {c.last_name || ""}</td>
+                                                                                    <td style={{ padding: "10px 16px" }}>
+                                                                                        <span style={{ 
+                                                                                            padding: "2px 8px", borderRadius: "100px", fontSize: "10px", fontWeight: 700,
+                                                                                            backgroundColor: "rgba(34, 197, 94, 0.1)", color: "var(--success)"
+                                                                                        }}>SUBSCRIBED</span>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Right Column: Error Resolver */}
+                                                        <div>
+                                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                                                                <h3 style={{ fontSize: "14px", fontWeight: 600, margin: 0 }}>
+                                                                    Failed Contacts {b.failed_count > 0 && `(${b.failed_count})`}
+                                                                </h3>
+                                                                {b.failed_count > 0 && (
+                                                                    <span style={{ fontSize: "11px", color: "var(--danger)", fontWeight: 600 }}>Action Required</span>
+                                                                )}
+                                                            </div>
+
+                                                            {b.failed_count === 0 ? (
+                                                                <div style={{ padding: "32px 20px", textAlign: "center", backgroundColor: "rgba(34, 197, 94, 0.03)", borderRadius: "8px", border: "1px dashed rgba(34, 197, 94, 0.2)" }}>
+                                                                    <CheckCircle2 style={{ width: "24px", height: "24px", color: "var(--success)", margin: "0 auto 8px" }} />
+                                                                    <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>100% Success Rate!</p>
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ maxHeight: "300px", overflowY: "auto", border: `1px solid ${colors.border}`, borderRadius: "8px" }}>
+                                                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                                                                        <tbody>
+                                                                            {(b.errors || []).map((err: any, idx: number) => (
+                                                                                <ErrorRow 
+                                                                                    key={idx} err={err} idx={idx} 
+                                                                                    batchId={b.id} token={token!} 
+                                                                                    colors={colors} onResolved={fetchBatches} 
+                                                                                />
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             ))}
                         </tbody>
                     </table>
