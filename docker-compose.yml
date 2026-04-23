@@ -8,13 +8,15 @@
 #   View logs:           docker-compose logs -f [service]
 #
 # Services:
-#   api      → FastAPI backend   → http://localhost:8000
-#   worker   → Email worker      → (background process)
-#   client   → Next.js frontend  → http://localhost:3000
-#   nginx    → Reverse proxy     → http://localhost:80 (production)
+#   api                      → FastAPI backend          → http://localhost:8000
+#   email_sender             → Email sending worker     → (background process)
+#   import_worker            → Contact import worker    → (background process)
+#   background_worker        → Misc queue tasks         → (background process)
+#   scheduler                → Campaign scheduler       → (background process)
+#   centralized_email_worker → System notification mail → (background process)
+#   client                   → Next.js frontend         → http://localhost:3000
+#   nginx                    → Reverse proxy            → http://localhost:80 (production)
 # ============================================================
-
-version: "3.9"
 
 services:
 
@@ -27,11 +29,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-    env_file:
-      - .env
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENVIRONMENT=${ENVIRONMENT}
     volumes:
       - ./platform/api/assets:/app/assets # Persist uploaded files
     healthcheck:
@@ -54,6 +60,7 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RABBITMQ_URL=${RABBITMQ_URL}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USERNAME=${SMTP_USERNAME}
@@ -67,7 +74,36 @@ services:
     networks:
       - email_engine_net
 
-  # ── Background Worker (Legacy) ───────────────────────────
+  # ── Contact Import Worker ────────────────────────────────
+  # REQUIRED: This worker MUST be running or contact imports
+  # will stay "pending" forever. It uses a robust S3 streaming
+  # pipeline with pandas-based parsing and chunked bulk upserts.
+  import_worker:
+    build:
+      context: .
+      dockerfile: deploy/worker/Dockerfile
+    container_name: email_engine_import_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - IMPORT_QUEUE_NAME=import_tasks
+    command: python import_worker.py
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - email_engine_net
+
+  # ── Background Worker (handles misc queue tasks) ─────────
   background_worker:
     build:
       context: .
@@ -79,6 +115,7 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RABBITMQ_URL=${RABBITMQ_URL}
     command: python background_worker.py
     depends_on:
       api:
@@ -98,6 +135,7 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RABBITMQ_URL=${RABBITMQ_URL}
     command: python scheduler.py
     depends_on:
       api:
@@ -105,7 +143,7 @@ services:
     networks:
       - email_engine_net
 
-  # ── Centralized System Worker ────────────────────────────
+  # ── Centralized System Email Worker ─────────────────────
   centralized_email_worker:
     build:
       context: .
@@ -117,6 +155,12 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SYSTEM_SMTP_HOST=${SYSTEM_SMTP_HOST}
+      - SYSTEM_SMTP_PORT=${SYSTEM_SMTP_PORT}
+      - SYSTEM_SMTP_USERNAME=${SYSTEM_SMTP_USERNAME}
+      - SYSTEM_SMTP_PASSWORD=${SYSTEM_SMTP_PASSWORD}
+      - SYSTEM_SMTP_FROM_EMAIL=${SYSTEM_SMTP_FROM_EMAIL}
+      - SYSTEM_SMTP_FROM_NAME=${SYSTEM_SMTP_FROM_NAME}
     command: python centralized_email_worker.py
     depends_on:
       api:
@@ -125,7 +169,7 @@ services:
       - email_engine_net
 
   # ── Mailhog Development SMTP ────────────────────────────
-  # CURRENTLY DISABLED
+  # CURRENTLY DISABLED — uncomment for local SMTP testing
   # mailhog:
   #   image: mailhog/mailhog
   #   container_name: email_engine_mailhog
@@ -153,6 +197,7 @@ services:
       - api
     networks:
       - email_engine_net
+
   # ── Nginx Reverse Proxy ──────────────────────────────────
   # Uncomment in production to route everything through port 80
   # nginx:
@@ -169,13 +214,13 @@ services:
   #   networks:
   #     - email_engine_net
 
-  # ── Shared Network ─────────────────────────────────────────
+# ── Shared Network ─────────────────────────────────────────
 networks:
   email_engine_net:
     driver: bridge
 
 # ── Future: Add Redis for scaling ──────────────────────────
-# To enable Redis (Phase 7 Upgrade), add:
+# To enable Redis (Phase 7 Upgrade), uncomment this block:
 #
 #   redis:
 #     image: redis:7-alpine
