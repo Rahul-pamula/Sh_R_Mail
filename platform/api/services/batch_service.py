@@ -38,18 +38,11 @@ class BatchService:
         """
         List all import batches for a tenant, newest first.
         """
-        try:
-            result = db.client.table("import_batches")\
-                .select("id, file_name, total_rows, imported_count, failed_count, errors, status, created_at, meta")\
-                .eq("tenant_id", tenant_id)\
-                .order("created_at", desc=True)\
-                .execute()
-        except Exception:
-            result = db.client.table("import_batches")\
-                .select("id, file_name, total_rows, imported_count, failed_count, errors, status, created_at")\
-                .eq("tenant_id", tenant_id)\
-                .order("created_at", desc=True)\
-                .execute()
+        result = db.client.table("import_batches")\
+            .select("id, file_name, total_rows, imported_count, failed_count, errors, status, created_at")\
+            .eq("tenant_id", tenant_id)\
+            .order("created_at", desc=True)\
+            .execute()
 
         return result.data or []
 
