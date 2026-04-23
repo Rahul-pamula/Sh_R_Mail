@@ -1,15 +1,15 @@
 ==============================================================
-  EMAIL ENGINE — STARTUP + TESTING GUIDE (MONOLITH)
+  EMAIL ENGINE — STARTUP + TESTING GUIDE (MICROSERVICES)
 ==============================================================
 
-NOTE: The Python virtual environment lives at:
-  /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv
+NOTE: The Python virtual environment lives at the root:
+  /Users/rahul/Desktop/Sh_R_Mail/.venv
 
   If it doesn't exist yet, create it once:
-    cd /Users/pamula/Desktop/Sh_R_Mail/platform/api
+    cd /Users/rahul/Desktop/Sh_R_Mail
     python3 -m venv .venv
     source .venv/bin/activate
-    pip install -r requirements.txt
+    pip install -r platform/api/requirements.txt
 
 --------------------------------------------------------------
 STEP 0: START ALL SERVICES
@@ -20,38 +20,40 @@ Tracking API → Supabase Edge Functions (always on, no tunnel needed)
   API_URL in .env is already set — nothing to start!
 
 Terminal 1 (API Server)
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/api
-  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
-  uvicorn main:app --reload --host 0.0.0.0 --port 8000
+cd /Users/rahul/Desktop/Sh_R_Mail
+source .venv/bin/activate
+cd platform/api
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
 
 Terminal 2 (Email Sender Worker)
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
+  cd /Users/rahul/Desktop/Sh_R_Mail
+  source .venv/bin/activate
   # Tune throughput locally:
   #   WORKER_PREFETCH_COUNT=10 → pull 10 messages at a time (faster)
   #   WORKER_MAX_RETRIES=3     → retry each message up to 3 times
-  WORKER_PREFETCH_COUNT=10 WORKER_MAX_RETRIES=3 python email_sender.py
+  WORKER_PREFETCH_COUNT=10 WORKER_MAX_RETRIES=3 python platform/worker/email_sender.py
 
-Terminal 3 (Background Worker — LEGACY, no longer required for contact imports)
-  CSV imports now run inside the API process via FastAPI BackgroundTasks.
-  This worker is kept for any future RabbitMQ-based background tasks.
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
-  python background_worker.py
+Terminal 3 (Dedicated Contact Import Worker — REQUIRED FOR IMPORTS)
+  Contact imports now use a robust Direct-to-S3 streaming pipeline.
+  This worker MUST be running or your imported files will be marked "pending" forever.
+  cd /Users/rahul/Desktop/Sh_R_Mail
+  source .venv/bin/activate
+  python platform/worker/import_worker.py
 
 Terminal 4 (Scheduler)
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
-  python scheduler.py
+  cd /Users/rahul/Desktop/Sh_R_Mail
+  source .venv/bin/activate
+  python platform/worker/scheduler.py
 
 Terminal 5 (Frontend)
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/client
+  cd /Users/rahul/Desktop/Sh_R_Mail/platform/client
   npm run dev
 
 Terminal 6 (Centralized System Email Worker)
-  cd /Users/pamula/Desktop/Sh_R_Mail/platform/worker
-  source /Users/pamula/Desktop/Sh_R_Mail/platform/api/.venv/bin/activate
-  python centralized_email_worker.py
+  cd /Users/rahul/Desktop/Sh_R_Mail
+  source .venv/bin/activate
+  python platform/worker/centralized_email_worker.py
 
 Open browser → http://localhost:3000
 
@@ -59,7 +61,7 @@ Open browser → http://localhost:3000
 QUICK REFERENCE
 --------------------------------------------------------------
 Email worker logs       → Terminal 2 (email_sender.py)
-Background worker logs  → Terminal 3 (background_worker.py)
+Import worker logs      → Terminal 3 (import_worker.py)
 Notification emails     → Your inbox
 Rate limit responses    → curl output (look for 429)
 DB state changes        → Supabase SQL Editor
@@ -71,10 +73,10 @@ KNOWN ISSUES / GOTCHAS
 
 [NEW 2026-04-09] Next.js 16 proxy rename + clean build
   - The framework renamed middleware → proxy. Keep the file at:
-      /Users/pamula/Desktop/Sh_R_Mail/platform/client/src/proxy.ts
+      /Users/rahul/Desktop/Sh_R_Mail/platform/client/src/proxy.ts
   - If you still see the "middleware deprecated" warning, nuke the cache once:
-      rm -rf /Users/pamula/Desktop/Sh_R_Mail/platform/client/.next
-      cd /Users/pamula/Desktop/Sh_R_Mail/platform/client && npm run dev
+      rm -rf /Users/rahul/Desktop/Sh_R_Mail/platform/client/.next
+      cd /Users/rahul/Desktop/Sh_R_Mail/platform/client && npm run dev
 
 [NEW 2026-04-09] Contacts page data sources
   - The Contacts UI now lazy-loads and cancels in-flight requests to avoid
@@ -82,25 +84,8 @@ KNOWN ISSUES / GOTCHAS
   - If import batches disappear, refresh once; if still empty, ensure the API is
     running on http://localhost:8000 and that your .env FRONTEND_URL matches.
 
-[FIXED] Contacts not uploading / job stuck in "pending" forever
-  PREVIOUS SYMPTOM:
-    - Import returned 200 OK but contacts never appeared.
-    - Frontend polled GET /contacts/jobs/{job_id} every 2s indefinitely.
-    - RabbitMQ published the task but nothing consumed it.
-
-  ROOT CAUSE:
-    The csv_import task was published to a RabbitMQ queue ("background_tasks")
-    that required a separate background_worker.py process to be running.
-    If that process was not started, the job stayed in status="pending" forever.
-
-  ARCHITECTURAL FIX (applied 2026-04-04):
-    Removed the RabbitMQ dependency for CSV imports entirely.
-    Contact imports now run via FastAPI BackgroundTasks inside the API process.
-    As long as the API server (Terminal 1) is running, imports will always work.
-
-    Changed files:
-      platform/api/services/import_service.py   [NEW] — import processing logic
-      platform/api/routes/contacts.py            [MODIFIED] — uses BackgroundTasks
-        instead of mq_client.publish_background_task()
-
-    background_worker.py is now OPTIONAL (kept for future RabbitMQ tasks).
+[FIXED] Contacts Architecture (2026-04-21)
+  - Contacts are no longer imported directly through the API server memory space.
+  - The UI uploads files securely to Supabase S3 via a Presigned URL ticket.
+  - The Dedicated Import Worker (`import_worker.py`) is notified via RabbitMQ,
+    streams the file in chunks from S3, and bulk-upserts to the database.
