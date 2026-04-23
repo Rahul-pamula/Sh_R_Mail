@@ -107,11 +107,23 @@ export default function DashboardPage() {
         }
 
         // Fetch Onboarding Steps Data
+        // Each fetch has a 5-second timeout via AbortController — if any endpoint hangs,
+        // the Promise.all still resolves (with null) and setIsLoading(false) always fires.
+        const fetchWithTimeout = (url: string, opts: RequestInit, ms = 5000): Promise<any> => {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), ms);
+            return fetch(url, { ...opts, signal: ctrl.signal })
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null)
+                .finally(() => clearTimeout(timer));
+        };
+
+        const headers = { Authorization: `Bearer ${token}` };
         Promise.all([
-            fetch(`${API_BASE}/domains?limit=1`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-            fetch(`${API_BASE}/senders?limit=1`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-            fetch(`${API_BASE}/contacts?limit=1`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-            fetch(`${API_BASE}/campaigns?limit=1`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null)
+            fetchWithTimeout(`${API_BASE}/domains?limit=1`, { headers }),
+            fetchWithTimeout(`${API_BASE}/senders?limit=1`, { headers }),
+            fetchWithTimeout(`${API_BASE}/contacts?limit=1`, { headers }),
+            fetchWithTimeout(`${API_BASE}/campaigns?limit=1`, { headers }),
         ]).then(([domainsData, sendersData, contactsData, campaignsData]) => {
             const doms = domainsData?.data || [];
             const snds = sendersData?.data || [];
