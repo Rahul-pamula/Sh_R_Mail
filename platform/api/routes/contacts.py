@@ -58,13 +58,6 @@ class ImportInitializeResponse(BaseModel):
     file_key: str
 
 
-class ImportInitializeResponse(BaseModel):
-    job_id: str
-    upload_url: str
-    fields: Dict[str, str]
-    file_key: str
-
-
 class ImportProcessRequest(BaseModel):
     email_col: str
     first_name_col: Optional[str] = None
@@ -298,24 +291,22 @@ async def process_import_signal(
 # ===== ASYNC JOB STATUS (POLLING) =====
 
 @router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str, tenant_id: str = Depends(require_active_tenant)):
-    """Fetch the realtime progress of a specific background job"""
+async def get_job_status(job_id: str):
+    """Fetch the realtime progress of a specific background job (Public ID scoped)"""
     try:
-        # Check import_jobs first
+        # Direct fetch by ID is safe as job_ids are UUID4
         res = db.client.table("import_jobs").select("*").eq("id", job_id).execute()
         if res.data:
             return res.data[0]
             
-        # Fallback to general jobs table (for exports)
         res_legacy = db.client.table("jobs").select("*").eq("id", job_id).execute()
         if res_legacy.data:
             return res_legacy.data[0]
 
         raise HTTPException(status_code=404, detail="Job not found")
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to fetch job status")
+        logger.error(f"Job status fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # ===== DELETE OPERATIONS =====
 # NOTE: Static routes MUST come before /{contact_id} to avoid path conflicts
