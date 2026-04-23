@@ -44,7 +44,12 @@ from repositories.audit_repository import AuditRepository
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
+import os
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+# Increase token life in development to 24 hours to reduce refresh annoyance
+# 30 minutes in production for security
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440 if ENVIRONMENT == "development" else 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7     # 7 days
 
 PUBLIC_EMAIL_PROVIDERS = [
@@ -196,12 +201,27 @@ def _create_refresh_token(user_id: str, tenant_id: str) -> str:
 
 
 def _set_refresh_cookie(response, refresh_token: str):
+    import os
+    is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+
+    # Root cause of "Silent refresh failed" in local dev:
+    # SameSite=Lax is the default for modern browsers. 
+    # For localhost dev over plain HTTP, Secure=True + SameSite=None is technically allowed 
+    # but often buggy in various browser environments (Safari, Brave).
+    #
+    # SETUP:
+    # 1. Dev: SameSite=Lax, Secure=False allows localhost cookies WITHOUT HTTPS.
+    # 2. Prod: SameSite=Lax, Secure=True (standard secure setup).
+    
+    samesite_val = "lax"
+    secure_val = True if is_prod else False
+
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,     # Must be True in prod (HTTPS)
-        samesite="lax",  # Strict would require same-origin exactly
+        secure=secure_val,
+        samesite=samesite_val,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/"
     )
