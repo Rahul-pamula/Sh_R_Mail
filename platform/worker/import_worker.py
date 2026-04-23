@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
 EXCHANGE_NAME = "background_exchange"
-QUEUE_NAME = os.getenv("IMPORT_QUEUE_NAME", "import_tasks")
+# Queue configuration
+IMPORT_QUEUE_NAME = os.getenv("IMPORT_QUEUE_NAME", "import_tasks_v4")
+ROUTING_KEY = "task.import"
 
 # SSL context for RabbitMQ
 _SKIP_TLS = os.getenv("AMQP_SKIP_TLS_VERIFY", "false").lower() == "true"
@@ -96,6 +98,9 @@ async def process_contact_import(payload: dict):
         processed_rows = 0
         failed_rows = 0
         imported_rows = 0
+        new_count = 0
+        updated_count = 0
+        skipped_duplicates = 0
         errors_for_ui = []
         
         for row_index, row in enumerate(raw_rows, start=1):
@@ -143,9 +148,12 @@ async def process_contact_import(payload: dict):
             chunk.append((row_index, contact, row))
             
             if len(chunk) >= chunk_size:
-                imported, current_failed, current_errors = await submit_chunk(tenant_id, chunk, job_id)
+                imported, current_failed, current_errors, current_stats = await submit_chunk(tenant_id, chunk, job_id)
                 imported_rows += imported
                 failed_rows += current_failed
+                new_count += current_stats.get("new", 0)
+                updated_count += current_stats.get("updated", 0)
+                skipped_duplicates += current_stats.get("skipped_duplicates", 0)
                 errors_for_ui.extend(current_errors)
                 chunk = []
                 
@@ -157,9 +165,12 @@ async def process_contact_import(payload: dict):
 
         # Push last remaining chunk
         if chunk:
-            imported, current_failed, current_errors = await submit_chunk(tenant_id, chunk, job_id)
+            imported, current_failed, current_errors, current_stats = await submit_chunk(tenant_id, chunk, job_id)
             imported_rows += imported
             failed_rows += current_failed
+            new_count += current_stats.get("new", 0)
+            updated_count += current_stats.get("updated", 0)
+            skipped_duplicates += current_stats.get("skipped_duplicates", 0)
             errors_for_ui.extend(current_errors)
         
         if rejections_buffer:
@@ -167,25 +178,27 @@ async def process_contact_import(payload: dict):
 
         # Final Update
         total_processed = imported_rows + failed_rows
-        db.client.table("import_jobs").update({
-            "status": "completed",
-            "processed_rows": total_processed,
-            "failed_rows": failed_rows
-        }).eq("id", job_id).execute()
 
-        # Update the Batch History table (Legacy 'import_batches')
-        # This is where the UI History tab gets its data.
-        # We NO LONGER use 'meta' column (it doesn't exist).
+        # 1. Update the Batch History table FIRST (so UI sees it immediately)
         try:
             db.client.table("import_batches").update({
                 "status": "completed",
-                "imported_count": imported_rows,
+                "imported_count": new_count,
+                "updated_count": updated_count,
+                "skipped_duplicates": skipped_duplicates,
                 "failed_count": failed_rows,
                 "total_rows": total_processed,
                 "errors": errors_for_ui[:200] # Store first 200 for UI
             }).eq("id", job_id).execute()
         except Exception as batch_err:
             logger.warning(f"Failed to update import_batches history: {batch_err}")
+
+        # 2. THEN signal job completion to the UI
+        db.client.table("import_jobs").update({
+            "status": "completed",
+            "processed_rows": total_processed,
+            "failed_rows": failed_rows
+        }).eq("id", job_id).execute()
         
         logger.info(f"[{job_id}] Import Finished! Processed={total_processed}, Success={imported_rows}, Failed={failed_rows}")
 
@@ -237,9 +250,9 @@ async def submit_chunk(tenant_id: str, chunk: list, job_id: str) -> tuple[int, i
                 })
             db.client.table("import_rejected_rows").insert(rejection_records).execute()
 
-        imported = res.get("success", 0) + res.get("skipped_duplicates", 0)
+        imported = res.get("success", 0)
         failed = res.get("failed", 0)
-        return imported, failed, errors_for_ui
+        return imported, failed, errors_for_ui, res
     except Exception as e:
         logger.error(f"Chunk failure: {e}")
         # Insert all rows in chunk as failed
@@ -270,13 +283,8 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
                 await process_contact_import(payload)
                 await message.ack()
             else:
-                # Let other workers handle it, but wait: since we share a queue, 
-                # rejecting without requeueing drops it!
-                # If we share the queue with background_worker, we MUST reject WITH requeue?
-                # No, standard practice is separate queues if logic is separate.
-                # However, they both listen to task.process routing key.
-                logger.warning(f"Ignoring task: {task_type}")
-                await message.reject(requeue=True)
+                logger.warning(f"Unknown task type for import_worker: {task_type}. Moving to DLQ.")
+                await message.nack(requeue=False)
                 
         except Exception as e:
             logger.error(f"Error processing import task: {e}")
@@ -292,11 +300,18 @@ async def main():
         await channel.set_qos(prefetch_count=1)
         
         exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
-        # Dedicated queue might be better to avoid conflict with legacy worker
-        queue = await channel.declare_queue(QUEUE_NAME, durable=True)
+        # Dedicated queue must match API declaration exactly (arguments inclusive)
+        queue = await channel.declare_queue(
+            IMPORT_QUEUE_NAME, 
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": "dead_letter_exchange",
+                "x-dead-letter-routing-key": "task.failed"
+            }
+        )
         await queue.bind(exchange, routing_key="task.import")
         
-        logger.info(f"Worker connected and waiting on queue '{QUEUE_NAME}'...")
+        logger.info(f"Worker connected and waiting on queue '{IMPORT_QUEUE_NAME}'...")
         await queue.consume(process_message)
         
         try:
