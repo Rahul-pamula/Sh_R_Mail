@@ -1,13 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, CalendarClock, CheckCircle2, CreditCard, TrendingUp, Users, Zap } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import {
-    CreditCard, ArrowLeft, Loader2, TrendingUp, Users,
-    AlertTriangle, Check, Zap, ArrowUp, ArrowDown, X,
-    CalendarClock, CheckCircle2
-} from 'lucide-react';
+import { Badge, Button, ConfirmModal, EmptyState, InlineAlert, PageHeader, SectionCard, StatCard, useToast } from '@/components/ui';
 
 const API_BASE = 'http://127.0.0.1:8000';
 
@@ -25,14 +21,15 @@ const PLAN_PRICE_INR: Record<string, string> = {
     Enterprise: '24,999',
 };
 
-const PLAN_COLOR: Record<string, { ring: string; badge: string; text: string; bg: string }> = {
-    Free: { ring: 'border-white/10', badge: 'bg-white/10 text-[var(--text-muted)]', text: 'text-[var(--text-muted)]', bg: '' },
-    Starter: { ring: 'border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-400', text: 'text-emerald-400', bg: 'rgba(16,185,129,0.04)' },
-    Pro: { ring: 'border-blue-500/40', badge: 'bg-blue-500/15 text-blue-400', text: 'text-blue-400', bg: 'rgba(59,130,246,0.05)' },
-    Enterprise: { ring: 'border-violet-500/40', badge: 'bg-violet-500/15 text-violet-400', text: 'text-violet-400', bg: 'rgba(139,92,246,0.05)' },
+type Plan = {
+    id: string;
+    name: string;
+    price_monthly: number;
+    max_monthly_emails: number;
+    max_contacts: number;
+    allow_custom_domain: boolean;
 };
 
-type Plan = { id: string; name: string; price_monthly: number; max_monthly_emails: number; max_contacts: number; allow_custom_domain: boolean };
 type BillingData = {
     plan_id: string;
     plan_details: Plan;
@@ -44,33 +41,48 @@ type BillingData = {
     all_plans: Plan[];
 };
 
-type DialogType = 'upgrade' | 'downgrade' | 'cancel' | null;
+type DialogState = { type: 'upgrade' | 'downgrade' | 'cancel'; plan?: Plan } | null;
+
+function ProgressBar({ percent }: { percent: number }) {
+    const safePercent = Math.min(100, Math.max(0, percent));
+    const toneClass = safePercent >= 100 ? 'bg-[var(--danger)]' : safePercent >= 80 ? 'bg-[var(--warning)]' : 'bg-[var(--accent)]';
+
+    return (
+        <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-hover)]">
+            <div className={`h-full rounded-full transition-all duration-500 ${toneClass}`} style={{ width: `${safePercent}%` }} />
+        </div>
+    );
+}
 
 export default function BillingPage() {
     const { token } = useAuth();
+    const { success, error: toastError } = useToast();
+
     const [data, setData] = useState<BillingData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    const [pageError, setPageError] = useState('');
     const [processing, setProcessing] = useState(false);
-    const [dialog, setDialog] = useState<{ type: DialogType; plan?: Plan } | null>(null);
-    const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+    const [dialog, setDialog] = useState<DialogState>(null);
 
     const fetchBilling = async () => {
         if (!token) return;
+        setLoading(true);
+        setPageError('');
         try {
             const res = await fetch(`${API_BASE}/billing/plan`, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.ok) setData(await res.json());
-            else setError('Failed to load billing info.');
-        } catch { setError('Network error.'); }
-        finally { setLoading(false); }
+            if (!res.ok) throw new Error('Failed to load billing info.');
+            setData(await res.json());
+        } catch (fetchError) {
+            console.error(fetchError);
+            setPageError('Failed to load billing info.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { fetchBilling(); }, [token]);
 
-    const showToast = (msg: string, ok = true) => {
-        setToast({ msg, ok });
-        setTimeout(() => setToast(null), 5000);
-    };
+    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
     const handleChangePlan = async () => {
         if (!dialog?.plan) return;
@@ -81,324 +93,233 @@ export default function BillingPage() {
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ plan_id: dialog.plan.id }),
             });
-            const d = await res.json();
-            if (res.ok) {
-                showToast(d.message);
-                await fetchBilling();
-            } else {
-                showToast(d.detail || 'Failed to change plan.', false);
-            }
-        } catch { showToast('Network error.', false); }
-        finally { setProcessing(false); setDialog(null); }
+            const responseData = await res.json();
+            if (!res.ok) throw new Error(responseData.detail || 'Failed to change plan.');
+            success(responseData.message || 'Plan updated.');
+            await fetchBilling();
+        } catch (changeError: any) {
+            toastError(changeError.message || 'Failed to change plan.');
+        } finally {
+            setProcessing(false);
+            setDialog(null);
+        }
     };
 
     const handleCancelDowngrade = async () => {
         setProcessing(true);
         try {
             const res = await fetch(`${API_BASE}/billing/cancel-downgrade`, {
-                method: 'POST', headers: { Authorization: `Bearer ${token}` },
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
             });
-            const d = await res.json();
-            if (res.ok) { showToast(d.message); await fetchBilling(); }
-            else showToast(d.detail || 'Failed', false);
-        } catch { showToast('Network error.', false); }
-        finally { setProcessing(false); setDialog(null); }
+            const responseData = await res.json();
+            if (!res.ok) throw new Error(responseData.detail || 'Failed to cancel downgrade.');
+            success(responseData.message || 'Scheduled downgrade canceled.');
+            await fetchBilling();
+        } catch (cancelError: any) {
+            toastError(cancelError.message || 'Failed to cancel downgrade.');
+        } finally {
+            setProcessing(false);
+            setDialog(null);
+        }
     };
 
     const openDialog = (plan: Plan) => {
         if (!data) return;
-        const currentPrice = data.plan_details.price_monthly;
-        const type = plan.price_monthly > currentPrice ? 'upgrade' : 'downgrade';
+        const type = plan.price_monthly > data.plan_details.price_monthly ? 'upgrade' : 'downgrade';
         setDialog({ type, plan });
     };
 
-    if (loading) return (
-        <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>
-    );
-    if (error || !data) return (
-        <div className="min-h-screen bg-[var(--bg-primary)] p-8">
-            <div className="max-w-3xl mx-auto p-5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400">{error || 'No data'}</div>
-        </div>
-    );
+    const metrics = useMemo(() => {
+        if (!data) return [];
+        const { plan_details, usage } = data;
+        return [
+            { label: 'Current Plan', value: plan_details.name, icon: <CreditCard className="h-5 w-5" /> },
+            { label: 'Emails Used', value: `${usage.emails_sent_this_cycle.toLocaleString()}/${plan_details.max_monthly_emails.toLocaleString()}`, icon: <TrendingUp className="h-5 w-5" /> },
+            { label: 'Contacts Used', value: `${usage.contacts_used.toLocaleString()}/${plan_details.max_contacts.toLocaleString()}`, icon: <Users className="h-5 w-5" /> },
+        ];
+    }, [data]);
+
+    if (loading) {
+        return <div className="p-12 text-sm text-[var(--text-muted)]">Loading billing information...</div>;
+    }
+
+    if (pageError || !data) {
+        return (
+            <div className="space-y-6 pb-8">
+                <PageHeader title="Plan & Billing" subtitle="Manage your subscription, usage, and scheduled plan changes." />
+                <InlineAlert variant="danger" title="Billing unavailable" description={pageError || 'No billing data found.'} />
+            </div>
+        );
+    }
 
     const { plan_details, usage, billing_cycle_end, scheduled_plan, scheduled_plan_effective_at, all_plans } = data;
     const emailsPct = Math.min(100, Math.round((usage.emails_sent_this_cycle / plan_details.max_monthly_emails) * 100));
     const contactsPct = Math.min(100, Math.round((usage.contacts_used / plan_details.max_contacts) * 100));
-    const barColor = (p: number) => p >= 100 ? '#EF4444' : p >= 80 ? '#F59E0B' : '#3B82F6';
-
-    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
     return (
-        <div className="min-h-screen bg-[var(--bg-primary)] p-8 lg:p-12">
-            <div className="max-w-4xl mx-auto">
-                <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-8">
-                    <ArrowLeft className="w-4 h-4" /> Back to Settings
-                </Link>
+        <div className="space-y-8 pb-8">
+            <PageHeader
+                title="Plan & Billing"
+                subtitle="Monitor usage, understand upgrade and downgrade timing, and keep your workspace within healthy operating limits."
+                action={<Button variant="secondary" onClick={fetchBilling}>Refresh</Button>}
+            />
 
-                <div className="flex items-center gap-3 mb-8">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-emerald-400" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Plan & Billing</h1>
-                        <p className="text-sm text-[var(--text-muted)]">Manage your subscription and usage limits.</p>
-                    </div>
-                </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {metrics.map((metric) => (
+                    <StatCard key={metric.label} label={metric.label} value={metric.value} icon={metric.icon} />
+                ))}
+            </div>
 
-                {/* Toast */}
-                {toast && (
-                    <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-sm ${toast.ok ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' : 'bg-red-500/10 border-red-500/25 text-red-400'}`}>
-                        {toast.ok ? <Check className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-                        {toast.msg}
-                    </div>
-                )}
+            {scheduled_plan && scheduled_plan_effective_at && (
+                <InlineAlert
+                    variant="warning"
+                    title="Downgrade scheduled"
+                    description={`Your plan will change from ${plan_details.name} to ${scheduled_plan.name} on ${fmtDate(scheduled_plan_effective_at)}. Current limits remain active until then.`}
+                >
+                    <Button variant="secondary" size="sm" onClick={() => setDialog({ type: 'cancel' })}>Cancel Downgrade</Button>
+                </InlineAlert>
+            )}
 
-                {/* Scheduled downgrade warning */}
-                {scheduled_plan && scheduled_plan_effective_at && (
-                    <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                            <CalendarClock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-medium text-amber-400">Downgrade scheduled</p>
-                                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                                    Your plan will change from <strong className="text-[var(--text-secondary)]">{plan_details.name}</strong> to{' '}
-                                    <strong className="text-[var(--text-secondary)]">{scheduled_plan.name}</strong> on{' '}
-                                    <strong className="text-[var(--text-secondary)]">{fmtDate(scheduled_plan_effective_at)}</strong>.
-                                    You keep your current limits until then.
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setDialog({ type: 'cancel' })}
-                            className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors"
-                        >
-                            Cancel downgrade
-                        </button>
-                    </div>
-                )}
-
-                {/* Current plan + billing cycle */}
-                <div className="glass-panel p-6 mb-6 flex items-center justify-between">
-                    <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{plan_details.name} Plan</h2>
-                            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">Active</span>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
+                <SectionCard title="Current Subscription" description="Your workspace stays on the current plan until the billing cycle ends, even when a downgrade is scheduled.">
+                    <div className="space-y-5">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{plan_details.name}</h2>
+                            <Badge variant="success">Active</Badge>
                         </div>
                         <p className="text-sm text-[var(--text-muted)]">
                             ₹{PLAN_PRICE_INR[plan_details.name] ?? plan_details.price_monthly}/month
-                            {billing_cycle_end && <> · Renews <strong className="text-[var(--text-secondary)]">{fmtDate(billing_cycle_end)}</strong></>}
+                            {billing_cycle_end ? <> · Renews <span className="font-medium text-[var(--text-primary)]">{fmtDate(billing_cycle_end)}</span></> : null}
                         </p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-xs text-[var(--text-muted)] mb-0.5">Current cycle ends</p>
-                        <p className="text-sm font-medium text-[var(--text-primary)]">{billing_cycle_end ? fmtDate(billing_cycle_end) : '—'}</p>
-                    </div>
-                </div>
-
-                {/* Usage */}
-                <div className="grid grid-cols-2 gap-4 mb-8">
-                    {[
-                        { label: 'Emails Sent', icon: TrendingUp, used: usage.emails_sent_this_cycle, max: plan_details.max_monthly_emails, pct: emailsPct },
-                        { label: 'Total Contacts', icon: Users, used: usage.contacts_used, max: plan_details.max_contacts, pct: contactsPct },
-                    ].map(m => {
-                        const Icon = m.icon;
-                        const color = barColor(m.pct);
-                        return (
-                            <div key={m.label} className="glass-panel p-5">
-                                <div className="flex items-center justify-between mb-3">
-                                    <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">{m.label}</p>
-                                    {m.pct >= 80 ? <AlertTriangle className="w-4 h-4 text-amber-400" /> : <Icon className="w-4 h-4 text-[var(--text-muted)]" />}
-                                </div>
-                                <div className="flex items-baseline gap-1.5 mb-3">
-                                    <span className="text-2xl font-bold text-[var(--text-primary)]">{m.used.toLocaleString()}</span>
-                                    <span className="text-sm text-[var(--text-muted)]">/ {m.max.toLocaleString()}</span>
-                                </div>
-                                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-1.5">
-                                    <div className="h-full rounded-full transition-all duration-700"
-                                        style={{ width: `${m.pct}%`, background: color, boxShadow: `0 0 8px ${color}60` }} />
-                                </div>
-                                <p className="text-xs" style={{ color }}>{m.pct}% used</p>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Cycle End</p>
+                                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{billing_cycle_end ? fmtDate(billing_cycle_end) : '—'}</p>
                             </div>
-                        );
-                    })}
-                </div>
+                            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Plan Type</p>
+                                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{plan_details.allow_custom_domain ? 'Custom-domain capable' : 'Shared infrastructure'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </SectionCard>
 
-                {/* All 4 plans */}
-                <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3 px-1">All Plans</h3>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        {all_plans.map(plan => {
+                <SectionCard title="Usage" description="Watch email and contact usage so throttling, overages, or plan pressure never surprise the team.">
+                    <div className="space-y-5">
+                        <div>
+                            <div className="mb-2 flex items-center justify-between text-sm">
+                                <span className="font-medium text-[var(--text-primary)]">Emails Sent</span>
+                                <span className="text-[var(--text-muted)]">{usage.emails_sent_this_cycle.toLocaleString()} / {plan_details.max_monthly_emails.toLocaleString()}</span>
+                            </div>
+                            <ProgressBar percent={emailsPct} />
+                            <p className="mt-2 text-xs text-[var(--text-muted)]">{emailsPct}% used this cycle</p>
+                        </div>
+                        <div>
+                            <div className="mb-2 flex items-center justify-between text-sm">
+                                <span className="font-medium text-[var(--text-primary)]">Contacts</span>
+                                <span className="text-[var(--text-muted)]">{usage.contacts_used.toLocaleString()} / {plan_details.max_contacts.toLocaleString()}</span>
+                            </div>
+                            <ProgressBar percent={contactsPct} />
+                            <p className="mt-2 text-xs text-[var(--text-muted)]">{contactsPct}% of contact capacity used</p>
+                        </div>
+                    </div>
+                </SectionCard>
+            </div>
+
+            <SectionCard title="Available Plans" description="Upgrades apply immediately. Downgrades are scheduled for the next renewal so you keep the limits you already paid for.">
+                {all_plans.length === 0 ? (
+                    <EmptyState title="No plans available" description="Billing plans will appear here once the backend returns available plan options." />
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {all_plans.map((plan) => {
                             const isCurrent = plan.id === data.plan_id;
                             const isScheduled = plan.id === scheduled_plan?.id;
-                            const c = PLAN_COLOR[plan.name] || PLAN_COLOR.Free;
-                            const currentPrice = plan_details.price_monthly;
-                            const isUpgrade = plan.price_monthly > currentPrice;
-                            const isDowngrade = plan.price_monthly < currentPrice;
+                            const isUpgrade = plan.price_monthly > plan_details.price_monthly;
                             const features = PLAN_FEATURES[plan.name] || [];
 
                             return (
-                                <div
-                                    key={plan.id}
-                                    className={`glass-panel p-5 flex flex-col relative border ${isCurrent ? 'border-[var(--accent)]/40' : c.ring}`}
-                                    style={{ background: isCurrent ? 'rgba(59,130,246,0.05)' : c.bg || undefined }}
-                                >
-                                    {/* Current badge */}
-                                    {isCurrent && (
-                                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-[var(--accent)] text-white shadow-lg whitespace-nowrap">
-                                                Current Plan
-                                            </span>
+                                <div key={plan.id} className={`relative flex flex-col rounded-[var(--radius-lg)] border p-5 ${isCurrent ? 'border-[var(--accent)] bg-[var(--info-bg)]/20' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-base font-semibold text-[var(--text-primary)]">{plan.name}</h3>
+                                            <p className="mt-1 text-2xl font-bold text-[var(--text-primary)]">₹{PLAN_PRICE_INR[plan.name] ?? plan.price_monthly}<span className="ml-1 text-xs font-normal text-[var(--text-muted)]">/mo</span></p>
                                         </div>
-                                    )}
-                                    {isScheduled && (
-                                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-500 text-white shadow-lg whitespace-nowrap">
-                                                Scheduled
-                                            </span>
-                                        </div>
-                                    )}
-                                    {plan.name === 'Pro' && !isCurrent && !isScheduled && (
-                                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg whitespace-nowrap">
-                                                Most Popular
-                                            </span>
-                                        </div>
-                                    )}
+                                        {isCurrent ? <Badge variant="accent">Current</Badge> : isScheduled ? <Badge variant="warning">Scheduled</Badge> : null}
+                                    </div>
 
-                                    <h4 className="text-sm font-semibold text-[var(--text-primary)] mt-3 mb-0.5">{plan.name}</h4>
-                                    <p className="text-2xl font-bold text-[var(--text-primary)] mb-4">
-                                        ₹{PLAN_PRICE_INR[plan.name] ?? plan.price_monthly}
-                                        <span className="text-xs font-normal text-[var(--text-muted)]">/mo</span>
-                                    </p>
-
-                                    <ul className="space-y-1.5 mb-6 flex-1">
-                                        {features.map(f => (
-                                            <li key={f} className="flex items-start gap-1.5 text-xs text-[var(--text-muted)]">
-                                                <CheckCircle2 className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${c.text}`} />
-                                                {f}
+                                    <ul className="mt-5 flex-1 space-y-2">
+                                        {features.map((feature) => (
+                                            <li key={feature} className="flex items-start gap-2 text-sm text-[var(--text-muted)]">
+                                                <CheckCircle2 className="mt-0.5 h-4 w-4 text-[var(--success)]" />
+                                                {feature}
                                             </li>
                                         ))}
                                     </ul>
 
-                                    {/* Action button */}
-                                    {isCurrent ? (
-                                        <div className="w-full py-2 rounded-lg border border-white/10 text-xs font-medium text-[var(--text-muted)] text-center">
-                                            Current Plan
-                                        </div>
-                                    ) : isScheduled ? (
-                                        <div className="w-full py-2 rounded-lg border border-amber-500/20 text-xs font-medium text-amber-400 text-center bg-amber-500/5">
-                                            Downgrade scheduled
-                                        </div>
-                                    ) : isUpgrade ? (
-                                        <button
-                                            onClick={() => openDialog(plan)}
-                                            className="w-full py-2 rounded-lg bg-[var(--accent)] text-white text-xs font-semibold hover:bg-blue-500 transition-colors flex items-center justify-center gap-1.5"
-                                        >
-                                            <ArrowUp className="w-3.5 h-3.5" /> Upgrade
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => openDialog(plan)}
-                                            className="w-full py-2 rounded-lg border border-white/10 text-xs font-medium text-[var(--text-muted)] hover:bg-white/5 transition-colors flex items-center justify-center gap-1.5"
-                                        >
-                                            <ArrowDown className="w-3.5 h-3.5" /> Downgrade
-                                        </button>
-                                    )}
+                                    <div className="mt-5">
+                                        {isCurrent ? (
+                                            <Button variant="secondary" fullWidth disabled>Current Plan</Button>
+                                        ) : isScheduled ? (
+                                            <Button variant="secondary" fullWidth disabled>Downgrade Scheduled</Button>
+                                        ) : (
+                                            <Button fullWidth variant={isUpgrade ? 'primary' : 'secondary'} onClick={() => openDialog(plan)}>
+                                                {isUpgrade ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                                                {isUpgrade ? 'Upgrade' : 'Downgrade'}
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
+                )}
+            </SectionCard>
+
+            <SectionCard tone="subtle" title="How plan changes work" description="The billing model is designed to be predictable for operators and finance teams.">
+                <div className="space-y-3 text-sm text-[var(--text-muted)]">
+                    <p><span className="font-medium text-[var(--text-primary)]">Upgrades</span> take effect immediately, so the new contact and sending limits are available right away.</p>
+                    <p><span className="font-medium text-[var(--text-primary)]">Downgrades</span> are scheduled for the end of the current billing cycle, so you keep the capacity you already paid for until renewal.</p>
+                    <p><span className="font-medium text-[var(--text-primary)]">Scheduled downgrades</span> can be canceled any time before they take effect.</p>
                 </div>
+            </SectionCard>
 
-                {/* FAQ blurb */}
-                <div className="mt-6 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)]">
-                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                        <span className="font-medium text-[var(--text-secondary)]">How plan changes work: </span>
-                        <span className="text-blue-400">Upgrades</span> take effect immediately — your new limits are active right now.
-                        {' '}<span className="text-amber-400">Downgrades</span> are scheduled for the end of your current billing period so you always get what you paid for.
-                        You can cancel a pending downgrade at any time before it takes effect.
-                    </p>
+            <ConfirmModal
+                isOpen={Boolean(dialog)}
+                onClose={() => setDialog(null)}
+                onConfirm={dialog?.type === 'cancel' ? handleCancelDowngrade : handleChangePlan}
+                title={dialog?.type === 'upgrade' ? `Upgrade to ${dialog.plan?.name}` : dialog?.type === 'downgrade' ? `Downgrade to ${dialog.plan?.name}` : 'Cancel scheduled downgrade'}
+                message={
+                    dialog?.type === 'upgrade' && dialog.plan
+                        ? `Move to ${dialog.plan.name} immediately at ₹${PLAN_PRICE_INR[dialog.plan.name] ?? dialog.plan.price_monthly}/month.`
+                        : dialog?.type === 'downgrade' && dialog.plan
+                            ? `Schedule a move to ${dialog.plan.name}. Your current ${plan_details.name} limits stay active until ${billing_cycle_end ? fmtDate(billing_cycle_end) : 'the end of the cycle'}.`
+                            : scheduled_plan
+                                ? `Cancel the scheduled downgrade to ${scheduled_plan.name} and remain on ${plan_details.name}.`
+                                : 'Confirm this billing change.'
+                }
+                confirmLabel={dialog?.type === 'upgrade' ? 'Upgrade Now' : dialog?.type === 'cancel' ? 'Keep Current Plan' : 'Schedule Downgrade'}
+                variant={dialog?.type === 'upgrade' ? 'primary' : dialog?.type === 'cancel' ? 'warning' : 'warning'}
+                isLoading={processing}
+            >
+                <div className="space-y-2 text-sm text-[var(--text-muted)]">
+                    {dialog?.type === 'upgrade' && dialog.plan ? (
+                        <>
+                            <p className="flex items-center gap-2"><Zap className="h-4 w-4 text-[var(--info)]" /> Takes effect immediately</p>
+                            <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--success)]" /> New limit: {dialog.plan.max_contacts.toLocaleString()} contacts</p>
+                        </>
+                    ) : null}
+                    {dialog?.type === 'downgrade' && dialog.plan ? (
+                        <>
+                            <p className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-[var(--warning)]" /> Takes effect on {billing_cycle_end ? fmtDate(billing_cycle_end) : 'renewal'}</p>
+                            <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--success)]" /> Current {plan_details.name} limits stay active until then</p>
+                        </>
+                    ) : null}
+                    {dialog?.type === 'cancel' && scheduled_plan ? (
+                        <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--success)]" /> You will remain on {plan_details.name} and continue with the current billing level.</p>
+                    ) : null}
                 </div>
-            </div>
-
-            {/* Confirmation Dialog */}
-            {dialog && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="glass-panel p-7 w-full max-w-md">
-                        <div className="flex items-start justify-between mb-5">
-                            <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${dialog.type === 'upgrade' ? 'bg-blue-500/10 border border-blue-500/25' : dialog.type === 'cancel' ? 'bg-amber-500/10 border border-amber-500/25' : 'bg-orange-500/10 border border-orange-500/25'}`}>
-                                    {dialog.type === 'upgrade' ? <ArrowUp className="w-5 h-5 text-blue-400" /> :
-                                        dialog.type === 'cancel' ? <CalendarClock className="w-5 h-5 text-amber-400" /> :
-                                            <ArrowDown className="w-5 h-5 text-orange-400" />}
-                                </div>
-                                <h3 className="text-base font-semibold text-[var(--text-primary)]">
-                                    {dialog.type === 'upgrade' ? `Upgrade to ${dialog.plan?.name}` :
-                                        dialog.type === 'cancel' ? 'Cancel scheduled downgrade' :
-                                            `Downgrade to ${dialog.plan?.name}`}
-                                </h3>
-                            </div>
-                            <button onClick={() => setDialog(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="p-4 rounded-xl mb-5 text-sm leading-relaxed" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                            {dialog.type === 'upgrade' && dialog.plan && (
-                                <>
-                                    <p className="text-[var(--text-secondary)] mb-2">
-                                        You'll be upgraded to <strong>{dialog.plan.name}</strong> at <strong>₹{PLAN_PRICE_INR[dialog.plan.name] ?? dialog.plan.price_monthly}/month</strong>.
-                                    </p>
-                                    <ul className="space-y-1 text-xs text-[var(--text-muted)]">
-                                        <li className="flex items-center gap-2"><Zap className="w-3.5 h-3.5 text-blue-400" /> Takes effect <strong className="text-blue-400">immediately</strong></li>
-                                        <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> New limits active right now ({dialog.plan.max_contacts.toLocaleString()} contacts)</li>
-                                        <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> Billing cycle resets today</li>
-                                    </ul>
-                                </>
-                            )}
-                            {dialog.type === 'downgrade' && dialog.plan && billing_cycle_end && (
-                                <>
-                                    <p className="text-[var(--text-secondary)] mb-2">
-                                        Your plan will change to <strong>{dialog.plan.name}</strong> at ₹{PLAN_PRICE_INR[dialog.plan.name] ?? dialog.plan.price_monthly}/month.
-                                    </p>
-                                    <ul className="space-y-1 text-xs text-[var(--text-muted)]">
-                                        <li className="flex items-center gap-2"><CalendarClock className="w-3.5 h-3.5 text-amber-400" /> Takes effect on <strong className="text-amber-400">{fmtDate(billing_cycle_end)}</strong></li>
-                                        <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> You keep {plan_details.name} limits until then</li>
-                                        <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> You can cancel this downgrade anytime</li>
-                                    </ul>
-                                </>
-                            )}
-                            {dialog.type === 'cancel' && (
-                                <p className="text-[var(--text-secondary)]">
-                                    The scheduled downgrade to <strong>{scheduled_plan?.name}</strong> will be cancelled.
-                                    You will remain on <strong>{plan_details.name}</strong> and continue to be billed at ₹{PLAN_PRICE_INR[plan_details.name] ?? plan_details.price_monthly}/month.
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button onClick={() => setDialog(null)} className="flex-1 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:bg-white/5 transition-colors">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={dialog.type === 'cancel' ? handleCancelDowngrade : handleChangePlan}
-                                disabled={processing}
-                                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 ${dialog.type === 'upgrade' ? 'bg-[var(--accent)] hover:bg-blue-500 text-white' :
-                                    dialog.type === 'cancel' ? 'bg-amber-500 hover:bg-amber-400 text-white' :
-                                        'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30'
-                                    }`}
-                            >
-                                {processing ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                                    dialog.type === 'upgrade' ? <><ArrowUp className="w-4 h-4" /> Upgrade Now</> :
-                                        dialog.type === 'cancel' ? 'Keep Current Plan' :
-                                            <><ArrowDown className="w-4 h-4" /> Schedule Downgrade</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </ConfirmModal>
         </div>
     );
 }

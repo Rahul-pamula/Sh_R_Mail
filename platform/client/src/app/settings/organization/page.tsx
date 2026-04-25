@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Building2, ArrowLeft, Save, Loader2, AlertTriangle, ShieldCheck, MailCheck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Building2, MailCheck, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Button } from '@/components/ui';
+import { Button, InlineAlert, Input, KeyValueList, PageHeader, SectionCard, StatCard, useToast } from '@/components/ui';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -12,13 +12,15 @@ const COUNTRIES = [
     'France', 'India', 'Singapore', 'Netherlands', 'Brazil', 'Other',
 ];
 
+const selectClassName = 'w-full rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20';
+
 export default function OrganizationSettingsPage() {
     const { token } = useAuth();
-    
+    const { success, error } = useToast();
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
-    // Form State
+    const [isEditing, setIsEditing] = useState(false);
     const [form, setForm] = useState({
         company_name: '',
         business_address: '',
@@ -28,7 +30,15 @@ export default function OrganizationSettingsPage() {
         business_country: 'United States',
     });
 
-    const isCanSpamComplete = form.business_address && form.business_city && form.business_state && form.business_zip && form.business_country;
+    const isCanSpamComplete = Boolean(
+        form.business_address && form.business_city && form.business_state && form.business_zip && form.business_country
+    );
+
+    const completenessScore = useMemo(() => {
+        const fields = Object.values(form);
+        const completed = fields.filter(Boolean).length;
+        return `${completed}/${fields.length}`;
+    }, [form]);
 
     useEffect(() => {
         if (token) fetchOrganization();
@@ -37,7 +47,7 @@ export default function OrganizationSettingsPage() {
     const fetchOrganization = async () => {
         try {
             const res = await fetch(`${API_BASE}/settings/organization`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
                 const data = await res.json();
@@ -50,8 +60,9 @@ export default function OrganizationSettingsPage() {
                     business_country: data.business_country || 'United States',
                 });
             }
-        } catch (error) {
-            console.error('Failed to fetch organization', error);
+        } catch (fetchError) {
+            console.error('Failed to fetch organization', fetchError);
+            error('Failed to load organization details.');
         } finally {
             setIsLoading(false);
         }
@@ -60,217 +71,212 @@ export default function OrganizationSettingsPage() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
-        
+
         try {
             const res = await fetch(`${API_BASE}/settings/organization`, {
                 method: 'PATCH',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(form)
+                body: JSON.stringify(form),
             });
-            
-            if (res.ok) {
-                // optional success toast
-            } else {
-                alert('Failed to save organization.');
+
+            if (!res.ok) {
+                throw new Error('Failed to save organization.');
             }
-        } catch (error) {
-            console.error('Error saving organization', error);
-            alert('An error occurred.');
+
+            setIsEditing(false);
+            success('Organization details saved.');
+        } catch (saveError) {
+            console.error('Error saving organization', saveError);
+            error('Could not save organization details.');
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleChange = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
+    const handleChange = (field: string, value: string) => setForm((current) => ({ ...current, [field]: value }));
+
+    const footerFields = [
+        { label: 'Company', value: form.company_name || 'Your Company Name' },
+        { label: 'Street', value: form.business_address || 'Add a business address' },
+        { label: 'City / Region', value: `${form.business_city || 'City'}, ${form.business_state || 'State'}` },
+        { label: 'Postal Code', value: form.business_zip || 'ZIP / postal code' },
+        { label: 'Country', value: form.business_country || 'Country' },
+    ];
 
     if (isLoading) {
-        return (
-            <div className="flex justify-center items-center h-96">
-                <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-            </div>
-        );
+        return <div className="p-12 text-sm text-[var(--text-muted)]">Loading organization details...</div>;
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-8 animate-fadeIn">
-            {/* Header */}
-            <div className="mb-8 mt-4">
-                <div className="mb-4">
-                    <a href="/settings" className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium">
-                        <ArrowLeft size={16} className="mr-2" /> Back to Settings
-                    </a>
-                </div>
-                <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
-                    Organization Details
-                </h1>
-                <p className="text-[var(--text-muted)] text-base">
-                    Company name and physical mailing address (CAN-SPAM required).
-                </p>
+        <div className="space-y-8 pb-8">
+            <PageHeader
+                title="Organization Details"
+                subtitle="Set the legal entity and mailing address that power compliance, footer rendering, and trust signals across your email program."
+                action={!isEditing ? <Button onClick={() => setIsEditing(true)}>Edit Details</Button> : null}
+            />
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <StatCard label="Compliance Status" value={isCanSpamComplete ? 'Ready' : 'Needs Address'} icon={<ShieldCheck className="h-5 w-5" />} />
+                <StatCard label="Profile Completion" value={completenessScore} icon={<Building2 className="h-5 w-5" />} />
+                <StatCard label="Footer Preview" value={isCanSpamComplete ? 'Live' : 'Blocked'} icon={<MailCheck className="h-5 w-5" />} />
             </div>
 
-            {/* CAN-SPAM Warning Banner */}
             {!isCanSpamComplete && (
-                <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3 shadow-sm">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h3 className="text-sm font-semibold text-amber-500">Physical Address Required</h3>
-                        <p className="text-sm text-amber-500/80 mt-1">
-                            Anti-spam laws (like CAN-SPAM) require a valid physical mailing address in every commercial email you send. Please complete your address below.
-                        </p>
-                    </div>
-                </div>
+                <InlineAlert
+                    variant="warning"
+                    title="Physical mailing address required"
+                    description="Commercial email regulations like CAN-SPAM require a valid physical address in every marketing footer."
+                    icon={<AlertTriangle className="mt-0.5 h-4 w-4" />}
+                />
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* Left Column: Form Fields */}
-                <div className="lg:col-span-2 space-y-6">
-                    
-                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-6 flex items-center gap-2">
-                            <Building2 className="w-5 h-5 text-[var(--accent)]" /> 
-                            Company Details
-                        </h2>
-                        
-                        <form onSubmit={handleSave} className="space-y-6">
-                            {/* Company Name */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--text-primary)]">Company/Organization Name</label>
-                                <input 
-                                    type="text" 
-                                    value={form.company_name}
-                                    onChange={(e) => handleChange('company_name', e.target.value)}
-                                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                                    placeholder="Acme Corp"
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.7fr_1fr]">
+                <SectionCard
+                    title="Company Details"
+                    description="These details are used in compliance footers, account identity, and future billing records."
+                    action={!isEditing ? <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>Edit</Button> : null}
+                >
+                    {isEditing ? (
+                        <form onSubmit={handleSave} className="space-y-5">
+                            <Input
+                                label="Company Name"
+                                value={form.company_name}
+                                onChange={(e) => handleChange('company_name', e.target.value)}
+                                placeholder="Acme Corp"
+                                autoFocus
+                            />
+                            <Input
+                                label="Street Address"
+                                value={form.business_address}
+                                onChange={(e) => handleChange('business_address', e.target.value)}
+                                placeholder="123 Main Street"
+                                required
+                            />
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Input
+                                    label="City"
+                                    value={form.business_city}
+                                    onChange={(e) => handleChange('business_city', e.target.value)}
+                                    placeholder="San Francisco"
+                                    required
                                 />
-                            </div>
-
-                            <hr className="border-[var(--border)]" />
-
-                            {/* Address Row 1 */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--text-primary)]">Street Address <span className="text-rose-500">*</span></label>
-                                <input 
-                                    type="text" 
-                                    value={form.business_address}
-                                    onChange={(e) => handleChange('business_address', e.target.value)}
-                                    className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                                    placeholder="123 Main Street, Suite 400"
+                                <Input
+                                    label="State / Region"
+                                    value={form.business_state}
+                                    onChange={(e) => handleChange('business_state', e.target.value)}
+                                    placeholder="CA"
                                     required
                                 />
                             </div>
-
-                            {/* Address Row 2 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">City <span className="text-rose-500">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        value={form.business_city}
-                                        onChange={(e) => handleChange('business_city', e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                                        placeholder="San Francisco"
-                                        required
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">State/Province <span className="text-rose-500">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        value={form.business_state}
-                                        onChange={(e) => handleChange('business_state', e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                                        placeholder="CA"
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Address Row 3 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">ZIP/Postal Code <span className="text-rose-500">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        value={form.business_zip}
-                                        onChange={(e) => handleChange('business_zip', e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                                        placeholder="94107"
-                                        required
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">Country <span className="text-rose-500">*</span></label>
-                                    <select 
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Input
+                                    label="ZIP / Postal Code"
+                                    value={form.business_zip}
+                                    onChange={(e) => handleChange('business_zip', e.target.value)}
+                                    placeholder="94107"
+                                    required
+                                />
+                                <div className="space-y-1.5">
+                                    <label className="block text-sm font-medium text-[var(--text-primary)]">Country</label>
+                                    <select
                                         value={form.business_country}
                                         onChange={(e) => handleChange('business_country', e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all appearance-none"
+                                        className={selectClassName}
                                         required
                                     >
-                                        {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        {COUNTRIES.map((country) => (
+                                            <option key={country} value={country}>{country}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
-                            
-                            <div className="pt-2">
-                                <Button type="submit" isLoading={isSaving} className="w-full sm:w-auto">
-                                    <Save className="w-4 h-4 mr-2" /> Save Organization
+                            <div className="flex items-center gap-3 pt-2">
+                                <Button type="submit" isLoading={isSaving}>Save Organization</Button>
+                                <Button type="button" variant="ghost" onClick={() => { setIsEditing(false); fetchOrganization(); }}>
+                                    Cancel
                                 </Button>
                             </div>
                         </form>
-                    </div>
+                    ) : (
+                        <KeyValueList
+                            columns={2}
+                            items={[
+                                {
+                                    label: 'Registered Company',
+                                    value: form.company_name || 'Legal entity not set',
+                                    helper: 'Shown in workspace identity and future billing records.',
+                                },
+                                {
+                                    label: 'Street Address',
+                                    value: form.business_address || <span className="text-[var(--danger)]">Missing required address</span>,
+                                    helper: 'Required in footer rendering for commercial email.',
+                                },
+                                {
+                                    label: 'City / Region',
+                                    value: `${form.business_city || 'City'}${form.business_city && form.business_state ? ', ' : ''}${form.business_state || 'State'}`,
+                                },
+                                {
+                                    label: 'Postal Code',
+                                    value: form.business_zip || 'Not set',
+                                },
+                                {
+                                    label: 'Compliance Country',
+                                    value: form.business_country,
+                                },
+                            ]}
+                        />
+                    )}
+                </SectionCard>
 
-                </div>
-
-                {/* Right Column: Preview & Info */}
                 <div className="space-y-6">
-                    
-                    {/* Live Preview Card */}
-                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 shadow-sm">
-                        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                            <MailCheck className="w-4 h-4 text-emerald-500" /> Email Footer Preview
-                        </h3>
-                        
-                        <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-4 text-center">
+                    <SectionCard
+                        title="Email Footer Preview"
+                        description="Preview how the compliance footer will appear in outbound messages."
+                    >
+                        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4 text-center">
                             {isCanSpamComplete ? (
                                 <div>
-                                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                                    <p className="text-xs leading-relaxed text-[var(--text-muted)]">
                                         You are receiving this email because you opted in via our website.
                                     </p>
-                                    <p className="text-[11px] text-[var(--text-muted)] mt-4 mb-2">
-                                        <strong>{form.company_name || 'Your Company Name'}</strong><br />
-                                        {form.business_address}<br />
-                                        {form.business_city}, {form.business_state} {form.business_zip}<br />
-                                        {form.business_country}
-                                    </p>
-                                    <p className="text-[10px] text-blue-500 underline cursor-pointer">Unsubscribe from these emails</p>
+                                    <div className="mt-4 text-[11px] leading-6 text-[var(--text-muted)]">
+                                        <p className="font-semibold text-[var(--text-primary)]">{form.company_name || 'Your Company Name'}</p>
+                                        <p>{form.business_address}</p>
+                                        <p>{form.business_city}, {form.business_state} {form.business_zip}</p>
+                                        <p>{form.business_country}</p>
+                                    </div>
+                                    <p className="mt-3 text-[10px] font-medium text-[var(--accent)] underline">Unsubscribe from these emails</p>
                                 </div>
                             ) : (
-                                <p className="text-xs text-[var(--text-muted)] italic py-2">
-                                    Fill out your physical address completely to see the footer preview here.
+                                <p className="py-4 text-xs italic text-[var(--text-muted)]">
+                                    Fill out your physical address completely to unlock the footer preview.
                                 </p>
                             )}
                         </div>
-                    </div>
+                    </SectionCard>
 
-                    {/* Legal Info Card */}
-                    <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-[var(--radius-lg)] p-5">
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2 mb-2">
-                            <ShieldCheck className="w-4 h-4 text-emerald-500" /> Why do we need this?
-                        </h4>
-                        <p className="text-xs text-[var(--text-muted)] leading-relaxed mb-3">
-                            Anti-spam regulations globally mandate that marketing emails identify the sender's physical address. 
-                            This builds trust with recipients and ensures compliance.
-                        </p>
-                        <a href="https://www.ftc.gov/tips-advice/business-center/guidance/can-spam-act-compliance-guide-business" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors">
-                            Read FTC CAN-SPAM Guide &rarr;
+                    <SectionCard
+                        tone="success"
+                        title="Why this matters"
+                        description="Anti-spam regulations globally require commercial email to identify the sender's physical mailing address. This also improves recipient trust."
+                    >
+                        <a
+                            href="https://www.ftc.gov/tips-advice/business-center/guidance/can-spam-act-compliance-guide-business"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-[var(--success)] transition hover:opacity-80"
+                        >
+                            Read the FTC CAN-SPAM guide
                         </a>
-                    </div>
-                </div>
+                    </SectionCard>
 
+                    <SectionCard title="Footer Fields" description="Quick audit view for the legal footer fields currently on file.">
+                        <KeyValueList columns={1} items={footerFields} />
+                    </SectionCard>
+                </div>
             </div>
         </div>
     );

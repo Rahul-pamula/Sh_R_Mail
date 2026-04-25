@@ -1,25 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Camera, Mail, ShieldCheck, User } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { User, Mail, ShieldCheck, HelpCircle, ArrowLeft, Save, Loader2, Camera } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { Button, InlineAlert, Input, KeyValueList, PageHeader, SectionCard, StatCard, useToast } from '@/components/ui';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
+const TIMEZONES = [
+    { value: 'UTC', label: 'UTC (Default)' },
+    { value: 'America/New_York', label: 'Eastern Time (ET)' },
+    { value: 'America/Chicago', label: 'Central Time (CT)' },
+    { value: 'America/Denver', label: 'Mountain Time (MT)' },
+    { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+    { value: 'Europe/London', label: 'London (GMT+0)' },
+    { value: 'Europe/Paris', label: 'Central Europe (CET)' },
+    { value: 'Asia/Kolkata', label: 'India (IST)' },
+    { value: 'Asia/Tokyo', label: 'Japan (JST)' },
+    { value: 'Australia/Sydney', label: 'Sydney (AEDT)' },
+];
+
+const selectClassName = 'w-full rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20';
+
 export default function ProfileSettingsPage() {
-    const { token, user: authUser, updateUserContext } = useAuth();
-    
+    const { token, updateUserContext } = useAuth();
+    const { success, error, info } = useToast();
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
-    // Form State
     const [fullName, setFullName] = useState('');
-    const [timezone, setTimezone] = useState('');
+    const [timezone, setTimezone] = useState('UTC');
     const [email, setEmail] = useState('');
-    
-    // Google Auth Check (simulated based on our auth knowledge)
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+
     const isGoogleAuth = false;
+    const initials = useMemo(() => (fullName || email || 'U').charAt(0).toUpperCase(), [fullName, email]);
 
     useEffect(() => {
         if (token) {
@@ -30,7 +46,7 @@ export default function ProfileSettingsPage() {
     const fetchProfile = async () => {
         try {
             const res = await fetch(`${API_BASE}/settings/profile`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
                 const data = await res.json();
@@ -38,8 +54,9 @@ export default function ProfileSettingsPage() {
                 setTimezone(data.timezone || 'UTC');
                 setEmail(data.email || '');
             }
-        } catch (error) {
-            console.error('Failed to fetch profile', error);
+        } catch (fetchError) {
+            console.error('Failed to fetch profile', fetchError);
+            error('Failed to load your profile.');
         } finally {
             setIsLoading(false);
         }
@@ -48,225 +65,176 @@ export default function ProfileSettingsPage() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
-        
+
         try {
             const res = await fetch(`${API_BASE}/settings/profile`, {
                 method: 'PATCH',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     full_name: fullName,
-                    timezone: timezone
-                })
+                    timezone,
+                }),
             });
-            
-            if (res.ok) {
-                const data = await res.json();
-                if (updateUserContext && data.data) {
-                    updateUserContext({ fullName: data.data.full_name });
-                }
-            } else {
-                alert('Failed to save profile.');
+
+            if (!res.ok) {
+                throw new Error('Failed to save profile.');
             }
-        } catch (error) {
-            console.error('Error saving profile', error);
-            alert('An error occurred.');
+
+            const data = await res.json();
+            if (updateUserContext && data.data) {
+                updateUserContext({ fullName: data.data.full_name });
+            }
+            setIsEditingProfile(false);
+            success('Profile updated.');
+        } catch (saveError) {
+            console.error('Error saving profile', saveError);
+            error('Could not save your profile changes.');
         } finally {
             setIsSaving(false);
         }
     };
 
     if (isLoading) {
-        return (
-            <div className="flex justify-center items-center h-96">
-                <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-            </div>
-        );
+        return <div className="p-12 text-sm text-[var(--text-muted)]">Loading profile settings...</div>;
     }
 
-    const initials = (fullName || email || 'U').charAt(0).toUpperCase();
-
     return (
-        <div className="max-w-4xl mx-auto p-8 animate-fadeIn">
-            {/* Header */}
-            <div className="mb-8 mt-4">
-                <div className="mb-4">
-                    <a href="/settings" className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors text-sm font-medium">
-                        <ArrowLeft size={16} className="mr-2" /> Back to Settings
-                    </a>
-                </div>
-                <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
-                    Profile Settings
-                </h1>
-                <p className="text-[var(--text-muted)] text-base">
-                    Manage your personal details, avatar, and security preferences.
-                </p>
+        <div className="space-y-8 pb-8">
+            <PageHeader
+                title="Profile Settings"
+                subtitle="Manage your identity, default timezone, and personal account preferences for day-to-day work inside Sh_R_Mail."
+                action={!isEditingProfile ? <Button onClick={() => setIsEditingProfile(true)}>Edit Profile</Button> : null}
+            />
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <StatCard label="Profile Status" value={fullName ? 'Configured' : 'Needs Name'} icon={<User className="h-5 w-5" />} />
+                <StatCard label="Sign-In Email" value={email ? 'Verified' : 'Missing'} icon={<Mail className="h-5 w-5" />} />
+                <StatCard label="Timezone" value={timezone.split('/').pop() || timezone} icon={<ShieldCheck className="h-5 w-5" />} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* Left Column: Form & Info */}
-                <div className="lg:col-span-2 space-y-6">
-                    
-                    {/* Basic Information Card */}
-                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                            <User className="w-5 h-5 text-[var(--accent)]" /> 
-                            Basic Information
-                        </h2>
-                        
-                        <form onSubmit={handleSave} className="space-y-5 mt-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">Full Name</label>
-                                    <input 
-                                        type="text" 
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.7fr_1fr]">
+                <div className="space-y-6">
+                    <SectionCard
+                        title="Basic Information"
+                        description="Update the name and timezone shown throughout approvals, activity history, and team collaboration surfaces."
+                        action={!isEditingProfile ? <Button variant="secondary" size="sm" onClick={() => setIsEditingProfile(true)}>Edit</Button> : null}
+                    >
+                        {isEditingProfile ? (
+                            <form onSubmit={handleSave} className="space-y-5">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <Input
+                                        label="Full Name"
                                         value={fullName}
                                         onChange={(e) => setFullName(e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition-all"
                                         placeholder="John Doe"
+                                        autoFocus
                                     />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-[var(--text-primary)]">Timezone</label>
-                                    <select 
-                                        value={timezone}
-                                        onChange={(e) => setTimezone(e.target.value)}
-                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition-all appearance-none"
-                                    >
-                                        <option value="UTC">UTC (Default)</option>
-                                        <option value="America/New_York">Eastern Time (ET)</option>
-                                        <option value="America/Chicago">Central Time (CT)</option>
-                                        <option value="America/Denver">Mountain Time (MT)</option>
-                                        <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                        <option value="Europe/London">London (GMT+0)</option>
-                                        <option value="Europe/Paris">Central Europe (CET)</option>
-                                        <option value="Asia/Kolkata">India (IST)</option>
-                                        <option value="Asia/Tokyo">Japan (JST)</option>
-                                        <option value="Australia/Sydney">Sydney (AEDT)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div className="pt-2">
-                                <Button type="submit" isLoading={isSaving} className="w-full sm:w-auto">
-                                    <Save className="w-4 h-4 mr-2" /> Save Changes
-                                </Button>
-                            </div>
-                        </form>
-                    </div>
-
-                    {/* Email & Security Card */}
-                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-6 flex items-center gap-2">
-                            <ShieldCheck className="w-5 h-5 text-emerald-500" /> 
-                            Security & Login
-                        </h2>
-
-                        <div className="space-y-6">
-                            {/* Email Address (Read-Only) */}
-                            <div>
-                                <label className="text-sm font-medium text-[var(--text-primary)] block mb-2">Account Email</label>
-                                <div className="flex bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg overflow-hidden opacity-80 cursor-not-allowed">
-                                    <div className="flex items-center justify-center px-4 border-r border-[var(--border)] bg-black/10">
-                                        <Mail className="w-4 h-4 text-[var(--text-muted)]" />
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-medium text-[var(--text-primary)]">Timezone</label>
+                                        <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={selectClassName}>
+                                            {TIMEZONES.map((zone) => (
+                                                <option key={zone.value} value={zone.value}>{zone.label}</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <input 
-                                        type="text" 
-                                        value={email}
-                                        readOnly
-                                        disabled
-                                        className="w-full bg-transparent px-4 py-2.5 text-sm text-[var(--text-muted)] focus:outline-none"
-                                    />
                                 </div>
-                                <p className="text-xs text-[var(--text-muted)] mt-2">Email addresses cannot be changed for security reasons.</p>
-                            </div>
+                                <div className="flex items-center gap-3 pt-2">
+                                    <Button type="submit" isLoading={isSaving}>Save Changes</Button>
+                                    <Button type="button" variant="ghost" onClick={() => { setIsEditingProfile(false); fetchProfile(); }}>
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </form>
+                        ) : (
+                            <KeyValueList
+                                columns={2}
+                                items={[
+                                    { label: 'Display Name', value: fullName || 'Not set' },
+                                    { label: 'Primary Email', value: email || 'Not set' },
+                                    { label: 'Account Status', value: 'Active', helper: 'This account currently has access to the workspace.' },
+                                    { label: 'Default Timezone', value: timezone },
+                                ]}
+                            />
+                        )}
+                    </SectionCard>
 
-                            <hr className="border-[var(--border)]" />
+                    <SectionCard title="Security & Login" description="Keep sign-in details clear and reduce account risk when working across devices or teams.">
+                        <div className="space-y-5">
+                            <KeyValueList
+                                columns={2}
+                                items={[
+                                    { label: 'Account Email', value: email || 'Not set', helper: 'Used for sign-in and verification.' },
+                                    { label: 'Email Verification', value: 'Verified', helper: 'Your primary email is confirmed.' },
+                                ]}
+                            />
 
-                            {/* Password Section */}
-                            <div>
-                                <h3 className="text-sm font-medium text-[var(--text-primary)] mb-4">Change Password</h3>
-                                
-                                {isGoogleAuth ? (
-                                    <div className="p-4 rounded-lg border border-blue-500/20 bg-blue-500/10 text-sm">
-                                        <p className="font-semibold text-blue-400 mb-1 flex items-center gap-2">
-                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                                            </svg>
-                                            Signed in with Google
-                                        </p>
-                                        <p className="text-[var(--text-muted)]">You're using Google credentials to sign in. Change your password in your Google account settings.</p>
+                            {isGoogleAuth ? (
+                                <InlineAlert
+                                    variant="info"
+                                    title="Signed in with Google"
+                                    description="Password updates are managed by your Google account rather than directly in Sh_R_Mail."
+                                />
+                            ) : isChangingPassword ? (
+                                <div className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                                    <Input type="password" placeholder="Current Password" label="Current Password" />
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <Input type="password" placeholder="New Password" label="New Password" />
+                                        <Input type="password" placeholder="Confirm New Password" label="Confirm Password" />
                                     </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <input 
-                                                type="password" 
-                                                placeholder="Current Password"
-                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <input 
-                                                type="password" 
-                                                placeholder="New Password"
-                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                                            />
-                                            <input 
-                                                type="password" 
-                                                placeholder="Confirm New Password"
-                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                                            />
-                                        </div>
-                                        <Button variant="secondary" className="w-full sm:w-auto mt-2">Update Password</Button>
+                                    <div className="flex items-center gap-3">
+                                        <Button type="button" onClick={() => info('Password change flow is not wired yet.')}>Update Password</Button>
+                                        <Button type="button" variant="ghost" onClick={() => setIsChangingPassword(false)}>Cancel</Button>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-[var(--text-primary)]">Password</p>
+                                        <p className="mt-1 text-sm text-[var(--text-muted)]">Use a strong password and rotate it if you suspect shared access.</p>
+                                    </div>
+                                    <Button variant="secondary" size="sm" onClick={() => setIsChangingPassword(true)}>Change Password</Button>
+                                </div>
+                            )}
                         </div>
-                    </div>
+                    </SectionCard>
                 </div>
 
-                {/* Right Column: Avatar & Extras */}
                 <div className="space-y-6">
-                    {/* Avatar Card */}
-                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-[var(--radius-lg)] p-6 shadow-sm flex flex-col items-center text-center">
-                        <div className="relative group mb-4">
-                            <div className="w-28 h-28 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-4xl shadow-xl shadow-indigo-500/20 ring-4 ring-[var(--bg-primary)]">
-                                {initials}
+                    <SectionCard title="Avatar" description="A clearer profile makes approvals, ownership, and audit trails easier to scan.">
+                        <div className="flex flex-col items-center text-center">
+                            <div className="relative mb-4">
+                                <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-4xl font-bold text-white shadow-lg">
+                                    {initials}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => info('Avatar uploads are not wired yet.')}
+                                    className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/55 opacity-0 transition hover:opacity-100"
+                                >
+                                    <Camera className="h-6 w-6 text-white" />
+                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white">Change</span>
+                                </button>
                             </div>
-                            <button className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                                <Camera className="w-6 h-6 text-white mb-1" />
-                                <span className="text-[10px] text-white font-medium uppercase tracking-wider">Change</span>
-                            </button>
+                            <p className="text-lg font-semibold text-[var(--text-primary)]">{fullName || 'Unknown User'}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{email}</p>
+                            <p className="mt-4 w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                                Avatars should be at least 300x300px.
+                            </p>
                         </div>
-                        <h3 className="font-semibold text-[var(--text-primary)] text-lg">{fullName || 'Unknown User'}</h3>
-                        <p className="text-[var(--text-muted)] text-sm mb-6">{email}</p>
-                        
-                        <p className="text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] px-3 py-2 rounded-lg border border-[var(--border)] w-full">
-                            Avatars should be at least 300x300px.
-                        </p>
-                    </div>
+                    </SectionCard>
 
-                    {/* Support Block */}
-                    <div className="bg-blue-500/5 border border-blue-500/10 rounded-[var(--radius-lg)] p-5">
-                        <h4 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2 mb-2">
-                            <HelpCircle className="w-4 h-4 text-blue-500" /> Need Help?
-                        </h4>
-                        <p className="text-xs text-[var(--text-muted)] leading-relaxed mb-4">
-                            If you're having trouble logging in or need to reset 2FA, contact our support team.
-                        </p>
-                        <a href="mailto:support@emailengine.com" className="text-xs font-semibold text-blue-500 hover:text-blue-400 transition-colors">
-                            Contact Support &rarr;
+                    <SectionCard title="Need Help?" description="If you’re locked out or need recovery support, our team can help restore access safely.">
+                        <a href="mailto:support@emailengine.com" className="text-sm font-medium text-[var(--info)] transition hover:opacity-80">
+                            Contact support
                         </a>
-                    </div>
+                        <p className="mt-2 text-sm text-[var(--text-muted)]">
+                            Reach out for login issues, password resets, or 2FA recovery.
+                        </p>
+                    </SectionCard>
                 </div>
-
             </div>
         </div>
     );

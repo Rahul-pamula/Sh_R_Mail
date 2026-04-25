@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Key, ArrowLeft, Plus, Trash2, Copy, Check, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Key, Plus, Trash2, Copy, Check, Loader2, Shield } from 'lucide-react';
+import { Badge, Button, ConfirmModal, EmptyState, InlineAlert, Input, KeyValueList, PageHeader, SectionCard, StatCard, TableToolbar } from '@/components/ui';
 
 const API_BASE = 'http://127.0.0.1:8000';
 
@@ -25,6 +25,7 @@ export default function ApiKeysSettings() {
     const [copied, setCopied] = useState(false);
     const [revoking, setRevoking] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
+    const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
 
     const fetchKeys = async () => {
         if (!token) return;
@@ -32,8 +33,8 @@ export default function ApiKeysSettings() {
             headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-            const d = await res.json();
-            setKeys(d.api_keys || []);
+            const data = await res.json();
+            setKeys(data.api_keys || []);
         }
         setLoading(false);
     };
@@ -49,8 +50,8 @@ export default function ApiKeysSettings() {
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ name: newKeyName.trim() }),
             });
-            const d = await res.json();
-            setNewKey(d.key);
+            const data = await res.json();
+            setNewKey(data.key);
             setNewKeyName('');
             setShowCreate(false);
             await fetchKeys();
@@ -60,7 +61,6 @@ export default function ApiKeysSettings() {
     };
 
     const handleRevoke = async (id: string) => {
-        if (!confirm('Are you sure you want to revoke this API key? This cannot be undone.')) return;
         setRevoking(id);
         try {
             await fetch(`${API_BASE}/settings/api-keys/${id}`, {
@@ -81,142 +81,171 @@ export default function ApiKeysSettings() {
         }
     };
 
+    const summaryMetrics = [
+        { label: 'Keys', value: keys.length.toString() },
+        { label: 'Recently Used', value: keys.filter((key) => !!key.last_used_at).length.toString() },
+        { label: 'Never Used', value: keys.filter((key) => !key.last_used_at).length.toString() },
+        { label: 'Pending Create', value: showCreate ? '1' : '0' },
+    ];
+
     return (
-        <div className="min-h-screen bg-[var(--bg-primary)] p-8 lg:p-12">
-            <div className="max-w-3xl mx-auto">
-                <Link href="/settings" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-8">
-                    <ArrowLeft className="w-4 h-4" /> Back to Settings
-                </Link>
+        <div className="space-y-8 pb-8">
+            <PageHeader
+                title="API Keys"
+                subtitle="Issue scoped credentials for production, staging, and internal tooling without mixing operational and administrative work."
+                action={
+                    <Button onClick={() => setShowCreate((value) => !value)}>
+                        <Plus className="h-4 w-4" />
+                        New Key
+                    </Button>
+                }
+            />
 
-                <div className="flex items-start justify-between mb-8">
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center">
-                                <Key className="w-5 h-5 text-rose-400" />
-                            </div>
-                            <h1 className="text-2xl font-bold text-[var(--text-primary)]">API Keys</h1>
-                        </div>
-                        <p className="text-[var(--text-muted)] text-sm">Generate secret keys to use the Email Engine API in your own applications.</p>
-                    </div>
-                    <button
-                        onClick={() => setShowCreate(v => !v)}
-                        className="btn-premium px-4 py-2 text-sm flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" /> New Key
-                    </button>
-                </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {summaryMetrics.map((metric) => (
+                    <StatCard key={metric.label} label={metric.label} value={metric.value} />
+                ))}
+            </div>
 
-                {/* New Key Revealed Panel */}
-                {newKey && (
-                    <div className="mb-6 p-5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-                        <div className="flex items-start gap-3 mb-3">
-                            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-semibold text-emerald-400">API key created!</p>
-                                <p className="text-xs text-[var(--text-muted)] mt-0.5">Copy it now — this is the only time you'll see the full key.</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-input)] text-emerald-600 dark:text-emerald-300 text-xs font-mono break-all border border-emerald-500/20">
-                                {newKey}
-                            </code>
-                            <button
-                                onClick={copyKey}
-                                className="flex-shrink-0 px-3 py-2 rounded-lg border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                            >
-                                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                            </button>
-                        </div>
-                        <button onClick={() => setNewKey(null)} className="mt-3 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-                            I've copied it, dismiss
+            {newKey && (
+                <InlineAlert
+                    variant="success"
+                    title="API key created"
+                    description="Copy it now. This is the only time the full secret will be visible."
+                    icon={<Check className="mt-0.5 h-4 w-4" />}
+                >
+                    <div className="flex items-center gap-2">
+                        <code className="flex-1 break-all rounded-[var(--radius)] border border-[var(--success-border)] bg-[var(--bg-input)] px-3 py-2 font-mono text-xs text-[var(--text-primary)]">
+                            {newKey}
+                        </code>
+                        <button
+                            onClick={copyKey}
+                            className="rounded-[var(--radius)] border border-[var(--success-border)] px-3 py-2 text-[var(--success)] transition hover:bg-[var(--success-bg)]"
+                        >
+                            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                         </button>
                     </div>
-                )}
+                    <Button variant="ghost" size="sm" className="mt-3" onClick={() => setNewKey(null)}>
+                        I’ve copied it
+                    </Button>
+                </InlineAlert>
+            )}
 
-                {/* Create Key Form */}
-                {showCreate && (
-                    <div className="mb-6 p-5 glass-panel">
-                        <p className="text-sm font-medium text-[var(--text-secondary)] mb-3">Create New API Key</p>
-                        <div className="flex gap-3">
-                            <input
-                                type="text"
-                                value={newKeyName}
-                                onChange={e => setNewKeyName(e.target.value)}
-                                className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-sm focus:border-[var(--accent)] transition-colors outline-none"
-                                placeholder='e.g. "Production App" or "CI/CD Pipeline"'
-                                onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                            />
-                            <button
-                                onClick={handleCreate}
-                                disabled={creating || !newKeyName.trim()}
-                                className="btn-premium px-5 py-2.5 text-sm disabled:opacity-60"
-                            >
-                                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
-                            </button>
-                        </div>
+            {showCreate && (
+                <SectionCard
+                    title="Create New API Key"
+                    description="Name keys by environment or owner so rotation, revocation, and audit trails stay obvious later."
+                >
+                    <div className="flex gap-3">
+                        <Input
+                            type="text"
+                            value={newKeyName}
+                            onChange={(e) => setNewKeyName(e.target.value)}
+                            className="flex-1"
+                            placeholder='e.g. "Production App" or "CI/CD Pipeline"'
+                            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                        />
+                        <Button onClick={handleCreate} disabled={creating || !newKeyName.trim()}>
+                            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create'}
+                        </Button>
                     </div>
-                )}
+                </SectionCard>
+            )}
 
-                {/* Keys List */}
-                <div className="glass-panel overflow-hidden">
-                    {loading ? (
-                        <div className="flex items-center justify-center p-12">
-                            <Loader2 className="w-5 h-5 animate-spin text-[var(--accent)]" />
-                        </div>
-                    ) : keys.length === 0 ? (
-                        <div className="text-center py-16 px-6">
-                            <Key className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
-                            <p className="text-[var(--text-muted)] text-sm">No API keys yet. Create one to get started.</p>
-                        </div>
-                    ) : (
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-[var(--border)]">
-                                    <th className="text-left px-6 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Name</th>
-                                    <th className="text-left px-6 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Key</th>
-                                    <th className="text-left px-6 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Created</th>
-                                    <th className="text-left px-6 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Last Used</th>
-                                    <th className="px-6 py-3" />
+            <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-card)]">
+                <TableToolbar
+                    title="Issued Keys"
+                    description="Separate keys by environment or integration so revocation stays low-risk."
+                    trailing={keys.length > 0 ? <Badge variant="outline">{keys.length} active records</Badge> : null}
+                    className="rounded-none border-0 border-b border-[var(--border)]"
+                />
+                {loading ? (
+                    <div className="flex items-center justify-center p-12">
+                        <Loader2 className="h-5 w-5 animate-spin text-[var(--accent)]" />
+                    </div>
+                ) : keys.length === 0 ? (
+                    <EmptyState
+                        icon={<Key className="h-10 w-10" />}
+                        title="No API keys yet"
+                        description="Create a dedicated key for each integration surface so you can rotate credentials without collateral damage."
+                        action={<Button onClick={() => setShowCreate(true)}>Create API Key</Button>}
+                    />
+                ) : (
+                    <table className="w-full border-collapse">
+                        <thead>
+                            <tr className="border-b border-[var(--border)] bg-[var(--bg-hover)]">
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Key</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Created</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Last Used</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Status</th>
+                                <th className="px-6 py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {keys.map((key) => (
+                                <tr key={key.id} className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--bg-hover)]">
+                                    <td className="px-6 py-4 text-sm font-medium text-[var(--text-primary)]">{key.name}</td>
+                                    <td className="px-6 py-4">
+                                        <code className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1 font-mono text-xs text-[var(--text-muted)]">
+                                            {key.key_prefix}•••••••••
+                                        </code>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
+                                        {new Date(key.created_at).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
+                                        {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <Badge variant={key.last_used_at ? 'success' : 'outline'}>
+                                            {key.last_used_at ? 'Active' : 'Unused'}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <button
+                                            onClick={() => setPendingRevokeId(key.id)}
+                                            disabled={revoking === key.id}
+                                            className="rounded-[var(--radius)] p-1.5 text-[var(--text-muted)] transition hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]"
+                                            title="Revoke key"
+                                        >
+                                            {revoking === key.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                        </button>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {keys.map((key, i) => (
-                                    <tr key={key.id} className="border-b border-[var(--border)] last:border-0 hover:bg-white/[0.02] transition-colors">
-                                        <td className="px-6 py-4 text-sm font-medium text-[var(--text-primary)]">{key.name}</td>
-                                        <td className="px-6 py-4">
-                                            <code className="text-xs font-mono text-[var(--text-muted)] bg-[var(--bg-input)] px-2 py-1 rounded">
-                                                {key.key_prefix}•••••••••
-                                            </code>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
-                                            {new Date(key.created_at).toLocaleDateString()}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
-                                            {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <button
-                                                onClick={() => handleRevoke(key.id)}
-                                                disabled={revoking === key.id}
-                                                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                                title="Revoke key"
-                                            >
-                                                {revoking === key.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-
-                <div className="mt-4 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border)]">
-                    <p className="text-xs text-[var(--text-muted)]">
-                        <span className="font-medium text-[var(--text-secondary)]">Usage:</span> Include your API key in the <code className="bg-[var(--bg-input)] px-1 py-0.5 rounded text-[var(--accent)]">Authorization: Bearer ee_...</code> header when making API calls.
-                    </p>
-                </div>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </div>
+
+            <SectionCard title="Usage Guidance" description="Keep authentication patterns consistent across SDKs, internal tooling, and partner integrations.">
+                <KeyValueList
+                    columns={1}
+                    items={[
+                        {
+                            label: 'Authorization header',
+                            value: <code className="rounded bg-[var(--bg-input)] px-1 py-0.5 font-mono text-xs text-[var(--accent)]">Authorization: Bearer ee_...</code>,
+                            helper: 'Use a unique key per environment so rotation is low-risk and audit history stays useful.',
+                        },
+                    ]}
+                />
+            </SectionCard>
+
+            <ConfirmModal
+                isOpen={!!pendingRevokeId}
+                onClose={() => setPendingRevokeId(null)}
+                onConfirm={() => {
+                    if (!pendingRevokeId) return;
+                    const current = pendingRevokeId;
+                    setPendingRevokeId(null);
+                    void handleRevoke(current);
+                }}
+                title="Revoke API Key?"
+                message="This key will stop working immediately and cannot be recovered."
+                confirmLabel="Revoke Key"
+                variant="danger"
+            />
         </div>
     );
 }

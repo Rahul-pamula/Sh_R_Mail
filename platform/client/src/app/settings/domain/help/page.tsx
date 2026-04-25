@@ -1,140 +1,172 @@
-"use client";
-import React from 'react';
-import { ArrowLeft, ShieldCheck, AlertTriangle, HelpCircle, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
+'use client';
 
-const colors = {
-    bg: 'var(--bg-primary)',
-    card: 'var(--bg-card)',
-    border: 'var(--border)',
-    text: 'var(--text-primary)',
-    textSecondary: 'var(--text-muted)',
-    primary: '#3B82F6',
-    warning: '#F59E0B',
-    danger: '#EF4444',
-    success: '#10B981',
-};
+import Link from 'next/link';
+import { AlertTriangle, ArrowLeft, CheckCircle2, HelpCircle, ShieldCheck } from 'lucide-react';
+
+import { InlineAlert, PageHeader, SectionCard } from '@/components/ui';
+
+const providers = [
+    {
+        id: 'namecheap',
+        title: 'Namecheap setup',
+        sections: [
+            {
+                title: 'DKIM records (3 CNAME records)',
+                body: 'Namecheap appends your base domain automatically, so only paste the prefix shown in Sh_R_Mail into the host field.',
+                steps: [
+                    'Open the Namecheap dashboard and click Manage for your domain.',
+                    'Go to Advanced DNS and choose Add New Record.',
+                    'Create a CNAME record and paste only the host prefix, such as xxx._domainkey.',
+                    'Paste the exact DKIM target value from Sh_R_Mail.',
+                    'Repeat the process for all three DKIM records.',
+                ],
+            },
+            {
+                title: 'SPF record (TXT)',
+                body: 'Use the root domain host and paste the SPF value exactly as shown in the app.',
+                steps: [
+                    'Add a TXT record in the same DNS area.',
+                    'Set Host to @.',
+                    'Paste the SPF value exactly as provided by Sh_R_Mail.',
+                ],
+            },
+            {
+                title: 'Custom return-path and bounce records',
+                body: 'These records keep bounce routing aligned and remove the “via amazonses.com” style fallback behavior.',
+                steps: [
+                    'Add the MX record using the bounces prefix shown in the app.',
+                    'Use the exact priority and target shown in the domain panel.',
+                    'Add the matching TXT record for the same bounce host.',
+                ],
+            },
+        ],
+    },
+    {
+        id: 'godaddy',
+        title: 'GoDaddy setup',
+        sections: [
+            {
+                title: 'Record entry guidance',
+                body: 'GoDaddy also appends your domain automatically, so only paste the host prefix, not the full domain.',
+                steps: [
+                    'Open your domain in the GoDaddy control center.',
+                    'Choose Manage DNS and then Add New Record.',
+                    'Select the type shown in Sh_R_Mail: CNAME, TXT, or MX.',
+                    'Paste only the host prefix such as bounces or xxx._domainkey.',
+                    'Paste the value from Sh_R_Mail exactly and save.',
+                ],
+            },
+        ],
+    },
+];
 
 export default function DomainHelpPage() {
     return (
-        <div style={{ maxWidth: '800px', paddingBottom: '80px', paddingTop: '20px' }}>
-            <Link href="/settings/domain" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: colors.textSecondary, textDecoration: 'none', marginBottom: '32px', fontSize: '14px', transition: 'color 0.2s', fontWeight: 500 }}>
-                <ArrowLeft size={16} /> Back to Domains
-            </Link>
+        <div className="mx-auto max-w-5xl space-y-8 px-4 pb-20 pt-6 sm:px-6">
+            <PageHeader
+                title="Domain verification guide"
+                subtitle="Use this guide when you need a calmer explanation of why the DNS records matter and how to enter them correctly."
+                action={(
+                    <Link
+                        href="/settings/domain"
+                        className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Back to domains
+                    </Link>
+                )}
+            />
 
-            <h1 style={{ fontSize: '32px', fontWeight: 600, color: colors.text, margin: '0 0 16px', letterSpacing: '-0.02em' }}>Domain Verification Guide</h1>
-            <p style={{ color: colors.textSecondary, margin: '0 0 40px', fontSize: '16px', lineHeight: 1.6 }}>
-                To send emails on behalf of your domain, you need to prove ownership by adding DKIM, SPF, and Custom Return-Path records to your DNS provider.
-            </p>
-
-            {/* Why is this required */}
-            <section style={{ marginBottom: '40px' }}>
-                <h2 style={{ fontSize: '20px', color: colors.text, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HelpCircle size={20} color={colors.primary} /> Why are these steps required?
-                </h2>
-                <div style={{ display: 'grid', gap: '16px' }}>
-                    <div style={{ backgroundColor: colors.card, padding: '20px', borderRadius: '8px', border: `1px solid ${colors.border}` }}>
-                        <h3 style={{ fontSize: '15px', color: colors.text, margin: '0 0 8px' }}>1. DKIM (3 CNAME records)</h3>
-                        <p style={{ color: colors.textSecondary, margin: 0, fontSize: '14px', lineHeight: 1.5 }}>Acts as a cryptographic signature. This proves to inbox providers (like Gmail and Outlook) that your emails actually came from you and weren't forged by a spammer.</p>
-                    </div>
-                    <div style={{ backgroundColor: colors.card, padding: '20px', borderRadius: '8px', border: `1px solid ${colors.border}` }}>
-                        <h3 style={{ fontSize: '15px', color: colors.text, margin: '0 0 8px' }}>2. SPF (TXT record)</h3>
-                        <p style={{ color: colors.textSecondary, margin: 0, fontSize: '14px', lineHeight: 1.5 }}>A public list of approved senders. This explicitly tells receiving inboxes that Amazon SES (our backend infrastructure) is legally authorized to send emails on your behalf.</p>
-                    </div>
-                    <div style={{ backgroundColor: colors.card, padding: '20px', borderRadius: '8px', border: `1px solid ${colors.border}` }}>
-                        <h3 style={{ fontSize: '15px', color: colors.text, margin: '0 0 8px' }}>3. Custom Return-Path / Bounces (MX & TXT records)</h3>
-                        <p style={{ color: colors.textSecondary, margin: 0, fontSize: '14px', lineHeight: 1.5 }}>Ensures that bounce messages are routed correctly to Amazon SES, achieving Strict DMARC alignment. Without this, Gmail will tag your emails with an ugly "via amazonses.com" label. This removes that tag!</p>
-                    </div>
+            <SectionCard
+                title="Why these records are required"
+                description="Each record exists to prove identity, authorize sending, or keep bounce handling aligned with your domain."
+            >
+                <div className="grid gap-4 md:grid-cols-3">
+                    {[
+                        {
+                            title: 'DKIM',
+                            body: 'Adds a cryptographic signature so inbox providers can verify your mail was really sent by your domain.',
+                            icon: HelpCircle,
+                            tone: 'text-[var(--accent)]',
+                        },
+                        {
+                            title: 'SPF',
+                            body: 'Tells inbox providers which infrastructure is allowed to send on your behalf.',
+                            icon: ShieldCheck,
+                            tone: 'text-[var(--ai-accent)]',
+                        },
+                        {
+                            title: 'Return-path and bounces',
+                            body: 'Routes bounce handling correctly and helps keep alignment clean for DMARC-sensitive providers.',
+                            icon: CheckCircle2,
+                            tone: 'text-[var(--success)]',
+                        },
+                    ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                            <div key={item.title} className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                                <Icon className={`mb-4 h-5 w-5 ${item.tone}`} />
+                                <h3 className="text-base font-semibold text-[var(--text-primary)]">{item.title}</h3>
+                                <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">{item.body}</p>
+                            </div>
+                        );
+                    })}
                 </div>
-            </section>
+            </SectionCard>
 
-            {/* What if I miss one? */}
-            <div style={{ padding: '20px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: `1px solid rgba(239, 68, 68, 0.3)`, borderRadius: '12px', display: 'flex', gap: '16px', marginBottom: '56px' }}>
-                <AlertTriangle color={colors.danger} size={24} style={{ flexShrink: 0 }} />
-                <div>
-                    <h4 style={{ color: '#FCA5A5', margin: '0 0 8px', fontSize: '16px' }}>What happens if I make a mistake or miss a record?</h4>
-                    <p style={{ color: '#F87171', margin: 0, fontSize: '14px', lineHeight: 1.6 }}>
-                        Domain verification will <strong>fail</strong>. Every single record must be present and perfectly copied. If even one character is off, your domain will remain in an unverified state, and you will be completely prevented from sending campaigns. Take your time and copy the values exactly!
-                    </p>
-                </div>
+            <InlineAlert
+                variant="danger"
+                title="If one record is wrong, verification will fail"
+                description="Every DNS record needs to be present and copied exactly. Even one missing character can keep the domain unverified and block sending."
+            />
+
+            <div className="space-y-6">
+                {providers.map((provider, providerIndex) => (
+                    <SectionCard
+                        key={provider.id}
+                        title={`${providerIndex + 1}. ${provider.title}`}
+                        description="Follow the provider-specific notes below, then compare what you entered against the exact values shown in the app."
+                    >
+                        <div className="space-y-4">
+                            {provider.sections.map((section) => (
+                                <div key={section.title} className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                                    <h3 className="text-base font-semibold text-[var(--text-primary)]">{section.title}</h3>
+                                    <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">{section.body}</p>
+                                    <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-[var(--text-primary)]">
+                                        {section.steps.map((step) => (
+                                            <li key={step} className="pl-1">{step}</li>
+                                        ))}
+                                    </ol>
+                                </div>
+                            ))}
+                        </div>
+                    </SectionCard>
+                ))}
             </div>
 
-            {/* Namecheap Section */}
-            <section style={{ marginBottom: '56px' }}>
-                <h2 id="namecheap" style={{ fontSize: '24px', color: colors.text, margin: '0 0 16px', borderBottom: `1px solid ${colors.border}`, paddingBottom: '12px' }}>
-                    1. Namecheap Setup
-                </h2>
-                <div style={{ padding: '24px', backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '12px', marginBottom: '24px' }}>
-                    <h3 style={{ fontSize: '16px', color: colors.text, margin: '0 0 12px' }}>DKIM Records (CNAME)</h3>
-                    <p style={{ color: colors.textSecondary, fontSize: '14px', marginBottom: '16px' }}>
-                        Namecheap implicitly adds your base domain to the host field. <strong>You must strip your domain off the host value we provide.</strong>
-                    </p>
-                    <ol style={{ color: colors.text, margin: 0, paddingLeft: '20px', fontSize: '15px', lineHeight: 2 }}>
-                        <li>Log in to your <strong>Namecheap Dashboard</strong>.</li>
-                        <li>Click <strong>Manage</strong> next to your domain.</li>
-                        <li>Navigate to the <strong>Advanced DNS</strong> tab.</li>
-                        <li>Under "Host Records", click <strong>Add New Record</strong>.</li>
-                        <li>Select <strong>CNAME Record</strong>.</li>
-                        <li>Paste the <strong>Host</strong> name copied from your dashboard, removing your domain name (e.g. <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>xxx._domainkey</code>).</li>
-                        <li>Paste the exact <strong>Value</strong> (<code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>xxx.dkim.amazonses.com</code>).</li>
-                        <li>Save the record. Repeat for all 3 DKIM records.</li>
-                    </ol>
-                </div>
+            <InlineAlert
+                variant="success"
+                title="What to do next"
+                description={(
+                    <>
+                        Go back to <strong>Settings → Domains</strong> and use <strong>Check Status</strong> on the pending domain.
+                        DNS changes often take 15 to 45 minutes to propagate, and some providers can take longer.
+                    </>
+                )}
+                icon={<CheckCircle2 className="h-4 w-4" />}
+            />
 
-                <div style={{ padding: '24px', backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '12px', marginBottom: '24px' }}>
-                    <h3 style={{ fontSize: '16px', color: colors.text, margin: '0 0 12px' }}>SPF Record (TXT)</h3>
-                    <ol style={{ color: colors.text, margin: 0, paddingLeft: '20px', fontSize: '15px', lineHeight: 2 }}>
-                        <li>In the same "Host Records" section, click <strong>Add New Record</strong>.</li>
-                        <li>Select <strong>TXT Record</strong>.</li>
-                        <li>Set the Host field to exactly <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>@</code> (representing the root domain).</li>
-                        <li>Set the Value field to <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>v=spf1 include:amazonses.com ~all</code>.</li>
-                        <li>Save the record.</li>
-                    </ol>
-                </div>
-
-                <div style={{ padding: '24px', backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '12px' }}>
-                    <h3 style={{ fontSize: '16px', color: colors.text, margin: '0 0 12px' }}>Custom Return-Path (MX & TXT Bounces)</h3>
-                    <ol style={{ color: colors.text, margin: 0, paddingLeft: '20px', fontSize: '15px', lineHeight: 2 }}>
-                        <li>For the MX record: Under "Mail Settings" (or Host Records depending on your setup), select <strong>Custom MX</strong>.</li>
-                        <li>Select <strong>Add New Record</strong>.</li>
-                        <li>Set Host to <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>bounces</code> (or exactly what is shown in the app).</li>
-                        <li>Set Value to <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>feedback-smtp.us-east-1.amazonses.com</code> with a priority of <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>10</code>.</li>
-                        <li>For the TXT record: Add a standard TXT record with Host <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>bounces</code> and Value <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>v=spf1 include:amazonses.com ~all</code>.</li>
-                        <li>Save both records.</li>
-                    </ol>
-                </div>
-            </section>
-
-            {/* GoDaddy Section */}
-            <section style={{ marginBottom: '56px' }}>
-                <h2 id="godaddy" style={{ fontSize: '24px', color: colors.text, margin: '0 0 16px', borderBottom: `1px solid ${colors.border}`, paddingBottom: '12px' }}>
-                    2. GoDaddy Setup
-                </h2>
-                <div style={{ padding: '24px', backgroundColor: colors.card, border: `1px solid ${colors.border}`, borderRadius: '12px' }}>
-                    <ol style={{ color: colors.text, margin: 0, paddingLeft: '20px', fontSize: '15px', lineHeight: 2 }}>
-                        <li>Log in to your <strong>GoDaddy Control Center</strong>.</li>
-                        <li>Select your domain to access the Domain Settings page.</li>
-                        <li>Select <strong>Manage DNS</strong>.</li>
-                        <li>Select <strong>Add New Record</strong>.</li>
-                        <li>Depending on the table in our dashboard, select <strong>CNAME</strong>, <strong>TXT</strong>, or <strong>MX</strong>.</li>
-                        <li>GoDaddy also automatically appends your domain name. Ensure you are only pasting the prefix (like <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>bounces</code> or <code style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px' }}>_domainkey</code>) into the Host/Name field.</li>
-                        <li>Paste the exact Value/Data provided in our app.</li>
-                        <li>Click <strong>Save</strong>.</li>
-                    </ol>
-                </div>
-            </section>
-
-            {/* What to do Next Box */}
-            <div style={{ padding: '24px', backgroundColor: 'rgba(16, 185, 129, 0.1)', border: `1px solid rgba(16, 185, 129, 0.3)`, borderRadius: '12px', display: 'flex', gap: '16px' }}>
-                <CheckCircle2 color={colors.success} size={28} style={{ flexShrink: 0 }} />
-                <div>
-                    <h4 style={{ color: '#34D399', margin: '0 0 8px', fontSize: '16px' }}>What to do next?</h4>
-                    <p style={{ color: '#6EE7B7', margin: 0, fontSize: '14px', lineHeight: 1.6 }}>
-                        Head back to the <strong>Settings &rarr; Domains</strong> page and click the <strong>Check Status</strong> icon next to your pending domain. DNS propagation can take 15 to 45 minutes on average, though GoDaddy occasionally takes longer. Once your badge turns green and says "Authenticated", you are immediately ready to start creating Campaigns using this domain!
-                    </p>
-                </div>
-            </div>
-
+            <InlineAlert
+                variant="warning"
+                title="Common failure pattern"
+                description={(
+                    <>
+                        If verification stays stuck, compare the <strong>host</strong> and <strong>value</strong> fields character-by-character.
+                        The most common issue is pasting the full domain into providers that already append it automatically.
+                    </>
+                )}
+                icon={<AlertTriangle className="h-4 w-4" />}
+            />
         </div>
     );
 }
