@@ -20,12 +20,20 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     const publicRoutes = ['/', '/login', '/signup', '/docs', '/forgot-password', '/contact', '/pricing', '/unsubscribe'];
     const isPublicRoute = publicRoutes.includes(pathname || '');
     const isOnboardingRoute = pathname?.startsWith('/onboarding');
+    const isSettingsRoute = pathname?.startsWith('/settings');
 
-    // Full-screen routes: template editor (/templates/[id]) should hide sidebar for immersive editing
-    const isFullScreenRoute = /^\/templates\/[^/]+$/.test(pathname || '') && pathname !== '/templates';
+    // Full-screen routes are reserved for focused builders/editors only.
+    const isFullScreenRoute = (
+        pathname?.startsWith('/templates/') && (
+            pathname?.includes('/builder') || pathname?.includes('/editor') || pathname?.includes('/block')
+        )
+    );
 
-    // Only show sidebar/header for authenticated users on app routes
-    const showSidebar = !isPublicRoute && !isOnboardingRoute && !isFullScreenRoute && isAuthenticated;
+    // Settings use their own local rail and should not compete with the full app sidebar.
+    const showAppChrome = !isPublicRoute && !isOnboardingRoute && !isFullScreenRoute && isAuthenticated;
+    const showSidebar = showAppChrome;
+    const showHeader = showAppChrome;
+
 
     // Show loading state
     const isRedirectingToOnboarding = isAuthenticated && user?.tenantStatus === 'onboarding' && !isOnboardingRoute && !isPublicRoute;
@@ -41,11 +49,12 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
 
     return (
         <div className="flex h-screen overflow-hidden relative">
+
             {showSidebar && <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />}
 
             <main className="flex-1 overflow-auto bg-[var(--bg-primary)] flex flex-col min-w-0">
-                {showSidebar && <Header setMobileMenuOpen={() => setMobileMenuOpen(true)} />}
-                <div className={`flex-1 ${showSidebar ? 'p-4 md:p-8 max-w-7xl mx-auto w-full' : 'w-full'}`}>
+                {showHeader && <Header setMobileMenuOpen={() => setMobileMenuOpen(true)} />}
+                <div className={`flex-1 ${showHeader ? `px-5 pt-6 pb-8 md:px-8 max-w-[1600px] mx-auto w-full` : 'w-full'}`}>
                     {children}
                 </div>
             </main>

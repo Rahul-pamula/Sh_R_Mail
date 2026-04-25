@@ -2,22 +2,76 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Mail, ChevronLeft, Activity, Users, Zap, LayoutTemplate, Settings } from 'lucide-react';
+import {
+    Mail, ChevronLeft, LayoutDashboard, Users, BarChart3,
+    LayoutTemplate, Settings, ServerCog, Megaphone, ChevronRight,
+    User, Building2, CreditCard, Shield, Key, Globe,
+    MailCheck, UserPlus, Bell, Lock, Sliders,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useAuth } from '@/context/AuthContext';
 
 /* ============================================================
-   SIDEBAR - Premium Dark Mode
-   Uses CSS variables from globals.css for consistent theming
+   SIDEBAR — Single sidebar with inline Settings submenu
    ============================================================ */
 
-const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: Activity },
-    { name: 'Contacts', href: '/contacts', icon: Users },
-    { name: 'Events', href: '/events', icon: Zap },
-    { name: 'Campaigns', href: '/campaigns', icon: Zap }, // Using Zap for campaigns too or a different icon
-    { name: 'Templates', href: '/templates', icon: LayoutTemplate },
-    { name: 'Settings', href: '/settings', icon: Settings },
+const NAV_SECTIONS = [
+    {
+        label: 'Operate',
+        items: [
+            { name: 'Dashboard', href: '/dashboard',     icon: LayoutDashboard },
+            { name: 'Contacts',  href: '/contacts',      icon: Users },
+            { name: 'Templates', href: '/templates',     icon: LayoutTemplate },
+            { name: 'Campaigns', href: '/campaigns',     icon: Megaphone },
+        ],
+    },
+    {
+        label: 'Observe',
+        items: [
+            { name: 'Analytics', href: '/analytics',     icon: BarChart3 },
+        ],
+    },
+    {
+        label: 'Configure',
+        items: [
+            { name: 'Infrastructure', href: '/infrastructure', icon: ServerCog },
+            { name: 'Settings',       href: '/settings',       icon: Settings },
+        ],
+    },
+];
+
+const SETTINGS_SUB = [
+    {
+        label: 'Account',
+        items: [
+            { href: '/settings/profile',       icon: User,      label: 'Profile' },
+            { href: '/settings/preferences',   icon: Sliders,   label: 'Preferences' },
+            { href: '/settings/security',      icon: Lock,      label: 'Security' },
+            { href: '/settings/notifications', icon: Bell,      label: 'Notifications' },
+        ],
+    },
+    {
+        label: 'Workspace',
+        items: [
+            { href: '/settings/organization',  icon: Building2,  label: 'Organization' },
+            { href: '/settings/team',          icon: Users,      label: 'Team' },
+            { href: '/settings/team/requests', icon: UserPlus,   label: 'Access Requests' },
+            { href: '/settings/billing',       icon: CreditCard, label: 'Billing & Plan' },
+        ],
+    },
+    {
+        label: 'Email',
+        items: [
+            { href: '/settings/domain',        icon: Globe,     label: 'Domain' },
+            { href: '/settings/senders',       icon: MailCheck, label: 'Senders' },
+            { href: '/settings/compliance',    icon: Shield,    label: 'Compliance' },
+        ],
+    },
+    {
+        label: 'Developer',
+        items: [
+            { href: '/settings/api-keys',      icon: Key,       label: 'API Keys' },
+        ],
+    },
 ];
 
 interface SidebarProps {
@@ -28,102 +82,151 @@ interface SidebarProps {
 export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarProps) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
-    const { logout } = useAuth();
+
+    const isOnSettings = pathname?.startsWith('/settings');
+
+    const isActive = (href: string) =>
+        pathname === href || (href !== '/' && pathname.startsWith(href));
 
     return (
         <>
             {/* Mobile backdrop */}
             {mobileMenuOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden" 
-                    onClick={() => setMobileMenuOpen?.(false)} 
+                <div
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setMobileMenuOpen?.(false)}
                 />
             )}
-            <aside
-                className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out border-r border-[var(--border)] z-50 fixed md:relative h-screen bg-[var(--bg-card)] backdrop-blur-xl ${collapsed ? 'w-[72px]' : 'w-[260px]'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
-            >
-            {/* Logo Area */}
-            <div className="h-20 flex items-center justify-between px-5 border-b border-[var(--border)]">
-                {!collapsed && (
-                    <div className="flex items-center gap-3 animate-fade-in">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-[var(--shadow-glow)]">
-                            <Mail className="w-4 h-4 text-white" />
+
+            <aside className={`
+                flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out
+                border-r border-[var(--border)] z-50 fixed md:relative h-screen
+                bg-[var(--bg-card)] backdrop-blur-xl
+                ${collapsed ? 'w-[72px]' : 'w-[240px]'}
+                ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
+
+                {/* Logo */}
+                <div className="h-[64px] shrink-0 flex items-center justify-between px-4 border-b border-[var(--border)]">
+                    {!collapsed && (
+                        <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--ai-accent)] flex items-center justify-center shadow-lg shadow-[var(--accent)]/20">
+                                <Mail className="w-3.5 h-3.5 text-white" />
+                            </div>
+                            <span className="font-bold text-[14px] text-[var(--text-primary)] tracking-tight">
+                                Sh_R_Mail
+                            </span>
                         </div>
-                        <span className="font-bold text-[15px] text-[var(--text-primary)] tracking-tight">
-                            Email Engine
-                        </span>
-                    </div>
-                )}
-                {collapsed && (
-                    <div className="w-full flex justify-center animate-fade-in">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <Mail className="w-4 h-4 text-white" />
+                    )}
+                    {collapsed && (
+                        <div className="w-full flex justify-center">
+                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--ai-accent)] flex items-center justify-center shadow-lg shadow-[var(--accent)]/20">
+                                <Mail className="w-3.5 h-3.5 text-white" />
+                            </div>
                         </div>
-                    </div>
-                )}
-
-                {/* Collapse Toggle */}
-                {!collapsed && (
-                    <button
-                        onClick={() => setCollapsed(true)}
-                        className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-                )}
-            </div>
-
-            {/* Expand Toggle (when collapsed) */}
-            {collapsed && (
-                <button
-                    onClick={() => setCollapsed(false)}
-                    className="absolute top-[88px] right-[-12px] bg-[var(--bg-card)] border border-[var(--border)] rounded-full p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] shadow-md z-30 transition-transform hover:scale-110"
-                >
-                    <ChevronLeft className="w-3 h-3 rotate-180" />
-                </button>
-            )}
-
-            {/* Navigation */}
-            <nav className="flex-1 py-6 px-3 overflow-y-auto">
-                <div className="mb-4 px-3 text-xs font-semibold tracking-wider text-[var(--text-muted)] uppercase">
-                    {!collapsed && <span>Menu</span>}
-                    {collapsed && <span className="flex justify-center">•</span>}
+                    )}
+                    {!collapsed && (
+                        <button
+                            onClick={() => setCollapsed(true)}
+                            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
 
-                <ul className="space-y-1.5">
-                    {navItems.map((item, i) => {
-                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                        const Icon = item.icon;
+                {/* Expand toggle (when collapsed) */}
+                {collapsed && (
+                    <button
+                        onClick={() => setCollapsed(false)}
+                        className="absolute top-[76px] right-[-12px] bg-[var(--bg-card)] border border-[var(--border)] rounded-full p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] shadow-md z-30 transition-transform hover:scale-110"
+                    >
+                        <ChevronRight className="w-3 h-3" />
+                    </button>
+                )}
 
-                        return (
-                            <li key={item.name} className={`stagger-${(i % 4) + 1} animate-slide-right`}>
-                                <Link
-                                    href={item.href}
-                                    className={`
-                                        group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                                        ${isActive
-                                            ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
-                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
-                                    `}
-                                    title={collapsed ? item.name : undefined}
-                                >
-                                    {isActive && (
-                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-blue-400 to-violet-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-                                    )}
+                {/* Navigation */}
+                <nav className="flex-1 pt-6 pb-4 px-2 overflow-y-auto space-y-4">
+                    {NAV_SECTIONS.map(section => (
+                        <div key={section.label}>
+                            {/* Section label */}
+                            {!collapsed && (
+                                <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-60 leading-none mt-0">
+                                    {section.label}
+                                </p>
+                            )}
+                            {collapsed && (
+                                <div className="flex justify-center mb-1">
+                                    <div className="w-4 h-px bg-[var(--border)]" />
+                                </div>
+                            )}
 
-                                    <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
+                            <ul className="space-y-0.5">
+                                {section.items.map(item => {
+                                    const active = isActive(item.href);
+                                    const Icon = item.icon;
+                                    return (
+                                        <li key={item.name}>
+                                            <Link
+                                                href={item.href}
+                                                title={collapsed ? item.name : undefined}
+                                                className={`
+                                                    group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                                                    ${active
+                                                        ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
+                                                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
+                                                    ${collapsed ? 'justify-center' : ''}
+                                                `}
+                                            >
+                                                {active && (
+                                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-gradient-to-b from-[var(--accent)] to-[var(--ai-accent)] rounded-r-full" />
+                                                )}
+                                                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
+                                                {!collapsed && <span className="truncate">{item.name}</span>}
+                                            </Link>
 
-                                    {!collapsed && (
-                                        <span className="truncate">{item.name}</span>
-                                    )}
-                                </Link>
-                            </li>
-                        );
-                    })}
-                </ul>
-            </nav>
-
-        </aside>
+                                            {/* Settings submenu — expands inline when on /settings/* */}
+                                            {item.href === '/settings' && isOnSettings && !collapsed && (
+                                                <div className="mt-1 ml-3 pl-3 border-l border-[var(--border)] space-y-3">
+                                                    {SETTINGS_SUB.map(sub => (
+                                                        <div key={sub.label}>
+                                                            <p className="px-2 mb-1 text-[9px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-50 leading-none">
+                                                                {sub.label}
+                                                            </p>
+                                                            <ul className="space-y-0.5">
+                                                                {sub.items.map(subItem => {
+                                                                    const subActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
+                                                                    const SubIcon = subItem.icon;
+                                                                    return (
+                                                                        <li key={subItem.href}>
+                                                                            <Link
+                                                                                href={subItem.href}
+                                                                                className={`
+                                                                                    group relative flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[12px] font-medium transition-all duration-150
+                                                                                    ${subActive
+                                                                                        ? 'text-[var(--accent)] bg-[var(--accent)]/10'
+                                                                                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}
+                                                                                `}
+                                                                            >
+                                                                                <SubIcon size={13} className={`flex-shrink-0 ${subActive ? 'text-[var(--accent)]' : ''}`} />
+                                                                                <span className="truncate">{subItem.label}</span>
+                                                                            </Link>
+                                                                        </li>
+                                                                    );
+                                                                })}
+                                                            </ul>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    ))}
+                </nav>
+            </aside>
         </>
     );
 }

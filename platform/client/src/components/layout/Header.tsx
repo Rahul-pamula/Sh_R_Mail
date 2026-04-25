@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Search, Bell, Menu, User, Settings, CreditCard, LogOut, ChevronDown, CheckCircle2, UserPlus, RefreshCw } from 'lucide-react';
+import { Search, Bell, Menu, User, Settings, CreditCard, LogOut, ChevronDown, CheckCircle2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { CommandPalette } from '@/components/ui/CommandPalette';
 
 interface HeaderProps {
     setMobileMenuOpen?: () => void;
@@ -27,6 +28,19 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Command K shortcut
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                setIsSearchOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     if (!user) return null;
 
     // Get initials for avatar
@@ -35,9 +49,11 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
     // Map the internal role to a friendly label
     const roleLabel = user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Member';
 
+
+
     return (
-        <header className="h-16 border-b border-[var(--border)] bg-[var(--bg-primary)] px-6 flex items-center justify-between sticky top-0 z-50">
-            {/* Left side: Mobile Menu (hidden on desktop) + Breadcrumb placeholder */}
+        <header className="h-[64px] bg-[var(--bg-primary)] px-6 flex items-center justify-between sticky top-0 z-50 border-b border-[var(--border)] shrink-0">
+            {/* Left side: Mobile menu toggle only */}
             <div className="flex items-center gap-4 flex-1">
                 <button 
                     onClick={() => setMobileMenuOpen?.()}
@@ -45,10 +61,6 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                 >
                     <Menu className="w-5 h-5" />
                 </button>
-                {/* Optional: Add dynamic breadcrumbs here based on pathname */}
-                <div className="hidden md:block text-sm font-medium text-[var(--text-muted)] capitalize">
-                    {pathname === '/dashboard' ? 'Overview' : pathname.split('/')[1]?.replace('-', ' ') || ''}
-                </div>
             </div>
 
             {/* Middle: Search Bar */}
@@ -57,10 +69,12 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors" />
                     <input
                         type="text"
-                        placeholder="Search campaigns, templates..."
-                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-full pl-10 pr-4 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all"
+                        placeholder="Search campaigns, contacts, domains..."
+                        readOnly
+                        onClick={() => setIsSearchOpen(true)}
+                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-full pl-10 pr-4 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all cursor-pointer"
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-primary)] border border-[var(--border)] rounded">⌘K</kbd>
                     </div>
                 </div>
@@ -68,11 +82,12 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
 
             {/* Right side: Notifications & Profile */}
             <div className="flex items-center gap-3 flex-1 justify-end relative" ref={dropdownRef}>
+
                 {/* Notifications Button */}
                 <button className="relative p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-full hover:bg-[var(--bg-secondary)] transition-colors">
                     <Bell className="w-5 h-5" />
                     {/* Notification Dot */}
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-[var(--bg-primary)]"></span>
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--ai-accent)] rounded-full border border-[var(--bg-primary)]"></span>
                 </button>
 
                 {/* Profile Avatar Button */}
@@ -82,7 +97,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                     onClick={() => setIsProfileOpen(!isProfileOpen)}
                     className="flex items-center gap-3 p-1 pr-2 rounded-full border border-transparent hover:border-[var(--border)] hover:bg-[var(--bg-secondary)] transition-all"
                 >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-sm shadow-indigo-500/20">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--ai-accent)] flex items-center justify-center text-white font-bold text-xs shadow-sm shadow-[var(--accent)]/20">
                         {initials}
                     </div>
                     <div className="hidden sm:flex flex-col items-start text-left">
@@ -105,7 +120,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                             <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                                     user.role === 'owner' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 
-                                    user.role === 'admin' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 
+                                    user.role === 'admin' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20' : 
                                     'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
                                 }`}>
                                     {roleLabel}
@@ -151,7 +166,7 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors mt-1"
                             >
-                                <RefreshCw className="w-4 h-4" /> Switch Account
+                                <RefreshCw className="w-4 h-4" /> Refresh Session
                             </button>
                         </div>
 
@@ -172,6 +187,8 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                     </div>
                 )}
             </div>
+
+            <CommandPalette isOpen={isSearchOpen} setIsOpen={setIsSearchOpen} />
         </header>
     );
 }
