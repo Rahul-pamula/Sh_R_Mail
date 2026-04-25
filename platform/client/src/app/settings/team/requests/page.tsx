@@ -5,7 +5,7 @@ import { CheckCircle2, ShieldAlert, Slash, UserPlus, XCircle } from 'lucide-reac
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, EmptyState, InlineAlert, PageHeader, SectionCard, StatCard, TableToolbar, useToast } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 interface JoinRequest {
     id: string;

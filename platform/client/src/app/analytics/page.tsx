@@ -6,7 +6,7 @@ import { Activity, AlertTriangle, ArrowRight, BarChart3, Mail, MousePointer, Ref
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, EmptyState, InlineAlert, PageHeader, SectionCard, StatCard } from '@/components/ui';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 function formatPercent(value: number) {
     return `${value.toFixed(1)}%`;

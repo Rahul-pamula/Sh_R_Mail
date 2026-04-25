@@ -23,7 +23,7 @@ import {
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Button, InlineAlert, ModalShell, SectionCard, StatCard } from "@/components/ui";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const STATUS_STYLES: Record<string, string> = {
     draft: "border-[var(--border)] bg-[var(--bg-hover)] text-[var(--text-muted)]",

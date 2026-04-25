@@ -9,6 +9,7 @@ import {
     MailCheck, UserPlus, Bell, Lock, Sliders,
 } from 'lucide-react';
 import { useState } from 'react';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 /* ============================================================
    SIDEBAR — Single sidebar with inline Settings submenu
@@ -145,8 +146,13 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                     </button>
                 )}
 
+                {/* Workspace Switcher */}
+                <div className="pt-4 pb-2">
+                    <WorkspaceSwitcher collapsed={collapsed} />
+                </div>
+
                 {/* Navigation */}
-                <nav className="flex-1 pt-6 pb-4 px-2 overflow-y-auto space-y-4">
+                <nav className="flex-1 pb-4 px-2 overflow-y-auto space-y-4">
                     {NAV_SECTIONS.map(section => (
                         <div key={section.label}>
                             {/* Section label */}

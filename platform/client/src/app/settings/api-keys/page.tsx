@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Key, Plus, Trash2, Copy, Check, Loader2, Shield } from 'lucide-react';
 import { Badge, Button, ConfirmModal, EmptyState, InlineAlert, Input, KeyValueList, PageHeader, SectionCard, StatCard, TableToolbar } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 type ApiKey = {
     id: string;

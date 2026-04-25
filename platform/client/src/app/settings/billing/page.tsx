@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, CalendarClock, CheckCircle2, CreditCard, TrendingUp
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, ConfirmModal, EmptyState, InlineAlert, PageHeader, SectionCard, StatCard, useToast } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const PLAN_FEATURES: Record<string, string[]> = {
     Free: ['500 contacts', '3,000 emails/mo', 'Shared IPs', '1 user', 'Community support'],

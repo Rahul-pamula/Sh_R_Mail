@@ -35,7 +35,7 @@ export default function CampaignAnalyticsPage() {
   const { id } = useParams();
   const router = useRouter();
   const { token } = useAuth();
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [sources, setSources] = useState<Record<string, number>>({});

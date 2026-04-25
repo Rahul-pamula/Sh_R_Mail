@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Building2, CreditCard, Globe, Key, MailCheck, Settings, Shield, User, UserPlus, Users } from 'lucide-react';
 import { Badge, EmptyState, PageHeader, SectionCard, StatCard } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const CARDS = [
     { href: '/settings/profile', icon: User, title: 'Profile', description: 'Update your name, timezone, and personal account details.' },

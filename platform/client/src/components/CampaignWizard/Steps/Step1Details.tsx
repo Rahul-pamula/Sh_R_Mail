@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import Link from 'next/link';
 import { Button } from "@/components/ui";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 export default function Step1Details({ data, updateData, onNext }: any) {
     const { token } = useAuth();

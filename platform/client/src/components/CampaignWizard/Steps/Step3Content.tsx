@@ -35,7 +35,7 @@ export default function Step3Content({ data, updateData, onNext, onBack }: any) 
     useEffect(() => {
         if (mode !== "template" || !token) return;
         setLoadingTemplates(true);
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL;
         fetch(`${API_BASE}/templates/`, { headers: { Authorization: `Bearer ${token}` } })
             .then((r) => (r.ok ? r.json() : { data: [] }))
             .then((json) => setTemplates(Array.isArray(json.data) ? json.data : []))

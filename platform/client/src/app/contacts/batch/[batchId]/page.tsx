@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, FileSpreadsheet, Globe2, Search, Users } from
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, EmptyState, FilterBar, InlineAlert, Input, PageHeader, SectionCard, StatCard, TableToolbar, useToast } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 interface DomainStat {
     domain: string;

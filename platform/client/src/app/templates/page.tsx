@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { TEMPLATE_PRESETS } from "./templatePresets";
 import { Button, ConfirmModal, FilterBar, EmptyState, PageHeader, SectionCard, StatCard, useToast } from "@/components/ui";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 function apiHeaders(token: string) {
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };

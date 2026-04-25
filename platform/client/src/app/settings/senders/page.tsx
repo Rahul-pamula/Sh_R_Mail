@@ -5,7 +5,7 @@ import { MailCheck, Plus, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, ConfirmModal, EmptyState, InlineAlert, Input, KeyValueList, PageHeader, SectionCard, StatCard, TableToolbar, useToast } from '@/components/ui';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 interface SenderIdentity {
     id: string;

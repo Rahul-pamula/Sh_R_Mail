@@ -87,7 +87,7 @@ export default function CampaignWizard({ editCampaignId, draftCampaignId }: Prop
             if (!token || !editCampaignId) return;
             try {
                 setLoadingDraft(true);
-                const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL;
                 const res = await fetch(`${API_BASE}/campaigns/${editCampaignId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -158,7 +158,7 @@ export default function CampaignWizard({ editCampaignId, draftCampaignId }: Prop
         if (!token) return;
         try {
             setSavingDraft(true);
-            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL;
             const payload = {
                 name: campaignData.name || "Untitled Draft",
                 subject: campaignData.subject || "",

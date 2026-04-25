@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Loader2, Mail, RotateCcw, XCircle } from 'lucide-react';
 import { Button, InlineAlert, Input, SectionCard } from '@/components/ui';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 function UnsubscribeContent() {
     const params = useSearchParams();

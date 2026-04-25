@@ -15,7 +15,30 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
     const { user, logout } = useAuth();
     const pathname = usePathname();
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [workspaceName, setWorkspaceName] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Fetch workspace name on mount
+    useEffect(() => {
+        if (!user || user.tenantStatus !== 'active') return;
+        const fetchWorkspaceName = async () => {
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (!token) return;
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/workspaces`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const workspaces = await res.json();
+                    const current = workspaces.find((w: any) => w.tenant_id === user.tenantId);
+                    if (current) setWorkspaceName(current.company_name);
+                }
+            } catch (err) {
+                console.error('Failed to fetch workspace name for header', err);
+            }
+        };
+        fetchWorkspaceName();
+    }, [user]);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -126,8 +149,8 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                                     {roleLabel}
                                 </span>
                                 {user.tenantStatus === 'active' && (
-                                    <span className="text-xs text-[var(--success)] flex items-center gap-1">
-                                        <CheckCircle2 className="w-3 h-3" /> Active Workspace
+                                    <span className="text-xs text-[var(--success)] flex items-center gap-1 truncate" title={workspaceName || 'Active Workspace'}>
+                                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> {workspaceName || 'Active Workspace'}
                                     </span>
                                 )}
                             </div>

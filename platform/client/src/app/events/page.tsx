@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { CheckCircle2, ChevronDown, ChevronUp, Clock, Loader2, RefreshCw, Send, XCircle, Zap } from 'lucide-react';
 import { Badge, Button, EmptyState, PageHeader, SectionCard, StatCard, TableToolbar, useToast } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 function timeAgo(ts: string) {
     if (!ts) return '—';

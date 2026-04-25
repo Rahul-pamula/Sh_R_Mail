@@ -19,7 +19,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, InlineAlert, KeyValueList, PageHeader, SectionCard, StatCard, StatusBadge } from '@/components/ui';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 type HealthStatus = 'green' | 'yellow' | 'red';
 

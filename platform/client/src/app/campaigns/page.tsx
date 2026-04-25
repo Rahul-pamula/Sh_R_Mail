@@ -21,7 +21,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { Button, ConfirmModal, EmptyState, FilterBar, InlineAlert, PageHeader, SectionCard, TableToolbar, StatusBadge, useToast } from "@/components/ui";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 type CampaignStatus = "all" | "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled" | "archived";
 
