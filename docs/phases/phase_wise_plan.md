@@ -1386,102 +1386,319 @@ graph TD
 
 ---
 
-## Phase 8 — Account Settings & Administration
-**WHY:** Enables self-serve technical configuration for tenants removing the need for manual support intervention.
+## Phase 8 — Workspace Administration, Team Management & Franchise Governance
+**WHY:** This is the operating model for how a tenant workspace is actually run after onboarding. It brings workspace settings, member administration, franchise creation, export controls, and governance into one parent phase because all five depend on the same tenant boundary, role model, invitation flow, and audit layer.
 
-### Phase 8 Architecture Flow
+### Phase 8 Parent Architecture Flow
 
-```mermaid
-graph TD
-    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
-    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
-    classDef security fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
-    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+### Phase 8 Scope Summary
+- `Phase 8.1` establishes the workspace admin foundation, roles, settings baseline, and shared data model.
+- `Phase 8.2` implements team management for Owners, Managers, and Members.
+- `Phase 8.3` extends that model into franchise workspaces with parent-child governance.
+- `Phase 8.4` delivers member export and reporting controls on top of the team model.
+- `Phase 8.5` hardens the whole phase with audit, lifecycle rules, deletion policy, compliance, and operational safeguards.
 
-    subgraph AdminUI [Tenant Settings Dashboard]
-        APIView[API Key Generation UI]
-        SenderView[Sender Email Setup]
-        TeamView[Workspace Isolation Selector]
-        
-        APIView --> TeamView
-        SenderView --> TeamView
-        class APIView frontend;
-        class SenderView frontend;
-        class TeamView frontend;
-    end
-
-    subgraph ProvisionAPI [Administration Logic]
-        OTP[Sender OTP Dispatcher]
-        KeyGen[Cryptographic API Key Gen]
-        AuthGate[Workspace RBAC Gate]
-        
-        SenderView --> |"Requests Verification"| OTP
-        APIView --> |"Requests Secret"| KeyGen
-        TeamView --> AuthGate
-        class OTP logic;
-        class KeyGen logic;
-        class AuthGate logic;
-    end
-
-    subgraph SecurityHash [Secret Resolution Layer]
-        Hasher[Bcrypt/Argon2 API Key Hasher]
-        TokenCache[Temporary OTP Redis Cache]
-        
-        KeyGen --> |"Plaintext"| Hasher
-        OTP <--> TokenCache
-        class Hasher security;
-        class TokenCache security;
-    end
-
-    subgraph ConfigData [Tenant State Configuration]
-        Senders[(Verified Senders Table)]
-        APIKeys[(Hashed API Keys Table)]
-        Workspaces[(Team Isolation Boundaries)]
-        
-        Hasher --> APIKeys
-        OTP --> |"Verifies"| Senders
-        AuthGate -.-> Workspaces
-        class Senders database;
-        class APIKeys database;
-        class Workspaces database;
-    end
-
-    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
-    class AdminUI dualBox;
-    class ProvisionAPI dualBox;
-    class SecurityHash dualBox;
-    class ConfigData dualBox;
-```
+### Phase 8.1 — Workspace Admin Foundation, Roles & Settings Core
+**WHY:** All later team and franchise behavior depends on a single source of truth for workspace identity, role enforcement, settings ownership, and admin-safe navigation.
 
 **[BACKEND]**
-- Secure sender verification logic dispatching short-lived OTP tokens confirming access over custom sender addresses.
-- API Key management infrastructure storing hashes rather than plain text.
-- Team workspace isolation logic respecting `team` vs `agency` data boundary matrices.
-- Fine-grained role evaluation checks separating Viewer, Operator, Manager, and Admin actions cleanly.
+- Finalize the core workspace administration schema:
+  `workspaces`, `workspace_members`, `invitations`, `audit_logs`, `exports_log`, and the parent-child `parent_workspace_id` relationship for franchise support.
+- Normalize role definitions at the workspace level:
+  `OWNER`, `MANAGER`, `MEMBER`, with optional `FRANCHISE_OWNER` represented as `OWNER` of a child workspace rather than a special role inside the parent workspace.
+- Ensure all administrative writes are tenant-scoped and role-checked before execution.
+- Keep data sovereignty explicit:
+  content belongs to the workspace, not the individual user; removing a user must never silently delete workspace campaigns, contacts, templates, or analytics history.
+- Prepare shared services used by every subphase:
+  invitation token generation, role evaluation, membership lookup, session invalidation, and audit event capture.
+- Align settings objects with admin workflows:
+  workspace branding, CAN-SPAM address, domain verification state, verified senders, and API keys all live behind the same permission model.
 
 **[FRONTEND]**
-- Organizational configuration sub-panels modifying required CAN-SPAM geographical details natively.
-- Sender Identity Verification wizard visually explaining complex SPF/DKIM/DMARC DNS insertions succinctly.
-- Member invitation flow rendering distinct role assignment dropdowns intuitively.
-- Comprehensive API Dashboard detailing exact daily consumption and tracking rejection trends visually.
+- Create a single workspace administration shell under settings for:
+  Profile, Organization, Team Members, Franchise Accounts, Domains, Senders, API Keys, Compliance, and Exports.
+- Add a clear role-aware navigation model so Owners see full administration controls, Managers see operational controls, and Members see limited self-service only.
+- Make the Team Members and Franchise Accounts sections first-class admin pages, not secondary modals hidden inside generic settings.
+- Standardize empty states, confirmation dialogs, success toasts, destructive warnings, and audit-friendly labels across the whole admin area.
 
-**📋 Planned Tasks — Phase 7.6 (Testing & Codebase Hardening)**
-- [AUDIT FIX 14] Automated test suite — 20 priority tests: auth signup/login, _suppress_contact tenant isolation, unsub token roundtrip, dispatch contact count, quota gate, bounce classification
-- [AUDIT FIX 15] Migration file renumbering — resolve duplicate 012_* and 013_* filenames for safe fresh deployment
-- [AUDIT FIX 16] Remove dead Clerk config — delete CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY from docker-compose.yml and .env.example
-- [FRIEND AUDIT FIX 22] Repository Pattern / DAL — Abstract direct Supabase queries out of controllers into services/db.py
-- [FRIEND AUDIT FIX 23] Monolithic Worker Refactor — Split email_sender.py into modular layers (parsing, sending, injection, logging)
-- [FRONTEND] Performance: Abort stale fetches on domains/team/contacts and Next 16 sync params fixing
+**Core Data Relationships**
 
-**📋 Planned Tasks — Phase 8**
-- Workspace Branding (Logo upload, Brand Colors)
-- Member Management Dashboard (Table UI with role filters)
-- Invitation System (Send invite, cancel pending, resend email)
-- Revoke Access Flow (Delete from tenant_users + session invalidate)
-- Voluntary Leave Flow (User-initiated resignation from workspace)
-- Ownership Transfer logic (Nuclear option to swap primary owner)
-- CAN-SPAM Physical Address setup (Mandatory legal compliance)
-- Domain Verification (Generate records, Verify button)
+```mermaid
+erDiagram
+    WORKSPACES ||--o{ WORKSPACE_MEMBERS : contains
+    USERS ||--o{ WORKSPACE_MEMBERS : joins
+    WORKSPACES ||--o{ INVITATIONS : issues
+    USERS ||--o{ INVITATIONS : invited_by
+    WORKSPACES ||--o{ EXPORTS_LOG : owns
+    USERS ||--o{ EXPORTS_LOG : requested_by
+    WORKSPACES ||--o{ AUDIT_LOGS : records
+    WORKSPACES ||--o{ WORKSPACES : parents
+```
+
+**📋 Planned Tasks — Phase 8.1**
+- Workspace administration IA finalized in documentation and navigation.
+- Role matrix defined for Owner, Manager, and Member actions.
+- `workspaces` model updated for parent-child franchise support.
+- `workspace_members` model includes `role`, `joined_at`, `invited_by`, `removed_at`, `removed_by`.
+- `invitations` model includes token, expiry, role, status, invited_by, accepted_at.
+- Shared permission guard documented for all admin APIs.
+- Workspace branding section defined:
+  logo, brand colors, sender display defaults, workspace identity metadata.
+- Organization settings section defined:
+  legal business name, CAN-SPAM address, timezone, business metadata.
+- Domain and sender configuration grouped under the same admin phase for operational clarity.
+- Admin shell states documented for desktop and mobile.
+- Self-service and privileged actions separated clearly in UI copy and information architecture.
+
+### Phase 8.2 — Team Management, Invites, Roles & Ownership
+**WHY:** This subphase covers daily people operations inside one workspace: inviting users, assigning roles, removing access, allowing voluntary exit, and transferring ownership safely.
+
+**[BACKEND]**
+- Implement invitation lifecycle for workspace members:
+  send invite, validate token, accept invite, resend invite, cancel invite, expire invite automatically.
+- Enforce role-based behavior:
+  Owners can invite Managers and Members, remove members, and transfer ownership;
+  Managers can invite Members only if product policy allows it, and can only manage the Members they are allowed to control;
+  Members cannot invite or remove others.
+- Support removal flows with history preserved:
+  removing a member revokes workspace access but keeps authored records tied to the workspace.
+- Implement voluntary leave flow:
+  a non-owner user can leave a workspace; the last remaining Owner cannot leave without ownership transfer.
+- Implement ownership transfer:
+  select an existing member or invite a new user, require confirmation, preserve an immutable audit trail, and prevent ownerless workspaces.
+- Invalidate workspace sessions after role downgrade, removal, or ownership transfer where required.
+
+**[FRONTEND]**
+- Build a dedicated Team Members dashboard with:
+  segmented lists or filtered table views for Owners, Managers, Members, pending invites, and recently removed users.
+- Add invite dialogs for:
+  Add Manager, Add Member, Resend Invite, Cancel Invite.
+- Provide clear row actions:
+  change role, remove access, resend invite, view joined date, view inviter, and export list.
+- Show policy-aware UI:
+  hide restricted actions, explain disabled actions, and always warn on ownership or destructive changes.
+- Add a self-service "Leave Workspace" flow in the user account area.
+
+**Team Management Flow**
+
+```mermaid
+flowchart TD
+    A[Owner opens Team Members] --> B[Select action]
+    B --> C[Invite Manager]
+    B --> D[Invite Member]
+    B --> E[Transfer Ownership]
+    B --> F[Remove User]
+    C --> G[Create invitation + role]
+    D --> G
+    G --> H[Send secure email invite]
+    H --> I[Invitee accepts token]
+    I --> J[Create or link membership]
+    J --> K[Audit event captured]
+    E --> L[Validate new owner]
+    L --> M[Confirm transfer]
+    M --> N[Swap owner privileges]
+    N --> K
+    F --> O[Revoke membership access]
+    O --> P[Invalidate sessions]
+    P --> K
+```
+
+**📋 Planned Tasks — Phase 8.2**
+- Team Members page with table UI and role filters.
+- Owner list, Manager list, Member list, Pending Invites view.
+- Invite Manager flow.
+- Invite Member flow.
+- Invite cancellation flow.
+- Invite resend flow.
+- Invitation acceptance landing page.
+- Role assignment and role update logic.
+- Revoke Access flow with confirm dialog.
+- Session invalidation after removal or privileged role downgrade.
+- Voluntary Leave flow for non-owner users.
+- Ownership Transfer flow with strong warnings and audit event.
+- Prevent last-owner exit or deletion.
+- Show inviter, join date, status, and role in the member table.
+- Document exact behavior for Manager-managed members.
+- Define export button entry point on the Team Members page for the next subphase.
+
+### Phase 8.3 — Franchise Workspace Management
+**WHY:** ShrMail needs a clean way for one master workspace Owner to create and govern child franchise workspaces without breaking isolation. A franchise is not just another user role; it is a separate workspace with its own owner, members, campaigns, settings, and data.
+
+**[BACKEND]**
+- Model each franchise as a child workspace using `parent_workspace_id`.
+- Implement franchise invitation lifecycle:
+  parent Owner invites a franchise owner, child workspace is provisioned in pending state, approval or activation rules are applied, and the franchise owner becomes Owner of the child workspace after acceptance.
+- Keep parent and child data strictly segregated:
+  contacts, campaigns, domains, analytics, billing context, and team membership remain workspace-bound.
+- Define deletion rules for franchises:
+  deleting a franchise archives or deletes the child workspace and all of its internal data according to product policy, while leaving the parent workspace intact.
+- Support franchise status states:
+  `pending_invite`, `pending_approval`, `active`, `suspended`, `deleted`.
+- Audit every franchise action:
+  invite, accept, approve, suspend, reactivate, delete.
+
+**[FRONTEND]**
+- Add a Franchise Accounts page for parent Owners showing:
+  pending invites, active franchises, franchise owner, status, creation date, and action menu.
+- Provide an "Add Franchise Owner" workflow that clearly explains a new workspace will be created.
+- Make child workspace boundaries obvious in the UI so users never confuse parent members with franchise members.
+- Show destructive warnings for franchise deletion:
+  all users, campaigns, contacts, templates, and operational data inside that franchise will be removed or archived based on retention policy.
+
+**Franchise Provisioning Flow**
+
+```mermaid
+flowchart LR
+    A[Parent Owner starts Add Franchise Owner] --> B[Enter franchise owner email]
+    B --> C[Create pending child workspace]
+    C --> D[Send franchise invitation email]
+    D --> E[Invitee accepts]
+    E --> F[Provision child owner membership]
+    F --> G[Activate franchise workspace]
+    G --> H[Franchise owner logs into isolated workspace]
+    H --> I[Franchise owner manages own team, campaigns, and settings]
+```
+
+**📋 Planned Tasks — Phase 8.3**
+- Child workspace data model documented in the roadmap.
+- Franchise Accounts admin page.
+- Add Franchise Owner invitation flow.
+- Pending franchise approval or activation rules documented.
+- Franchise status lifecycle documented.
+- Parent-child workspace visibility rules documented.
+- Franchise owner onboarding flow documented.
+- Franchise deletion flow with irreversible warning.
+- Franchise suspension/reactivation rules documented.
+- Audit coverage for franchise create, approve, suspend, delete.
+- Clarify whether billing is inherited, delegated, or tracked separately.
+- Clarify whether domains and sender identities are shared or isolated.
+
+### Phase 8.4 — Team Directory Export, Reporting & Download Workflows
+**WHY:** Once team membership is modeled correctly, admins need a safe way to export it. Export is not a standalone feature; it sits on top of the team model, permission layer, audit logs, and async job system.
+
+**[BACKEND]**
+- Support filtered user exports for Owners and eligible Managers.
+- Allow export filters such as:
+  role, invited_by, status, workspace, franchise, joined date range, and output format.
+- Implement dual-mode export behavior:
+  small exports stream directly, large exports run asynchronously.
+- Write export jobs to `exports_log` with status, requester, filters, file format, progress, and storage metadata.
+- Generate signed download URLs for completed files and expire them automatically.
+- Rate-limit export creation and prevent duplicate concurrent export storms for the same workspace when needed.
+
+**[FRONTEND]**
+- Add export controls directly to the Team Members page and, if needed, an Export History subpage in settings.
+- Show filter controls before export so users understand what dataset they are downloading.
+- Distinguish immediate download from queued export clearly in the UI.
+- Surface status:
+  queued, processing, completed, failed, expired.
+- Provide clear help text:
+  "Large exports are emailed to you when ready."
+
+**Export Flow**
+
+```mermaid
+flowchart TD
+    A[Owner or eligible Manager opens Team Members] --> B[Apply filters]
+    B --> C[Click Export Users]
+    C --> D{Estimated size}
+    D -->|Small| E[Generate file immediately]
+    D -->|Large| F[Create exports_log job]
+    E --> G[Browser download]
+    F --> H[Background worker paginates data]
+    H --> I[Store file securely]
+    I --> J[Mark export completed]
+    J --> K[Email signed link to requester]
+    K --> L[Download from Export History or email]
+```
+
+**📋 Planned Tasks — Phase 8.4**
+- Export Users button on Team Members page.
+- Export filters:
+  role, invited_by, status, format.
+- Small export direct download behavior.
+- Large export async queue behavior.
+- Export history page or panel.
+- Export status polling or refresh strategy.
+- Signed download URL lifecycle documented.
+- CSV schema documented:
+  first name, last name, email, joined date, role, inviter, status.
+- Optional XLSX format documented.
+- Export permission rules documented for Owner vs Manager.
+- Export rate-limit and concurrency rules documented.
+- Export-ready email notification documented.
+
+### Phase 8.5 — Governance, Audit, Deletion Policy & Operational Safeguards
+**WHY:** Team administration becomes risky without auditability, retention rules, lifecycle safeguards, and clear destructive-action policy. This subphase closes the loop so every people-management action is accountable and recoverable where appropriate.
+
+**[BACKEND]**
+- Log every critical action:
+  invite sent, invite accepted, invite cancelled, member removed, ownership transferred, franchise created, franchise deleted, export requested, export downloaded.
+- Add retention and lifecycle behavior:
+  soft-delete user membership where appropriate, archive pending or expired invites, and retain audit history independently from access status.
+- Define destructive behavior explicitly:
+  removing a member removes access only;
+  deleting a franchise removes or archives all franchise-scoped data according to retention policy.
+- Add safety rules for the last Owner, owner transfer confirmation, and protected financial or destructive actions.
+- Ensure compliance visibility:
+  who invited whom, who exported which data, and when destructive actions occurred.
+
+**[FRONTEND]**
+- Add an audit log surface or timeline for workspace Owners.
+- Provide clear confirmations for destructive actions with exact impact language.
+- Display retention hints where relevant:
+  removed users lose access immediately, but historical records remain tied to the workspace.
+- Show export and invite history with timestamps for admin confidence and supportability.
+
+**Governance Flow**
+
+```mermaid
+flowchart TD
+    A[Admin action occurs] --> B{Action type}
+    B --> C[Invite]
+    B --> D[Role change / removal]
+    B --> E[Ownership transfer]
+    B --> F[Franchise delete]
+    B --> G[Export request]
+    C --> H[Audit log]
+    D --> H
+    E --> H
+    F --> I[Destructive warning + audit + retention workflow]
+    G --> J[Audit + rate-limit + export log]
+    I --> H
+    J --> H
+```
+
+**📋 Planned Tasks — Phase 8.5**
+- Workspace audit log for team administration.
+- Invite history with timestamps and actor identity.
+- Export log with filters, requester, and file lifecycle.
+- Soft-delete / access revocation policy documented.
+- Franchise deletion policy documented clearly.
+- Ownership transfer safeguards documented.
+- Last-owner protection documented.
+- Destructive confirmation standards documented.
+- Retention rules for invites, exports, and audit logs documented.
+- Compliance wording for admin-visible history documented.
+
+### Phase 8 Consolidated Delivery Checklist
+- Workspace branding and organization settings.
+- CAN-SPAM physical address setup.
+- Domain verification and sender verification.
+- Team Members management dashboard.
+- Invitation system:
+  send, resend, cancel, accept.
+- Role-aware Owner, Manager, Member permissions.
+- Revoke access flow.
+- Voluntary leave flow.
+- Ownership transfer flow.
+- Franchise Accounts system.
+- Franchise invite, activation, suspension, deletion flows.
+- Team user export:
+  sync and async.
+- Export history and secure download handling.
+- Audit log and retention rules.
+- Full documentation for UI, API, data, lifecycle, and governance behavior.
 
 ---
 
