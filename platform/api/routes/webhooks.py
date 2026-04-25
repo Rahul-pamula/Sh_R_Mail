@@ -29,6 +29,7 @@ import re
 import urllib.request
 import urllib.error
 from functools import lru_cache
+from repositories.audit_repository import AuditRepository
 
 # cryptography is a standard FastAPI-ecosystem dependency; add to requirements.txt if missing
 try:
@@ -46,6 +47,7 @@ except ImportError:
 
 logger = logging.getLogger("email_engine.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+audit_repo = AuditRepository(db.client)
 
 MAILTRAP_WEBHOOK_SECRET = os.getenv("MAILTRAP_WEBHOOK_SECRET", "")
 
@@ -287,6 +289,15 @@ async def handle_bounce(request: Request):
         return {"status": "ignored", "reason": "soft_bounce"}
     bounce_reason_detail = body.get("reason", bounce_type)
     _suppress_contact(email, "bounce", bounce_reason_detail)
+    
+    # Audit log
+    audit_repo.insert_log(
+        tenant_id="SYSTEM", # Generic endpoint doesn't know tenant yet
+        action="webhook.bounce",
+        resource_type="contact",
+        metadata={"email": email, "reason": bounce_reason_detail, "provider": "generic"}
+    )
+    
     return {"status": "ok", "action": "contact_marked_bounced", "email": email}
 
 
@@ -303,6 +314,15 @@ async def handle_spam_complaint(request: Request):
     if not email:
         raise HTTPException(status_code=422, detail="Missing 'email' field in body.")
     _suppress_contact(email, "spam")
+    
+    # Audit log
+    audit_repo.insert_log(
+        tenant_id="SYSTEM",
+        action="webhook.spam",
+        resource_type="contact",
+        metadata={"email": email, "provider": "generic"}
+    )
+    
     return {"status": "ok", "action": "contact_unsubscribed_via_spam", "email": email}
 
 
@@ -410,5 +430,18 @@ async def handle_ses_webhook(
 
         else:
             logger.info(f"[SES] Unhandled SNS event type: '{event_type}'")
+
+        # Audit log for SES
+        audit_repo.insert_log(
+            tenant_id=tenant_id or "SYSTEM",
+            action=f"webhook.ses.{event_type.lower()}",
+            resource_type="ses_event",
+            metadata={
+                "event_type": event_type,
+                "tags": tags,
+                "message_id": mail.get("messageId"),
+                "source": mail.get("source")
+            }
+        )
 
     return {"status": "ok"}
