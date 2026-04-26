@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
+import SettingsSidebar from "@/components/layout/SettingsSidebar";
 import Header from "@/components/layout/Header";
 
 interface LayoutWrapperProps {
@@ -50,10 +51,14 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     return (
         <div className="flex h-screen overflow-hidden relative">
 
-            {showSidebar && <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />}
+            {showSidebar && (
+                isSettingsRoute 
+                    ? <SettingsSidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+                    : <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+            )}
 
             <main className="flex-1 overflow-auto bg-[var(--bg-primary)] flex flex-col min-w-0">
-                {showHeader && <Header setMobileMenuOpen={() => setMobileMenuOpen(true)} />}
+                {showHeader && <Header setMobileMenuOpen={() => setMobileMenuOpen(true)} settingsMode={isSettingsRoute} />}
                 <div className={`flex-1 ${showHeader ? `px-5 pt-6 pb-8 md:px-8 max-w-[1600px] mx-auto w-full` : 'w-full'}`}>
                     {children}
                 </div>

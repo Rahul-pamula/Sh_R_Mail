@@ -9,9 +9,10 @@ import { CommandPalette } from '@/components/ui/CommandPalette';
 
 interface HeaderProps {
     setMobileMenuOpen?: () => void;
+    settingsMode?: boolean;
 }
 
-export default function Header({ setMobileMenuOpen }: HeaderProps) {
+export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps) {
     const { user, logout } = useAuth();
     const pathname = usePathname();
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -107,6 +108,13 @@ export default function Header({ setMobileMenuOpen }: HeaderProps) {
                 >
                     <Menu className="w-5 h-5" />
                 </button>
+
+                {settingsMode && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent)]/5 border border-[var(--accent)]/20 animate-in fade-in zoom-in duration-300">
+                        <Settings className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-[var(--accent)]">Settings Mode</span>
+                    </div>
+                )}
             </div>
 
             {/* Middle: Search Bar */}

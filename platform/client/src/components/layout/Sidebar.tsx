@@ -5,8 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
     Mail, ChevronLeft, LayoutDashboard, Users, BarChart3,
     LayoutTemplate, Settings, ServerCog, Megaphone, ChevronRight,
-    User, Building2, CreditCard, Shield, Key, Globe,
-    MailCheck, UserPlus, Bell, Lock, Sliders, Store, History, Download, MessageSquareDot,
 } from 'lucide-react';
 import { useState } from 'react';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
@@ -14,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { can, Action } from '@/utils/permissions';
 
 /* ============================================================
-   SIDEBAR — Single sidebar with inline Settings submenu
+   SIDEBAR — Main application sidebar
    ============================================================ */
 
 type NavItem = { name: string; href: string; icon: any; action?: Action };
@@ -45,47 +43,6 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     },
 ];
 
-type SubItem = { href: string; icon: any; label: string; action?: Action };
-
-const SETTINGS_SUB: { label: string; items: SubItem[] }[] = [
-    {
-        label: 'Account',
-        items: [
-            { href: '/settings/profile',       icon: User,      label: 'Profile' },
-            { href: '/settings/preferences',   icon: Sliders,   label: 'Preferences' },
-            { href: '/settings/security',      icon: Lock,      label: 'Security' },
-            { href: '/settings/notifications', icon: Bell,      label: 'Notifications' },
-        ],
-    },
-    {
-        label: 'Workspace',
-        items: [
-            { href: '/settings/organization',  icon: Building2,         label: 'Organization', action: 'VIEW_SETTINGS' },
-            { href: '/settings/team',          icon: Users,             label: 'Team', action: 'VIEW_SETTINGS' },
-            { href: '/settings/team/requests', icon: UserPlus,          label: 'Access Requests', action: 'VIEW_SETTINGS' },
-            { href: '/settings/franchises',    icon: Store,             label: 'Franchise Accounts', action: 'ADD_FRANCHISE' },
-            { href: '/settings/requests',      icon: MessageSquareDot,  label: 'Workspace Requests', action: 'VIEW_SETTINGS' },
-            { href: '/settings/billing',       icon: CreditCard,        label: 'Billing & Plan', action: 'VIEW_BILLING' },
-            { href: '/settings/audit',         icon: History,           label: 'Audit History', action: 'VIEW_SETTINGS' },
-            { href: '/settings/exports',       icon: Download,          label: 'Export History', action: 'VIEW_SETTINGS' },
-        ],
-    },
-    {
-        label: 'Email',
-        items: [
-            { href: '/settings/domain',        icon: Globe,     label: 'Domain', action: 'VIEW_DOMAIN' },
-            { href: '/settings/senders',       icon: MailCheck, label: 'Senders', action: 'VIEW_SETTINGS' },
-            { href: '/settings/compliance',    icon: Shield,    label: 'Compliance', action: 'VIEW_SETTINGS' },
-        ],
-    },
-    {
-        label: 'Developer',
-        items: [
-            { href: '/settings/api-keys',      icon: Key,       label: 'API Keys', action: 'VIEW_SETTINGS' },
-        ],
-    },
-];
-
 interface SidebarProps {
     mobileMenuOpen?: boolean;
     setMobileMenuOpen?: (open: boolean) => void;
@@ -95,8 +52,6 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
     const { user } = useAuth();
-
-    const isOnSettings = pathname?.startsWith('/settings');
 
     const isActive = (href: string) =>
         pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -204,43 +159,6 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                                                 <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
                                                 {!collapsed && <span className="truncate">{item.name}</span>}
                                             </Link>
-
-                                            {/* Settings submenu — expands inline when on /settings/* */}
-                                            {item.href === '/settings' && isOnSettings && !collapsed && (
-                                                <div className="mt-1 ml-3 pl-3 border-l border-[var(--border)] space-y-3">
-                                                    {SETTINGS_SUB.map(sub => (
-                                                        <div key={sub.label}>
-                                                            <p className="px-2 mb-1 text-[9px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-50 leading-none">
-                                                                {sub.label}
-                                                            </p>
-                                                            <ul className="space-y-0.5">
-                                                                {sub.items.map(subItem => {
-                                                                    if (subItem.action && !can(user, subItem.action)) return null;
-
-                                                                    const subActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
-                                                                    const SubIcon = subItem.icon;
-                                                                    return (
-                                                                        <li key={subItem.href}>
-                                                                            <Link
-                                                                                href={subItem.href}
-                                                                                className={`
-                                                                                    group relative flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[12px] font-medium transition-all duration-150
-                                                                                    ${subActive
-                                                                                        ? 'text-[var(--accent)] bg-[var(--accent)]/10'
-                                                                                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}
-                                                                                `}
-                                                                            >
-                                                                                <SubIcon size={13} className={`flex-shrink-0 ${subActive ? 'text-[var(--accent)]' : ''}`} />
-                                                                                <span className="truncate">{subItem.label}</span>
-                                                                            </Link>
-                                                                        </li>
-                                                                    );
-                                                                })}
-                                                            </ul>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
                                         </li>
                                     );
                                 })}
