@@ -144,6 +144,7 @@ class AuthResponse(BaseModel):
     email_verified: bool = False
     full_name: Optional[str] = None
     workspace_type: str = "MAIN"
+    workspace_name: Optional[str] = None
 
 
 class SwitchWorkspaceRequest(BaseModel):
@@ -233,8 +234,15 @@ def _set_refresh_cookie(response, refresh_token: str):
 def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str, onboarding_required: bool, tenant_status: str, email_verified: bool = False, full_name: Optional[str] = None) -> AuthResponse:
     """Return a stable auth contract with public role names."""
     from utils.supabase_client import db
-    tenant_res = db.client.table("tenants").select("workspace_type").eq("id", tenant_id).execute()
-    ws_type = tenant_res.data[0].get("workspace_type", "primary") if tenant_res.data else "primary"
+    tenant_res = db.client.table("tenants").select("workspace_type, company_name").eq("id", tenant_id).execute()
+    
+    ws_type = "primary"
+    workspace_name = "Workspace"
+    
+    if tenant_res.data:
+        ws_type = tenant_res.data[0].get("workspace_type", "primary")
+        workspace_name = tenant_res.data[0].get("company_name", "Workspace")
+        
     mapped_type = "FRANCHISE" if ws_type == "franchise" else "MAIN"
 
     return AuthResponse(
@@ -246,7 +254,8 @@ def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str,
         tenant_status=tenant_status,
         email_verified=email_verified,
         full_name=full_name,
-        workspace_type=mapped_type
+        workspace_type=mapped_type,
+        workspace_name=workspace_name
     )
 
 

@@ -22,8 +22,11 @@ export function proxy(request: NextRequest) {
         route => pathname.startsWith(route)
     );
 
-    // Rule 1: If no token and trying to access protected route → redirect to login
-    if (!token && isProtectedRoute) {
+    // Rule 1: If no access token AND no refresh token, and trying to access protected route → redirect to login
+    // We allow the request to pass if there is a refresh token so the frontend can try to recover the session.
+    const refreshToken = request.cookies.get('refresh_token')?.value;
+    
+    if (!token && !refreshToken && isProtectedRoute) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 

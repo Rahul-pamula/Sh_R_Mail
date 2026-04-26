@@ -3,23 +3,24 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    ChevronLeft, Settings, User, Building2, CreditCard, Shield, Key, Globe,
-    Users, UserPlus, Bell, Lock, Sliders, Store, History, MessageSquareDot,
+    Settings, User, Building2, CreditCard, Shield, Key, Globe,
+    Users, Bell, Lock, Sliders, Store, History, MessageSquareDot,
     ArrowLeft, Mail
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { can, Action } from '@/utils/permissions';
 
 /* ============================================================
-   SETTINGS SIDEBAR — Dedicated sidebar for settings mode
+   SETTINGS SIDEBAR — Dedicated sidebar for settings mode.
+   All items use permission-based guards only — no hardcoded role checks.
    ============================================================ */
 
-type SettingsNavItem = { 
-    label: string; 
-    href: string; 
-    icon: any; 
+type SettingsNavItem = {
+    label: string;
+    href: string;
+    icon: any;
+    /** If set, item is hidden unless user has this permission */
     action?: Action;
-    section?: string;
 };
 
 const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
@@ -35,19 +36,25 @@ const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
     {
         label: 'Workspace',
         items: [
-            { href: '/settings/organization',  icon: Building2,         label: 'Organization', action: 'VIEW_SETTINGS' },
-            { href: '/settings/team',          icon: Users,             label: 'Team Members', action: 'VIEW_SETTINGS' },
-            { href: '/settings/franchises',    icon: Store,             label: 'Franchise Accounts', action: 'ADD_FRANCHISE' },
-            { href: '/settings/requests',      icon: MessageSquareDot,  label: 'Workspace Requests', action: 'VIEW_SETTINGS' },
-            { href: '/settings/billing',       icon: CreditCard,        label: 'Billing & Plan', action: 'VIEW_BILLING' },
-            { href: '/settings/audit',         icon: History,           label: 'Audit History', action: 'VIEW_SETTINGS' },
+            // Visible to all authenticated users with workspace settings access
+            { href: '/settings/organization',  icon: Building2,        label: 'Organization',       action: 'VIEW_SETTINGS' },
+            { href: '/settings/team',          icon: Users,            label: 'Team Members',       action: 'VIEW_TEAM' },
+            // Only visible to MAIN workspaces (VIEW_FRANCHISE is blocked for franchises in permissions.ts)
+            { href: '/settings/franchises',    icon: Store,            label: 'Franchise Accounts', action: 'VIEW_FRANCHISE' },
+            { href: '/settings/requests',      icon: MessageSquareDot, label: 'Workspace Requests', action: 'VIEW_SETTINGS' },
+            // Both Main and Franchise workspaces can see billing (each manages their own)
+            { href: '/settings/billing',       icon: CreditCard,       label: 'Billing & Plan',     action: 'VIEW_BILLING' },
+            { href: '/settings/audit',         icon: History,          label: 'Audit History',      action: 'VIEW_SETTINGS' },
         ],
     },
     {
         label: 'Infrastructure',
         items: [
-            { href: '/settings/domain',        icon: Globe,     label: 'Sending Domain', action: 'VIEW_DOMAIN' },
-            { href: '/settings/api-keys',      icon: Key,       label: 'API Keys', action: 'VIEW_SETTINGS' },
+            // Domain management (full for MAIN, read-only fork for FRANCHISE)
+            { href: '/settings/domain',        icon: Globe,  label: 'Sending Domain',    action: 'VIEW_DOMAIN' },
+            // Sender identities management
+            { href: '/settings/senders',       icon: Mail,   label: 'Sender Identities', action: 'VIEW_SENDER' },
+            { href: '/settings/api-keys',      icon: Key,    label: 'API Keys',           action: 'VIEW_SETTINGS' },
         ],
     },
 ];
@@ -61,7 +68,7 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
     const pathname = usePathname();
     const { user } = useAuth();
 
-    const isActive = (href: string) => 
+    const isActive = (href: string) =>
         pathname === href || pathname.startsWith(href + '/');
 
     return (
@@ -83,7 +90,7 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
 
                 {/* Back to Dashboard */}
                 <div className="h-[64px] shrink-0 flex items-center px-4 border-b border-[var(--border)]">
-                    <Link 
+                    <Link
                         href="/dashboard"
                         className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors group"
                     >
@@ -103,43 +110,50 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
                     </div>
                 </div>
 
-                {/* Navigation */}
+                {/* Navigation — 100% permission-driven, no hardcoded role checks */}
                 <nav className="flex-1 pb-4 px-3 overflow-y-auto space-y-6">
-                    {SETTINGS_NAV.map(section => (
-                        <div key={section.label} className="space-y-1.5">
-                            <p className="px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-50">
-                                {section.label}
-                            </p>
-                            <ul className="space-y-0.5">
-                                {section.items.map(item => {
-                                    if (item.action && !can(user, item.action)) return null;
-                                    
-                                    const active = isActive(item.href);
-                                    const Icon = item.icon;
+                    {SETTINGS_NAV.map(section => {
+                        const visibleItems = section.items.filter(item =>
+                            !item.action || can(user, item.action)
+                        );
 
-                                    return (
-                                        <li key={item.href}>
-                                            <Link
-                                                href={item.href}
-                                                className={`
-                                                    group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
-                                                    ${active
-                                                        ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
-                                                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
-                                                `}
-                                            >
-                                                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
-                                                <span className="truncate">{item.label}</span>
-                                                {active && (
-                                                    <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent)] shadow-sm shadow-[var(--accent)]/50" />
-                                                )}
-                                            </Link>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
-                    ))}
+                        // Hide entire section if no items are visible
+                        if (visibleItems.length === 0) return null;
+
+                        return (
+                            <div key={section.label} className="space-y-1.5">
+                                <p className="px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-50">
+                                    {section.label}
+                                </p>
+                                <ul className="space-y-0.5">
+                                    {visibleItems.map(item => {
+                                        const active = isActive(item.href);
+                                        const Icon = item.icon;
+
+                                        return (
+                                            <li key={item.href}>
+                                                <Link
+                                                    href={item.href}
+                                                    className={`
+                                                        group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                                                        ${active
+                                                            ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
+                                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
+                                                    `}
+                                                >
+                                                    <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
+                                                    <span className="truncate">{item.label}</span>
+                                                    {active && (
+                                                        <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent)] shadow-sm shadow-[var(--accent)]/50" />
+                                                    )}
+                                                </Link>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </nav>
 
                 {/* Bottom Profile Hint */}

@@ -13,7 +13,7 @@ import uuid
 import json
 
 from utils.jwt_middleware import require_active_tenant, JWTPayload
-from utils.permissions import require_permission
+from utils.permissions import require_permission, can
 from utils.supabase_client import db
 
 router = APIRouter(prefix="/domains", tags=["Domains"])
@@ -51,7 +51,7 @@ async def list_domains(
             target_tenant_id = t_res.data.get("parent_tenant_id")
 
     res = db.client.table("domains")\
-        .select("id, domain_name, status, created_at")\
+        .select("id, domain_name, status, created_at, dkim_tokens, mail_from_domain")\
         .eq("tenant_id", target_tenant_id)\
         .order("created_at", desc=True)\
         .execute()
@@ -67,6 +67,10 @@ async def add_domain(
     Step 1: Send domain to AWS, get 3 DKIM tokens back.
     If no AWS keys are configured in .env, generates fake tokens for UI testing.
     """
+    # Explicit defense-in-depth security check
+    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
+        raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
+
     domain = body.domain_name.strip().lower()
     
     # Check if domain already exists for THIS tenant
@@ -119,6 +123,10 @@ async def verify_domain(
     """
     Step 2: Tell AWS to check the global DNS to see if the user pasted the tokens correctly.
     """
+    # Explicit defense-in-depth security check
+    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
+        raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
+
     # Fetch domain
     res = db.client.table("domains").select("*").eq("id", domain_id).eq("tenant_id", tenant_id).single().execute()
     if not res.data:
@@ -162,6 +170,10 @@ async def delete_domain(
     jwt_payload: JWTPayload = Depends(require_permission("ADD_DOMAIN"))
 ):
     """Delete domain from DB and AWS SES"""
+    # Explicit defense-in-depth security check
+    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
+        raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
+
     res = db.client.table("domains").select("domain_name").eq("id", domain_id).eq("tenant_id", tenant_id).single().execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Domain not found")

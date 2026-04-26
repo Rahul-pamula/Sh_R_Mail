@@ -20,13 +20,12 @@ ALGORITHM = "HS256"
 
 class JWTPayload:
     """Validated JWT payload & DB Context"""
-    def __init__(self, user_id: str, tenant_id: str, email: str, role: str, workspace_type: str, ui_role: str, tenant_status: str, onboarding_required: bool, isolation_model: str = "team"):
+    def __init__(self, user_id: str, tenant_id: str, email: str, role: str, workspace_type: str, tenant_status: str, onboarding_required: bool, isolation_model: str = "team"):
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.email = email
         self.role = role
         self.workspace_type = workspace_type
-        self.ui_role = ui_role
         self.tenant_status = tenant_status
         self.onboarding_required = onboarding_required
         self.isolation_model = isolation_model
@@ -113,24 +112,21 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
             )
         workspace_type = "FRANCHISE" if raw_workspace_type.upper() == "FRANCHISE" else "MAIN"
 
-        # Compute UI Role equivalent (e.g. MAIN_OWNER)
-        ui_role = "MEMBER"
-        if db_role == "owner" and workspace_type == "MAIN":
-            ui_role = "MAIN_OWNER"
-        elif db_role == "owner" and workspace_type == "FRANCHISE":
-            ui_role = "FRANCHISE_OWNER"
-        elif db_role == "manager":
-            ui_role = "MANAGER"
+        # Normalize role to uppercase: OWNER | MANAGER | MEMBER
+        normalized_role = "MEMBER"
+        if db_role == "owner":
+            normalized_role = "OWNER"
+        elif db_role == "manager" or db_role == "admin":
+            normalized_role = "MANAGER"
         elif db_role == "member":
-            ui_role = "MEMBER"
+            normalized_role = "MEMBER"
 
         return JWTPayload(
             user_id=user_id,
             tenant_id=tenant_id,
             email=email,
-            role=db_role,
+            role=normalized_role,
             workspace_type=workspace_type,
-            ui_role=ui_role,
             tenant_status=tenant_status,
             onboarding_required=onboarding_required,
             isolation_model=isolation_model
@@ -254,7 +250,7 @@ def require_admin_or_owner(jwt_payload: JWTPayload = Depends(verify_jwt_token)) 
     Require the user to have 'manager' or 'owner' role.
     Use this for destructive actions, domain management, team invites, etc.
     """
-    if jwt_payload.role not in ["manager", "owner"]:
+    if jwt_payload.role not in ["MANAGER", "OWNER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied."
@@ -274,7 +270,7 @@ def apply_data_isolation(query_builder, jwt_payload: JWTPayload):
     user_id = jwt_payload.user_id
     model = getattr(jwt_payload, "isolation_model", "team")
     
-    if role in ["owner", "manager"]:
+    if role in ["OWNER", "MANAGER"]:
         return query_builder
         
     if model == "agency":

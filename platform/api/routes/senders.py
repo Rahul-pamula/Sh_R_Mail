@@ -45,11 +45,18 @@ async def send_verification_email(to_email: str, token: str):
 @router.get("/domains")
 async def list_sender_domains(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_SENDER"))
+    jwt_payload: JWTPayload = Depends(require_permission("VIEW_DOMAIN"))
 ):
-    """List domains available for creating a sender (includes parent domains for franchises)"""
+    """
+    List domains available for creating a sender.
+    - FRANCHISE: fetches parent tenant's verified domains, returns ONLY domain_name + status.
+      No internal IDs, no DKIM tokens, no DNS records exposed.
+    - MAIN: fetches own verified domains with full data.
+    """
+    is_franchise = jwt_payload.workspace_type == "FRANCHISE"
     target_tenant_id = tenant_id
-    if jwt_payload.workspace_type == "FRANCHISE":
+
+    if is_franchise:
         t_res = db.client.table("tenants").select("parent_tenant_id").eq("id", tenant_id).single().execute()
         if t_res.data and t_res.data.get("parent_tenant_id"):
             target_tenant_id = t_res.data.get("parent_tenant_id")
@@ -60,7 +67,19 @@ async def list_sender_domains(
         .eq("status", "verified")\
         .order("created_at", desc=True)\
         .execute()
-    return {"data": res.data}
+
+    domains = res.data or []
+
+    # ── SECURITY: Strip all sensitive data for franchise users ──────────────
+    # Franchise users must NEVER receive internal IDs, DKIM tokens, or DNS details.
+    # They only need domain_name + status to display the read-only card.
+    if is_franchise:
+        domains = [
+            {"domain_name": d["domain_name"], "status": d["status"]}
+            for d in domains
+        ]
+
+    return {"data": domains}
 
 
 # ─── List Senders ──────────────────────────────────────────────────────────────

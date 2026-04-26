@@ -13,38 +13,17 @@ interface HeaderProps {
 }
 
 export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps) {
-    const { user, logout } = useAuth();
+    const { user, currentWorkspace, logout } = useAuth();
     const pathname = usePathname();
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [workspaceName, setWorkspaceName] = useState<string | null>(null);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Fetch workspace name on mount
-    useEffect(() => {
-        if (!user || user.tenantStatus !== 'active') return;
-        const fetchWorkspaceName = async () => {
-            try {
-                const token = localStorage.getItem('auth_token');
-                if (!token) return;
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/workspaces`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const workspaces = await res.json();
-                    const current = workspaces.find((w: any) => w.tenant_id === user.tenantId);
-                    if (current) setWorkspaceName(current.company_name);
-                }
-            } catch (err) {
-                console.error('Failed to fetch workspace name for header', err);
-            }
-        };
-        fetchWorkspaceName();
-    }, [user]);
+    const workspaceName = currentWorkspace?.name || 'Workspace';
 
     // Fetch pending workspace requests count for owners
     useEffect(() => {
-        if (!user || (user.role !== 'MAIN_OWNER' && user.role !== 'FRANCHISE_OWNER')) return;
+        if (!user || user.role !== 'OWNER') return;
         const fetchPendingRequests = async () => {
             try {
                 const token = localStorage.getItem('auth_token');
@@ -93,8 +72,13 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
     // Get initials for avatar
     const initials = (user.fullName || user.email || 'U').charAt(0).toUpperCase();
 
-    // Map the internal role to a friendly label
-    const roleLabel = user.role === 'MAIN_OWNER' ? 'Main Owner' : user.role === 'FRANCHISE_OWNER' ? 'Franchise Owner' : user.role === 'MANAGER' ? 'Manager' : 'Member';
+    // Map the internal role to a friendly label (UI ONLY)
+    const roleLabel = 
+        user.role === 'OWNER' 
+            ? (user.workspaceType === 'MAIN' ? 'Main Owner' : 'Franchise Owner')
+            : user.role === 'MANAGER' 
+                ? 'Manager' 
+                : 'Member';
 
 
 
@@ -177,7 +161,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                             
                             <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                    (user.role === 'MAIN_OWNER' || user.role === 'FRANCHISE_OWNER') ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 
+                                    user.role === 'OWNER' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 
                                     user.role === 'MANAGER' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20' : 
                                     'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
                                 }`}>

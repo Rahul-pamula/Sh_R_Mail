@@ -38,7 +38,7 @@ export default function ProfileSettingsPage() {
     const [leaveBusy, setLeaveBusy] = useState(false);
 
     const isGoogleAuth = false;
-    const isOwner = user?.role === 'MAIN_OWNER' || user?.role === 'FRANCHISE_OWNER';
+    const isOwner = user?.role === 'OWNER';
     const initials = useMemo(() => (fullName || email || 'U').charAt(0).toUpperCase(), [fullName, email]);
 
     useEffect(() => {

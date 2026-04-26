@@ -1,16 +1,21 @@
 import { useAuth } from '@/context/AuthContext';
 
-export type UserRole = 'MAIN_OWNER' | 'FRANCHISE_OWNER' | 'MANAGER' | 'MEMBER';
+export type UserRole = 'OWNER' | 'MANAGER' | 'MEMBER';
 export type WorkspaceType = 'MAIN' | 'FRANCHISE';
 
 export type Action = 
     | 'ADD_DOMAIN'
     | 'VIEW_DOMAIN'
+    | 'DELETE_DOMAIN'
     | 'ADD_FRANCHISE'
+    | 'VIEW_FRANCHISE'
+    | 'MANAGE_FRANCHISE'
     | 'VIEW_BILLING'
+    | 'MANAGE_BILLING'
     | 'ADD_MANAGER'
     | 'ADD_MEMBER'
     | 'ADD_SENDER'
+    | 'VIEW_SENDER'
     | 'VIEW_SETTINGS'
     | 'MANAGE_SETTINGS'
     | 'VIEW_TEAM'
@@ -38,10 +43,9 @@ export function can(user: UserContext | null | undefined, action: Action): boole
     }
 
     // STRICT WORKSPACE OVERRIDE:
-    // If we are in a Franchise workspace, NO ONE can access parent-level infrastructure.
+    // Franchise workspaces cannot manage infrastructure or spawn sub-franchises.
     if (user.workspaceType === 'FRANCHISE') {
-        if (action === 'ADD_DOMAIN' || 
-            action === 'ADD_FRANCHISE' || action === 'VIEW_BILLING') {
+        if (action === 'ADD_DOMAIN' || action === 'DELETE_DOMAIN' || action === 'ADD_FRANCHISE') {
             return false;
         }
     }
@@ -49,15 +53,11 @@ export function can(user: UserContext | null | undefined, action: Action): boole
     const { role } = user;
 
     switch (role) {
-        case 'MAIN_OWNER':
-            return true;
-
-        case 'FRANCHISE_OWNER':
-            if (action === 'ADD_DOMAIN' || action === 'ADD_FRANCHISE' || action === 'VIEW_BILLING') return false;
+        case 'OWNER':
             return true;
 
         case 'MANAGER':
-            if (action === 'ADD_DOMAIN' || action === 'VIEW_DOMAIN' || action === 'ADD_FRANCHISE' || action === 'VIEW_BILLING' || action === 'ADD_MANAGER') return false;
+            if (action === 'ADD_DOMAIN' || action === 'DELETE_DOMAIN' || action === 'ADD_FRANCHISE' || action === 'MANAGE_FRANCHISE' || action === 'VIEW_FRANCHISE' || action === 'VIEW_BILLING' || action === 'MANAGE_BILLING' || action === 'ADD_MANAGER') return false;
             return true;
 
         case 'MEMBER':

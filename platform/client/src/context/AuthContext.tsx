@@ -10,15 +10,23 @@ interface User {
     fullName: string;
     tenantId: string;
     tenantStatus: 'onboarding' | 'active' | 'pending_join';
-    role: 'MAIN_OWNER' | 'FRANCHISE_OWNER' | 'MANAGER' | 'MEMBER';
+    role: 'OWNER' | 'MANAGER' | 'MEMBER';
     workspaceType: 'MAIN' | 'FRANCHISE';
+    workspaceName: string;
     onboardingRequired?: boolean;
+}
+
+interface WorkspaceState {
+    id: string;
+    name: string;
+    role: string;
 }
 
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    currentWorkspace: WorkspaceState | null;
     token: string | null;
     login: (email: string, password: string, redirectPath?: string) => Promise<void>;
     signup: (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string) => Promise<void>;
@@ -36,20 +44,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const VALID_THEMES = new Set(['light', 'dark', 'system']);
 
-const computeUIRole = (dbRole?: string | null, workspaceType?: string | null): 'MAIN_OWNER' | 'FRANCHISE_OWNER' | 'MANAGER' | 'MEMBER' => {
-    const role = (dbRole || 'member').toLowerCase();
-    const type = workspaceType || 'MAIN';
-    
-    if (role === 'main_owner' || (role === 'owner' && type === 'MAIN')) return 'MAIN_OWNER';
-    if (role === 'franchise_owner' || (role === 'owner' && type === 'FRANCHISE')) return 'FRANCHISE_OWNER';
-    if (role === 'manager' || role === 'admin') return 'MANAGER';
-    return 'MEMBER';
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceState | null>(null);
+
+    useEffect(() => {
+        console.log("Workspace:", currentWorkspace);
+    }, [currentWorkspace]);
     const router = useRouter();
     const pathname = usePathname();
     const { setTheme } = useTheme();
@@ -57,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isRefreshing = useRef<boolean>(false);
 
     const handleAuthSuccess = useCallback((data: any, emailOverride?: string): User => {
+        const role = (data.role || 'MEMBER').toUpperCase();
+        const validRoles = ['OWNER', 'MANAGER', 'MEMBER'];
+        
         const userData: User = {
             userId: data.user_id || '',
             email: data.email || emailOverride || '',
@@ -65,7 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             tenantStatus: (data.tenant_status || 'active') as User['tenantStatus'],
             onboardingRequired: data.onboarding_required === true || data.onboarding_required === 'true',
             workspaceType: (data.workspace_type || 'MAIN').toUpperCase() as 'MAIN' | 'FRANCHISE',
-            role: (data.ui_role || computeUIRole(data.role || 'owner', data.workspace_type)) as User['role'],
+            workspaceName: data.workspace_name || 'Workspace',
+            role: (validRoles.includes(role) ? role : 'MEMBER') as User['role'],
+        };
+
+        const workspaceData: WorkspaceState = {
+            id: userData.tenantId,
+            name: userData.workspaceName,
+            role: userData.role
         };
 
         if (data.token) {
@@ -78,8 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         localStorage.setItem('user_data', JSON.stringify(userData));
+        localStorage.setItem('current_workspace', JSON.stringify(workspaceData));
         
         setUser(userData);
+        setCurrentWorkspace(workspaceData);
         setIsAuthenticated(true);
         return userData;
     }, []);
@@ -95,35 +110,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     // 1. Initial hydration from localStorage (fast UI)
                     if (userDataStr) {
                         const parsedUser = JSON.parse(userDataStr);
-                        // IMPORTANT: Use the stored user as is (it already has UI roles)
                         setUser(parsedUser);
+                        
+                        const wsStr = localStorage.getItem('current_workspace');
+                        if (wsStr) {
+                            setCurrentWorkspace(JSON.parse(wsStr));
+                        } else {
+                            setCurrentWorkspace({
+                                id: parsedUser.tenantId,
+                                name: parsedUser.workspaceName || 'Workspace',
+                                role: parsedUser.role
+                            });
+                        }
                         setIsAuthenticated(true);
                     }
 
-                    // 2. Verification & Refresh from backend (Source of Truth)
+                    // 2. Verification from backend
                     const meRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
                         headers: { Authorization: `Bearer ${token}` },
                     });
 
                     if (meRes.ok) {
                         const meData = await meRes.json();
-                        
-                        // Sync theme
                         if (VALID_THEMES.has(meData.theme_preference)) {
                             setTheme(meData.theme_preference);
                         }
-
-                        // Re-hydrate session with fresh DB data
-                        handleAuthSuccess({
-                            ...meData,
-                            token: token // Keep existing token
-                        });
+                        handleAuthSuccess({ ...meData, token });
                     } else if (meRes.status === 401) {
-                        logout();
+                        // 3. Token expired? Attempt silent refresh
+                        console.log('Access token expired, attempting silent refresh...');
+                        const newToken = await silentRefresh();
+                        
+                        if (newToken) {
+                            // 4. Retry verification with new token
+                            const retryRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+                                headers: { Authorization: `Bearer ${newToken}` },
+                            });
+                            if (retryRes.ok) {
+                                const retryData = await retryRes.json();
+                                handleAuthSuccess({ ...retryData, token: newToken });
+                            } else {
+                                console.warn('Retry after refresh failed');
+                                logout();
+                            }
+                        } else {
+                            // Refresh failed, logout
+                            logout();
+                        }
                     }
                 } catch (e) {
                     console.error('Auth hydration error:', e);
-                    logout();
+                    // Do not logout on random network errors, just stop loading
+                    // The user can still be "authenticated" from localStorage if it was a transient error
                 }
             }
             setIsLoading(false);
@@ -294,7 +332,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (userData) {
             const parsedUser = JSON.parse(userData);
             parsedUser.tenantStatus = 'active';
-            parsedUser.role = computeUIRole(parsedUser.role, parsedUser.workspaceType);
             localStorage.setItem('user_data', JSON.stringify(parsedUser));
             setUser(parsedUser);
         }
@@ -302,7 +339,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const updateUserContext = (updates: Partial<User>) => {
         if (!user) return;
-        const updatedUser = { ...user, ...updates, role: computeUIRole(updates.role ?? user.role, updates.workspaceType ?? user.workspaceType) };
+        const updatedUser = { ...user, ...updates };
+        
+        // Safety normalization
+        if (updatedUser.role) {
+            const role = updatedUser.role.toUpperCase();
+            if (!['OWNER', 'MANAGER', 'MEMBER'].includes(role)) {
+                updatedUser.role = 'MEMBER'; // Safe fallback
+            } else {
+                updatedUser.role = role as User['role'];
+            }
+        }
+
         setUser(updatedUser);
         localStorage.setItem('user_data', JSON.stringify(updatedUser));
     };
@@ -341,6 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 user,
                 isAuthenticated,
                 isLoading,
+                currentWorkspace,
                 token: typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null,
                 login,
                 signup,

@@ -17,16 +17,16 @@ interface WorkspaceSwitcherProps {
 }
 
 export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps) {
-    const { user, token, switchWorkspace } = useAuth();
+    const { user, currentWorkspace: activeWorkspace, token, switchWorkspace } = useAuth();
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isSwitching, setIsSwitching] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Current workspace
-    const currentWorkspace = workspaces.find(w => w.tenant_id === user?.tenantId);
+    // Workspace list for switcher
     const otherWorkspaces = workspaces.filter(w => w.tenant_id !== user?.tenantId);
+    const activeInList = workspaces.find(w => w.tenant_id === user?.tenantId);
 
     // Fetch workspaces when dropdown opens
     useEffect(() => {
@@ -74,7 +74,7 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
         }
     };
 
-    const displayName = currentWorkspace?.company_name || user?.tenantId?.slice(0, 8) || 'Workspace';
+    const displayName = activeWorkspace?.name || activeInList?.company_name || user?.tenantId?.slice(0, 8) || 'Workspace';
     const initial = displayName.charAt(0).toUpperCase();
 
     const normalizeRole = (role: string) => role === 'admin' ? 'manager' : role;
@@ -130,9 +130,9 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
                     <p className="text-[13px] font-semibold text-[var(--text-primary)] truncate leading-tight">
                         {displayName}
                     </p>
-                    {currentWorkspace && (
-                        <p className={`text-[10px] font-medium uppercase tracking-wider leading-tight mt-0.5 ${roleColor(currentWorkspace.role)}`}>
-                            {formatRole(currentWorkspace.role)}
+                    {activeWorkspace && (
+                        <p className={`text-[10px] font-medium uppercase tracking-wider leading-tight mt-0.5 ${roleColor(activeWorkspace.role)}`}>
+                            {formatRole(activeWorkspace.role)}
                         </p>
                     )}
                 </div>
@@ -163,19 +163,19 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
                     {!isLoading && (
                         <div className="py-1 max-h-[240px] overflow-y-auto">
                             {/* Current workspace */}
-                            {currentWorkspace && (
+                            {activeInList && (
                                 <div className="flex items-center gap-3 px-3 py-2.5 bg-[var(--accent)]/5">
                                     <div className="w-7 h-7 rounded-md bg-[var(--accent)]/15 border border-[var(--accent)]/25 flex items-center justify-center flex-shrink-0">
                                         <span className="text-xs font-bold text-[var(--accent)]">
-                                            {currentWorkspace.company_name.charAt(0).toUpperCase()}
+                                            {activeInList.company_name.charAt(0).toUpperCase()}
                                         </span>
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">
-                                            {currentWorkspace.company_name}
+                                            {activeInList.company_name}
                                         </p>
-                                        <p className={`text-[10px] font-medium uppercase tracking-wider ${roleColor(currentWorkspace.role)}`}>
-                                            {formatRole(currentWorkspace.role)}
+                                        <p className={`text-[10px] font-medium uppercase tracking-wider ${roleColor(activeInList.role)}`}>
+                                            {formatRole(activeInList.role)}
                                         </p>
                                     </div>
                                     <Check className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />

@@ -47,7 +47,7 @@ export default function WorkspaceRequestsPage() {
     const { token, user } = useAuth();
     const { success, error } = useToast();
 
-    const isOwner = user?.role === 'MAIN_OWNER' || user?.role === 'FRANCHISE_OWNER';
+    const isOwner = user?.role === 'OWNER';
     const isManager = user?.role === 'MANAGER';
 
     const [requests, setRequests] = useState<WorkspaceRequest[]>([]);

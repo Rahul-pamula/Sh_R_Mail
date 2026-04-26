@@ -15,7 +15,7 @@ import { useState } from "react";
 export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const pathname = usePathname();
-    const { isAuthenticated, isLoading, user } = useAuth();
+    const { isAuthenticated, isLoading, user, currentWorkspace } = useAuth();
 
     // Public routes that should NOT show sidebar (marketing/auth pages)
     const publicRoutes = ['/', '/login', '/signup', '/docs', '/forgot-password', '/reset-password', '/verify-email', '/waiting-room', '/team/join', '/contact', '/pricing', '/auth/callback', '/unsubscribe'];
@@ -38,7 +38,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
 
     // Show loading state
     const isRedirectingToOnboarding = isAuthenticated && user?.tenantStatus === 'onboarding' && !isOnboardingRoute && !isPublicRoute;
-    if (isLoading || isRedirectingToOnboarding) {
+    if (isLoading || isRedirectingToOnboarding || (showAppChrome && !currentWorkspace)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[var(--bg-primary)]">
                 <div className="w-8 h-8 flex items-center justify-center">
