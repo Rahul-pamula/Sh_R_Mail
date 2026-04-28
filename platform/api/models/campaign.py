@@ -12,6 +12,7 @@ class CampaignBase(BaseModel):
     domain_id: UUID = Field(..., description="The ID of the verified domain to be used")
     status: str = Field(default="draft") # draft, scheduled, sending, sent, paused, cancelled
     scheduled_at: Optional[datetime] = None
+    version: int = Field(default=1, description="Optimistic concurrency control version")
 
 class CampaignCreate(CampaignBase):
     pass
@@ -25,12 +26,13 @@ class CampaignUpdate(BaseModel):
     domain_id: Optional[UUID] = None
     status: Optional[str] = None
     scheduled_at: Optional[datetime] = None
+    version: Optional[int] = None # Used for concurrency validation
 
 class CampaignResponse(CampaignBase):
     id: UUID
     tenant_id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    version: int
 
     class Config:
         from_attributes = True
@@ -54,6 +56,7 @@ class SendRequest(BaseModel):
     """Request body for sending a campaign"""
     target_list_id: Optional[str] = None   # "all" | "batch:{uuid}"
     test_emails: Optional[List[str]] = None
+    confirmed: bool = False
 
 class CampaignDispatchBase(BaseModel):
     campaign_id: UUID

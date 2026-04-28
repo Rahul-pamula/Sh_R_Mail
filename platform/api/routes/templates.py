@@ -16,7 +16,7 @@ router = APIRouter(prefix="/templates", tags=["Templates"])
 async def create_template_endpoint(
     template: TemplateCreate,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:manage"))
 ):
 
     """Create a new template"""
@@ -31,7 +31,7 @@ async def list_templates_endpoint(
     page: int = 1,
     limit: int = 20,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:view"))
 ):
 
     """List templates with pagination"""
@@ -46,7 +46,7 @@ async def list_templates_endpoint(
 async def get_template_endpoint(
     template_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:view"))
 ):
 
     """Get a template by ID"""
@@ -61,7 +61,7 @@ async def update_template_endpoint(
     template_id: str,
     template: TemplateUpdate,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:manage"))
 ):
 
     """Update a template"""
@@ -77,7 +77,7 @@ async def update_template_endpoint(
 async def delete_template_endpoint(
     template_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:manage"))
 ):
 
     """Delete a template"""
@@ -95,7 +95,7 @@ class CompilePreviewRequest(BaseModel):
 @router.post("/compile/preview")
 async def compile_preview_endpoint(
     payload: CompilePreviewRequest,
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_TEMPLATE"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:view"))
 ):
 
     """Compiles the given design_json to raw HTML for editor preview."""

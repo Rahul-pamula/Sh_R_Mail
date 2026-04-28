@@ -58,7 +58,7 @@ export default function AnalyticsPage() {
 
     useEffect(() => {
         if (!authLoading) {
-            if (user && !can(user, 'VIEW_ANALYTICS')) {
+            if (user && !can(user, 'analytics:view')) {
                 router.replace('/dashboard');
             } else if (token) {
                 load();
@@ -66,7 +66,7 @@ export default function AnalyticsPage() {
         }
     }, [authLoading, token, user]);
 
-    if (authLoading || (user && !can(user, 'VIEW_ANALYTICS'))) {
+    if (authLoading || (user && !can(user, 'analytics:view'))) {
         return null;
     }
 

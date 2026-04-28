@@ -256,12 +256,12 @@ async def queue_campaign_dispatch(
         raise ValueError("Campaign has no associated verified domain.")
 
     dispatch_records: List[Dict[str, Any]] = []
-    tasks: List[Dict[str, Any]] = []
+    email_task_records: List[Dict[str, Any]] = []
+    mq_payloads: List[Dict[str, Any]] = []
 
     for contact in contacts:
         dispatch_id = str(uuid.uuid4())
-        html_content = process_merge_tags(process_spintax(campaign.get("body_html", "")), contact)
-        subject = process_merge_tags(process_spintax(campaign.get("subject", "")), contact)
+        task_id = str(uuid.uuid4())
 
         dispatch_records.append(
             {
@@ -274,17 +274,30 @@ async def queue_campaign_dispatch(
             }
         )
 
-        tasks.append(
+        # email_tasks = source of truth for state tracking
+        email_task_records.append(
             {
-                "dispatch_id": dispatch_id,
+                "id": task_id,
+                "trace_id": task_id,           # re-use task_id as trace for simplicity
                 "campaign_id": campaign_id,
+                "snapshot_id": snapshot_id,
+                "dispatch_id": dispatch_id,
                 "tenant_id": tenant_id,
+                "contact_id": contact["id"],
                 "recipient_email": contact["email"],
-                "recipient_id": contact["id"],
-                "subject": subject,
-                "body_html": html_content,
-                "from_name": campaign.get("from_name", "Email Engine"),
-                "from_email": f"{campaign.get('from_prefix', 'noreply')}@{domain_name}",
+                "recipient_domain": contact["email"].split("@")[-1] if "@" in contact["email"] else "",
+                "recipient_isp": "",           # enriched later if needed
+                "status": "pending",
+                "is_sent": False,
+                "created_at": now_iso,
+            }
+        )
+
+        # Hardened Minimal RabbitMQ payload
+        mq_payloads.append(
+            {
+                "task_id": task_id,
+                "attempt": 1
             }
         )
 
@@ -292,9 +305,12 @@ async def queue_campaign_dispatch(
     for index in range(0, len(dispatch_records), chunk_size):
         supabase.table("campaign_dispatch").insert(dispatch_records[index:index + chunk_size]).execute()
 
-    await mq_client.publish_tasks(tasks)
+    for index in range(0, len(email_task_records), chunk_size):
+        supabase.table("email_tasks").insert(email_task_records[index:index + chunk_size]).execute()
+
+    await mq_client.publish_tasks(mq_payloads)
 
     return {
         "snapshot_id": snapshot_id,
-        "dispatched": len(tasks),
+        "dispatched": len(mq_payloads),
     }

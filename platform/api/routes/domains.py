@@ -16,6 +16,7 @@ from utils.jwt_middleware import require_active_tenant, JWTPayload
 from utils.permissions import require_permission, can
 from utils.supabase_client import db
 from services.plan_service import PlanService
+from services.audit_service import write_log
 
 router = APIRouter(prefix="/domains", tags=["Domains"])
 
@@ -41,7 +42,7 @@ def get_ses_client():
 @router.get("/")
 async def list_domains(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_DOMAIN"))
+    jwt_payload: JWTPayload = Depends(require_permission("domains:view"))
 ):
     """List all domains for the active tenant (or parent tenant if franchise)"""
     
@@ -62,14 +63,14 @@ async def list_domains(
 async def add_domain(
     body: AddDomainRequest, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_DOMAIN"))
+    jwt_payload: JWTPayload = Depends(require_permission("domains:add"))
 ):
     """
     Step 1: Send domain to AWS, get 3 DKIM tokens back.
     If no AWS keys are configured in .env, generates fake tokens for UI testing.
     """
     # Explicit defense-in-depth security check
-    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
+    if not can(jwt_payload, "domains:add") or jwt_payload.workspace_type == "FRANCHISE":
         raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
 
     # Plan Limit Check
@@ -118,6 +119,14 @@ async def add_domain(
             "mail_from_domain": mail_from,
             "status": "pending"
         }).execute()
+        await write_log(
+            tenant_id=tenant_id,
+            user_id=jwt_payload.user_id,
+            action="domain_added",
+            resource_type="domain",
+            resource_id=inserted.data[0]["id"],
+            metadata={"domain": domain}
+        )
         return {"status": "success", "data": inserted.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save domain in database: {str(e)}")
@@ -127,13 +136,13 @@ async def add_domain(
 async def verify_domain(
     domain_id: str, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_DOMAIN"))
+    jwt_payload: JWTPayload = Depends(require_permission("domains:add"))
 ):
     """
     Step 2: Tell AWS to check the global DNS to see if the user pasted the tokens correctly.
     """
     # Explicit defense-in-depth security check
-    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
+    if not can(jwt_payload, "domains:add") or jwt_payload.workspace_type == "FRANCHISE":
         raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
 
     # Fetch domain
@@ -169,6 +178,16 @@ async def verify_domain(
         
     # Update DB
     updated = db.client.table("domains").update({"status": new_status}).eq("id", domain_id).execute()
+    
+    await write_log(
+        tenant_id=tenant_id,
+        user_id=jwt_payload.user_id,
+        action="domain_verified" if new_status == "verified" else "domain_verification_failed",
+        resource_type="domain",
+        resource_id=domain_id,
+        metadata={"status": new_status, "domain": domain_name}
+    )
+    
     return {"status": "success", "verification_status": new_status, "data": updated.data[0]}
 
 
@@ -176,7 +195,7 @@ async def verify_domain(
 async def delete_domain(
     domain_id: str, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_DOMAIN"))
+    jwt_payload: JWTPayload = Depends(require_permission("domains:add"))
 ):
     """Delete domain from DB and AWS SES"""
     # Explicit defense-in-depth security check
@@ -188,6 +207,30 @@ async def delete_domain(
         raise HTTPException(status_code=404, detail="Domain not found")
         
     domain_name = res.data["domain_name"]
+
+    # 1. PREREQUISITE: Check if domain is assigned to any workspace (Franchise or Main)
+    # This prevents breaking the outbound orchestration for assigned tenants.
+    usage_res = db.client.table("tenants").select("id, company_name").eq("sending_domain", domain_name).execute()
+    if usage_res.data:
+        workspaces = ", ".join([t["company_name"] for t in usage_res.data[:3]])
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Domain cannot be deleted: It is currently assigned to {len(usage_res.data)} workspace(s) (e.g., {workspaces}). Reassign them before deleting."
+        )
+
+    # 2. PREREQUISITE: Check if any active campaigns are using this domain
+    campaign_usage = db.client.table("campaigns")\
+        .select("id")\
+        .eq("domain_id", domain_id)\
+        .in_("status", ["approved", "scheduled", "sending", "paused"])\
+        .execute()
+    
+    if campaign_usage.data:
+        raise HTTPException(
+            status_code=400, 
+            detail="Domain cannot be deleted: It is currently in use by active or scheduled campaigns."
+        )
+
     ses = get_ses_client()
     
     if ses:
@@ -196,5 +239,16 @@ async def delete_domain(
         except ClientError as e:
             pass # ignore if it doesn't exist on AWS anymore
             
+    # Use hard delete since schema lacks deleted_at
     db.client.table("domains").delete().eq("id", domain_id).eq("tenant_id", tenant_id).execute()
+    
+    await write_log(
+        tenant_id=tenant_id,
+        user_id=jwt_payload.user_id,
+        action="domain_removed",
+        resource_type="domain",
+        resource_id=domain_id,
+        metadata={"domain": domain_name}
+    )
+    
     return {"status": "success", "message": "Domain removed"}

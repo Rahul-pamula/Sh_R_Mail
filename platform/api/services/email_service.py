@@ -116,3 +116,23 @@ async def send_raw_html(to_email: str, subject: str, html_content: str) -> bool:
         "subject": subject,
         "html": html_content
     })
+
+async def send_campaign_review_notification(
+    to_email: str,
+    creator_name: str,
+    campaign_name: str,
+    campaign_id: str,
+    creator_role: str = "Creator",
+    workspace_name: str = "your workspace",
+) -> bool:
+    """Alert Admins/Owners that a campaign is ready for review."""
+    # Link directly to the campaign detail page (not the list with a query param)
+    review_url = f"{APP_URL}/campaigns/{campaign_id}"
+    return await publish_system_email("campaign_review", to_email, {
+        "creator_name": creator_name,
+        "creator_role": creator_role,
+        "campaign_name": campaign_name,
+        "workspace_name": workspace_name,
+        "review_url": review_url,
+    })
+

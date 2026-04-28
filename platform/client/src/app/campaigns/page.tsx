@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
     AlertCircle,
     Archive,
@@ -17,14 +17,16 @@ import {
     Plus,
     Search,
     StopCircle,
+    Zap,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { can } from "@/utils/permissions";
 import { Button, ConfirmModal, EmptyState, FilterBar, InlineAlert, PageHeader, SectionCard, TableToolbar, StatusBadge, useToast } from "@/components/ui";
+import ReviewCampaignModal from "@/components/ReviewCampaignModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
-type CampaignStatus = "all" | "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled" | "archived";
+type CampaignStatus = "all" | "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled" | "archived" | "awaiting_review" | "approved";
 
 const STATUS_TABS: { key: CampaignStatus; label: string }[] = [
     { key: "all", label: "All" },
@@ -33,6 +35,8 @@ const STATUS_TABS: { key: CampaignStatus; label: string }[] = [
     { key: "sending", label: "Sending" },
     { key: "sent", label: "Sent" },
     { key: "paused", label: "Paused" },
+    { key: "awaiting_review", label: "Review" },
+    { key: "approved", label: "Approved" },
     { key: "archived", label: "Archived" },
 ];
 
@@ -43,9 +47,10 @@ function actionButtonClass(tone: "default" | "success" | "warning" | "danger" = 
     return "border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]";
 }
 
-export default function CampaignsPage() {
-    const { token, user } = useAuth();
+function CampaignsPage() {
+    const searchParams = useSearchParams();
     const router = useRouter();
+    const { token, user } = useAuth();
     const { success, error: toastError, info } = useToast();
     const [campaigns, setCampaigns] = useState<any[]>([]);
     const [localDrafts, setLocalDrafts] = useState<any[]>([]);
@@ -57,7 +62,20 @@ export default function CampaignsPage() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [reviewId, setReviewId] = useState<string | null>(null);
     const [pendingAction, setPendingAction] = useState<{ kind: "discard_local" | "campaign"; id: string; action?: "cancel" | "archive" | "unarchive" | "delete"; title: string; message: string; confirmLabel: string; variant: "danger" | "warning" | "primary"; } | null>(null);
+
+    // Deep link for review modal
+    useEffect(() => {
+        const id = searchParams.get("review");
+        if (id) {
+            setReviewId(id);
+            // Clean up the URL without refreshing
+            const url = new URL(window.location.href);
+            url.searchParams.delete("review");
+            window.history.replaceState({}, "", url.toString());
+        }
+    }, [searchParams]);
 
     const fetchCampaigns = async (background = false) => {
         if (!token) return;
@@ -188,7 +206,7 @@ export default function CampaignsPage() {
                 title="Campaigns"
                 subtitle="Create, schedule, pause, and archive outbound campaigns from one place."
                 action={
-                    can(user, 'CREATE_CAMPAIGN') ? (
+                    can(user, 'campaign:create') ? (
                         <Button onClick={handleCreateNew}>
                             <Plus className="h-4 w-4" />
                             Create Campaign
@@ -299,7 +317,7 @@ export default function CampaignsPage() {
                     icon={activeTab === "archived" ? <Archive className="h-10 w-10" /> : <Megaphone className="h-10 w-10" />}
                     title={activeTab === "archived" ? "No archived campaigns" : activeTab === "all" ? "No campaigns yet" : `No ${activeTab} campaigns`}
                     description={activeTab === "archived" ? "Archived campaigns will appear here for later reference." : "Create your first campaign to start sending and tracking performance."}
-                    action={activeTab !== "archived" && can(user, 'CREATE_CAMPAIGN') ? <Button onClick={handleCreateNew}>Create Campaign</Button> : undefined}
+                    action={activeTab !== "archived" && can(user, 'campaign:create') ? <Button onClick={handleCreateNew}>Create Campaign</Button> : undefined}
                 />
             )}
 
@@ -347,19 +365,19 @@ export default function CampaignsPage() {
                                             </td>
                                             <td className="px-5 py-4">
                                                 <div className="flex flex-wrap justify-end gap-2">
-                                                    {campaign.status === "paused" && (
+                                                    {campaign.status === "paused" && can(user, 'campaign:send') && (
                                                         <button disabled={isWorking} onClick={() => handleAction(campaign.id, "resume")} className={`inline-flex items-center gap-1 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition ${actionButtonClass("success")}`}>
                                                             <PlayCircle className="h-3.5 w-3.5" />
                                                             Resume
                                                         </button>
                                                     )}
-                                                    {(campaign.status === "sending" || campaign.status === "processing") && (
+                                                    {(campaign.status === "sending" || campaign.status === "processing") && can(user, 'campaign:send') && (
                                                         <button disabled={isWorking} onClick={() => handleAction(campaign.id, "pause")} className={`inline-flex items-center gap-1 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition ${actionButtonClass("warning")}`}>
                                                             <Pause className="h-3.5 w-3.5" />
                                                             Pause
                                                         </button>
                                                     )}
-                                                    {["sending", "processing", "paused", "scheduled"].includes(campaign.status) && (
+                                                    {["sending", "processing", "paused", "scheduled"].includes(campaign.status) && can(user, 'campaign:send') && (
                                                         <button
                                                             disabled={isWorking}
                                                             onClick={() => setPendingAction({
@@ -377,7 +395,13 @@ export default function CampaignsPage() {
                                                             Cancel
                                                         </button>
                                                     )}
-                                                    {(campaign.status === "draft" || campaign.status === "paused") && (
+                                                    {campaign.status === "awaiting_review" && can(user, 'campaign:send') && (
+                                                        <button onClick={() => setReviewId(campaign.id)} className={`inline-flex items-center gap-1 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition ${actionButtonClass("success")}`}>
+                                                            <Zap className="h-3.5 w-3.5" />
+                                                            Review
+                                                        </button>
+                                                    )}
+                                                    {(campaign.status === "draft" || campaign.status === "paused" || campaign.status === "awaiting_review") && (
                                                         <Link href={`/campaigns/new?edit=${campaign.id}`} className={`inline-flex items-center gap-1 rounded-[var(--radius)] border px-2.5 py-1.5 text-xs font-medium transition ${actionButtonClass()}`}>
                                                             Edit
                                                         </Link>
@@ -490,6 +514,20 @@ export default function CampaignsPage() {
                 confirmLabel={pendingAction?.confirmLabel}
                 variant={pendingAction?.variant}
             />
+            <ReviewCampaignModal
+                isOpen={!!reviewId}
+                onClose={() => setReviewId(null)}
+                campaignId={reviewId}
+                onActionComplete={() => fetchCampaigns(true)}
+            />
         </div>
+    );
+}
+
+export default function CampaignsPageWrapper() {
+    return (
+        <Suspense fallback={<div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-[var(--accent)]" /></div>}>
+            <CampaignsPage />
+        </Suspense>
     );
 }

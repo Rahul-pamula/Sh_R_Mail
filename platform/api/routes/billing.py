@@ -44,7 +44,7 @@ def _get_plan(plan_id: str) -> dict:
 @router.get("/plan")
 async def get_current_plan(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_BILLING"))
+    jwt_payload: JWTPayload = Depends(require_permission("billing:view"))
 ):
     """
     Returns current plan, usage stats, all available plans, and any scheduled downgrade.
@@ -102,7 +102,7 @@ async def get_current_plan(
 async def change_plan(
     request: ChangePlanRequest, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_BILLING"))
+    jwt_payload: JWTPayload = Depends(require_permission("billing:manage"))
 ):
     """
     Industry-standard plan change logic:
@@ -184,7 +184,7 @@ async def change_plan(
 @router.post("/cancel-downgrade")
 async def cancel_downgrade(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_BILLING"))
+    jwt_payload: JWTPayload = Depends(require_permission("billing:manage"))
 ):
     """Cancel a pending scheduled downgrade. The tenant stays on their current plan."""
     tenant = _get_tenant_billing(tenant_id)
@@ -208,7 +208,7 @@ async def cancel_downgrade(
 async def legacy_upgrade(
     request: ChangePlanRequest, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_BILLING"))
+    jwt_payload: JWTPayload = Depends(require_permission("billing:manage"))
 ):
     """Deprecated. Use POST /billing/change-plan instead."""
     return await change_plan(request, tenant_id=tenant_id, jwt_payload=jwt_payload)

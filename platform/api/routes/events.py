@@ -18,7 +18,7 @@ async def list_events(
     limit: int = 50,
     event_type: Optional[str] = None,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_ANALYTICS"))
+    jwt_payload: JWTPayload = Depends(require_permission("analytics:view"))
 ):
 
     """
@@ -101,7 +101,7 @@ async def list_events(
 @router.get("/summary")
 async def events_summary(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_ANALYTICS"))
+    jwt_payload: JWTPayload = Depends(require_permission("analytics:view"))
 ):
 
     """Quick stats card for dashboard (O(1) Space Complexity)"""

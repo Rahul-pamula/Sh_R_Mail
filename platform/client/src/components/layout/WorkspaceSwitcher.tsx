@@ -77,17 +77,20 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
     const displayName = activeWorkspace?.name || activeInList?.company_name || user?.tenantId?.slice(0, 8) || 'Workspace';
     const initial = displayName.charAt(0).toUpperCase();
 
-    const normalizeRole = (role: string) => role === 'admin' ? 'manager' : role;
+    const normalizeRole = (role: string) => role?.toUpperCase() || 'VIEWER';
     const formatRole = (role: string) => {
         const normalizedRole = normalizeRole(role);
-        return normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1);
+        if (normalizedRole === 'OWNER') return 'Owner';
+        if (normalizedRole === 'ADMIN') return 'Admin';
+        if (normalizedRole === 'CREATOR') return 'Creator';
+        return 'Viewer';
     };
 
     // Role badge color
     const roleColor = (role: string) => {
         const normalizedRole = normalizeRole(role);
-        if (normalizedRole === 'owner') return 'text-amber-400';
-        if (normalizedRole === 'manager') return 'text-[var(--accent)]';
+        if (normalizedRole === 'OWNER') return 'text-amber-400';
+        if (normalizedRole === 'ADMIN') return 'text-[var(--accent)]';
         return 'text-[var(--text-muted)]';
     };
 

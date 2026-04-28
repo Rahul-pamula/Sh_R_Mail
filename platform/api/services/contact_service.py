@@ -363,6 +363,9 @@ class ContactService:
         if not contact_ids:
             return 0
 
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        
         result = db.client.table("contacts")\
             .delete()\
             .eq("tenant_id", tenant_id)\
@@ -379,6 +382,9 @@ class ContactService:
         Delete ALL contacts for a tenant (tenant reset).
         Single SQL statement.
         """
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+
         result = db.client.table("contacts")\
             .delete()\
             .eq("tenant_id", tenant_id)\
@@ -394,6 +400,9 @@ class ContactService:
         Delete all contacts from a specific import batch (tenant-scoped).
         Single SQL statement.
         """
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+
         result = db.client.table("contacts")\
             .delete()\
             .eq("tenant_id", tenant_id)\

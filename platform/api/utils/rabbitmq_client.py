@@ -14,9 +14,11 @@ class RabbitMQManager:
         self.exchange = None
         self.exchange_name = "campaign_exchange"
         self.queue_name = "bulk_email_queue"
+        self.retry_queue_name = "bulk_email_retry_queue"
+        self.dlq_name = "bulk_email_dlq"
 
     async def connect(self):
-        """Establish connection to RabbitMQ"""
+        """Establish connection to RabbitMQ and declare hardened topology"""
         if self.connection and not self.connection.is_closed:
             return
 
@@ -24,59 +26,60 @@ class RabbitMQManager:
             self.connection = await aio_pika.connect_robust(self.url)
             self.channel = await self.connection.channel()
             
-            # Setup Exchange (Topic or Direct depending on needs, using Direct for simplicity)
+            # 1. Main Exchange
             self.exchange = await self.channel.declare_exchange(
                 self.exchange_name, aio_pika.ExchangeType.DIRECT, durable=True
             )
             
-            # Setup Quorum Queue for high availability (reverting to classic if quorum not supported locally)
-            queue = await self.channel.declare_queue(
-                self.queue_name, 
-                durable=True,
-                # arguments={"x-queue-type": "quorum"} # Uncomment in production cluster
+            # 2. DLQ Setup (The Safety Net)
+            self.dlq_exchange = await self.channel.declare_exchange(
+                "dead_letter_exchange", aio_pika.ExchangeType.DIRECT, durable=True
             )
+            dlq_queue = await self.channel.declare_queue(self.dlq_name, durable=True)
+            await dlq_queue.bind(self.dlq_exchange, routing_key="email.failed")
             
-            # Bind Queue to Exchange
-            await queue.bind(self.exchange, routing_key="email.send")
+            # 3. Retry Queue Setup (Delayed Backoff via DLX)
+            await self.channel.declare_queue(
+                self.retry_queue_name, 
+                durable=True,
+                arguments={
+                    "x-dead-letter-exchange": self.exchange_name,
+                    "x-dead-letter-routing-key": "email.send"
+                }
+            )
+
+            # 4. Main Queue Setup
+            main_queue = await self.channel.declare_queue(self.queue_name, durable=True)
+            await main_queue.bind(self.exchange, routing_key="email.send")
             
             # --- Phase 7.5: Setup Background Jobs Exchange and Queue ---
             self.bg_exchange = await self.channel.declare_exchange(
                 "background_exchange", aio_pika.ExchangeType.DIRECT, durable=True
             )
 
-            # --- DLQ SETUP (The Safety Net) ---
-            # 1. Declare the Dead Letter Exchange
-            self.dlx_exchange = await self.channel.declare_exchange(
-                "dead_letter_exchange", aio_pika.ExchangeType.DIRECT, durable=True
-            )
-            # 2. Declare the Dead Letter Queue
-            dlq_queue = await self.channel.declare_queue("failed_tasks", durable=True)
-            # 3. Bind DLQ to DLX
-            await dlq_queue.bind(self.dlx_exchange, routing_key="task.failed")
-
-            # Update Background Queue with DLX
+            # Background Queue with generic DLX
             bg_queue = await self.channel.declare_queue(
                 "background_tasks_v4", 
                 durable=True,
                 arguments={
                     "x-dead-letter-exchange": "dead_letter_exchange",
-                    "x-dead-letter-routing-key": "task.failed"
+                    "x-dead-letter-routing-key": "email.failed"
                 }
             )
             await bg_queue.bind(self.bg_exchange, routing_key="task.process")
 
-            # Update Dedicated Import Queue with DLX
+            # Dedicated Import Queue
             import_queue = await self.channel.declare_queue(
                 "import_tasks_v4", 
                 durable=True,
                 arguments={
                     "x-dead-letter-exchange": "dead_letter_exchange",
-                    "x-dead-letter-routing-key": "task.failed"
+                    "x-dead-letter-routing-key": "email.failed"
                 }
             )
             await import_queue.bind(self.bg_exchange, routing_key="task.import")
             
-            logger.info("Successfully connected to RabbitMQ and declared queues.")
+            logger.info("✅ RabbitMQ hardened topology declared (Main, Retry, DLQ).")
         except Exception as e:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
             raise

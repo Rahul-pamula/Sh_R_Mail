@@ -15,7 +15,7 @@ router = APIRouter(prefix="/infrastructure", tags=["Infrastructure"])
 async def get_live_webhooks(
     limit: int = 20,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_SETTINGS"))
+    jwt_payload: JWTPayload = Depends(require_permission("settings:update"))
 ):
 
     """
@@ -40,7 +40,7 @@ async def get_live_webhooks(
 @router.get("/stats")
 async def get_infra_stats(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_SETTINGS"))
+    jwt_payload: JWTPayload = Depends(require_permission("settings:update"))
 ):
 
     """

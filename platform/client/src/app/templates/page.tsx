@@ -42,7 +42,7 @@ export default function TemplatesPage() {
 
     useEffect(() => {
         if (!authLoading) {
-            if (user && !can(user, "VIEW_TEMPLATE")) {
+            if (user && !can(user, "template:view")) {
                 router.replace("/dashboard");
             } else if (token) {
                 fetchTemplates();
@@ -50,7 +50,7 @@ export default function TemplatesPage() {
         }
     }, [authLoading, token, user, page]);
 
-    if (authLoading || (user && !can(user, "VIEW_TEMPLATE"))) {
+    if (authLoading || (user && !can(user, "template:view"))) {
         return null;
     }
 

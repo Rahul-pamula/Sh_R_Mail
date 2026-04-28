@@ -6,6 +6,7 @@ import { Search, Bell, Menu, User, Settings, CreditCard, LogOut, ChevronDown, Ch
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import NotificationPopover from './NotificationPopover';
 
 interface HeaderProps {
     setMobileMenuOpen?: () => void;
@@ -76,9 +77,9 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
     const roleLabel = 
         user.role === 'OWNER' 
             ? (user.workspaceType === 'MAIN' ? 'Main Owner' : 'Franchise Owner')
-            : user.role === 'MANAGER' 
-                ? 'Manager' 
-                : 'Member';
+            : user.role === 'ADMIN' 
+                ? 'Admin' 
+                : 'Creator';
 
 
 
@@ -122,15 +123,19 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
             <div className="flex items-center gap-3 flex-1 justify-end relative" ref={dropdownRef}>
 
                 {/* Notifications Button */}
-                <Link href="/settings/requests" className="relative p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-full hover:bg-[var(--bg-secondary)] transition-colors" title="Workspace Requests">
-                    <Bell className="w-5 h-5" />
-                    {/* Notification Dot */}
-                    {pendingRequestsCount > 0 && (
-                        <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--danger)] text-[9px] font-bold text-white border-[1.5px] border-[var(--bg-primary)]">
-                            {pendingRequestsCount}
-                        </span>
-                    )}
-                </Link>
+                <NotificationPopover />
+
+                {/* Workspace Requests Button (Owners Only) */}
+                {user?.role === 'OWNER' && (
+                    <Link href="/settings/requests" className="relative p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-full hover:bg-[var(--bg-secondary)] transition-colors" title="Workspace Requests">
+                        <User className="w-5 h-5" />
+                        {pendingRequestsCount > 0 && (
+                            <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--danger)] text-[9px] font-bold text-white border-[1.5px] border-[var(--bg-primary)]">
+                                {pendingRequestsCount}
+                            </span>
+                        )}
+                    </Link>
+                )}
 
                 {/* Profile Avatar Button */}
                 <div className="h-8 w-[1px] bg-[var(--border)] mx-1 hidden sm:block"></div>
@@ -162,7 +167,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                             <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                                     user.role === 'OWNER' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 
-                                    user.role === 'MANAGER' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20' : 
+                                    user.role === 'ADMIN' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/20' : 
                                     'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
                                 }`}>
                                     {roleLabel}

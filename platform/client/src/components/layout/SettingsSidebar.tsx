@@ -37,24 +37,24 @@ const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
         label: 'Workspace',
         items: [
             // Visible to all authenticated users with workspace settings access
-            { href: '/settings/organization',  icon: Building2,        label: 'Organization',       action: 'VIEW_SETTINGS' },
-            { href: '/settings/team',          icon: Users,            label: 'Team Members',       action: 'VIEW_TEAM' },
-            // Only visible to MAIN workspaces (VIEW_FRANCHISE is blocked for franchises in permissions.ts)
-            { href: '/settings/franchises',    icon: Store,            label: 'Franchise Accounts', action: 'VIEW_FRANCHISE' },
-            { href: '/settings/requests',      icon: MessageSquareDot, label: 'Workspace Requests', action: 'VIEW_SETTINGS' },
+            { href: '/settings/organization',  icon: Building2,        label: 'Organization',       action: 'settings:view' },
+            { href: '/settings/team',          icon: Users,            label: 'Team Members',       action: 'team:view' },
+            // Only visible to MAIN workspaces (franchise:manage is blocked for franchises in permissions.ts)
+            { href: '/settings/franchises',    icon: Store,            label: 'Franchise Accounts', action: 'franchise:manage' },
+            { href: '/settings/requests',      icon: MessageSquareDot, label: 'Workspace Requests', action: 'settings:view' },
             // Both Main and Franchise workspaces can see billing (each manages their own)
-            { href: '/settings/billing',       icon: CreditCard,       label: 'Billing & Plan',     action: 'VIEW_BILLING' },
-            { href: '/settings/audit',         icon: History,          label: 'Audit History',      action: 'VIEW_SETTINGS' },
+            { href: '/settings/billing',       icon: CreditCard,       label: 'Billing & Plan',     action: 'billing:view' },
+            { href: '/settings/audit',         icon: History,          label: 'Audit History',      action: 'settings:view' },
         ],
     },
     {
         label: 'Infrastructure',
         items: [
             // Domain management (full for MAIN, read-only fork for FRANCHISE)
-            { href: '/settings/domain',        icon: Globe,  label: 'Sending Domain',    action: 'VIEW_DOMAIN' },
+            { href: '/settings/domain',        icon: Globe,  label: 'Sending Domain',    action: 'domains:view' },
             // Sender identities management
-            { href: '/settings/senders',       icon: Mail,   label: 'Sender Identities', action: 'VIEW_SENDER' },
-            { href: '/settings/api-keys',      icon: Key,    label: 'API Keys',           action: 'VIEW_SETTINGS' },
+            { href: '/settings/senders',       icon: Mail,   label: 'Sender Identities', action: 'sender:manage' },
+            { href: '/settings/api-keys',      icon: Key,    label: 'API Keys',           action: 'api_keys:manage' },
         ],
     },
 ];

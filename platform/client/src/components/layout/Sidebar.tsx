@@ -22,23 +22,23 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
         label: 'Operate',
         items: [
             { name: 'Dashboard', href: '/dashboard',     icon: LayoutDashboard },
-            { name: 'Contacts',  href: '/contacts',      icon: Users, action: 'VIEW_CONTACT' },
-            { name: 'Templates', href: '/templates',     icon: LayoutTemplate, action: 'VIEW_TEMPLATE' },
-            { name: 'Campaigns', href: '/campaigns',     icon: Megaphone, action: 'VIEW_CAMPAIGN' },
+            { name: 'Contacts',  href: '/contacts',      icon: Users, action: 'contacts:view' },
+            { name: 'Templates', href: '/templates',     icon: LayoutTemplate, action: 'campaign:view' },
+            { name: 'Campaigns', href: '/campaigns',     icon: Megaphone, action: 'campaign:view' },
         ],
     },
     {
         label: 'Observe',
         items: [
-            { name: 'Analytics', href: '/analytics',     icon: BarChart3, action: 'VIEW_ANALYTICS' },
+            { name: 'Analytics', href: '/analytics',     icon: BarChart3, action: 'analytics:view' },
         ],
     },
 
     {
         label: 'Configure',
         items: [
-            { name: 'Infrastructure', href: '/infrastructure', icon: ServerCog, action: 'VIEW_SETTINGS' },
-            { name: 'Settings',       href: '/settings',       icon: Settings, action: 'VIEW_SETTINGS' },
+            { name: 'Infrastructure', href: '/infrastructure', icon: ServerCog, action: 'domains:view' },
+            { name: 'Settings',       href: '/settings',       icon: Settings, action: 'settings:view' },
         ],
     },
 ];
@@ -166,6 +166,23 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                         </div>
                     ))}
                 </nav>
+
+                {/* Role Badge */}
+                <div className="p-4 border-t border-[var(--border)]">
+                    {!collapsed ? (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)] shadow-sm">
+                             <div className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+                             <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-tight leading-none mb-0.5">Your Role</span>
+                                <span className="text-[12px] font-semibold text-[var(--text-primary)] capitalize">{user?.role?.toLowerCase() || 'Viewer'}</span>
+                             </div>
+                        </div>
+                    ) : (
+                        <div className="flex justify-center">
+                             <div className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+                        </div>
+                    )}
+                </div>
             </aside>
         </>
     );

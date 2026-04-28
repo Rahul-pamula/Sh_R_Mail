@@ -124,7 +124,7 @@ async def get_conn(tenant_id: Optional[str] = None) -> AsyncIterator[asyncpg.Con
             # Use a transaction so SET LOCAL is scoped correctly
             async with conn.transaction():
                 await conn.execute(
-                    "SET LOCAL app.current_tenant_id = $1", tenant_id
+                    "SELECT set_config('app.current_tenant_id', $1, true)", tenant_id
                 )
                 yield conn
         else:

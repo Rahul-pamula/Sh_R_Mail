@@ -1,0 +1,10 @@
+ALTER TABLE email_tasks 
+    ADD COLUMN IF NOT EXISTS is_sent BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS dispatch_id UUID REFERENCES campaign_dispatch(id) ON DELETE CASCADE,
+    ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+-- Connect delivery_logs to email_tasks
+ALTER TABLE delivery_logs 
+    ADD COLUMN IF NOT EXISTS task_id UUID REFERENCES email_tasks(id) ON DELETE CASCADE;

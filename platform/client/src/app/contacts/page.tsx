@@ -449,7 +449,7 @@ export default function ContactsPage() {
     useEffect(() => {
         if (!token) return;
         
-        if (user && !can(user, "VIEW_CONTACT")) {
+        if (user && !can(user, "contacts:view")) {
             router.replace("/dashboard");
             return;
         }
@@ -464,7 +464,7 @@ export default function ContactsPage() {
         }
     }, [token, user, activeTab, suppressionPage]);
 
-    if (!user || (user && !can(user, "VIEW_CONTACT"))) {
+    if (!user || (user && !can(user, "contacts:view"))) {
         return null;
     }
 

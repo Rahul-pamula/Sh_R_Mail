@@ -119,7 +119,8 @@ export default function CampaignWizard({ editCampaignId, draftCampaignId }: Prop
                     contentMode: mode,
                     from_name: campaign.from_name || "",
                     from_prefix: campaign.from_prefix || "",
-                    domain_id: campaign.domain_id || ""
+                    domain_id: campaign.domain_id || "",
+                    status: campaign.status || "draft"
                 }));
                 // Force step 1 and overwrite any garbage in localStorage from a previous session
                 setCurrentStep(1);

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/assets", tags=["Assets"])
 async def upload_asset(
     file: UploadFile = File(...),
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_ASSETS"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:manage"))
 ):
 
     if not file.content_type.startswith("image/"):
@@ -46,7 +46,7 @@ async def upload_asset(
 async def mirror_asset(
     request: MirrorRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_ASSETS"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:manage"))
 ):
 
     storage = get_storage_provider()
@@ -76,7 +76,7 @@ async def mirror_asset(
 @router.get("/list")
 async def list_assets(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_ASSETS"))
+    jwt_payload: JWTPayload = Depends(require_permission("template:view"))
 ):
     storage = get_storage_provider()
     return storage.list_files(tenant_id)

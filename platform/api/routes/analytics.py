@@ -22,7 +22,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 async def get_campaign_analytics(
     campaign_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_ANALYTICS")),
+    _: JWTPayload = Depends(require_permission("analytics:view")),
 ):
     """
     Full analytics for a single campaign.
@@ -130,7 +130,7 @@ async def get_campaign_analytics(
 async def get_campaign_recipients(
     campaign_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_ANALYTICS")),
+    _: JWTPayload = Depends(require_permission("analytics:view")),
 ):
     """
     Returns per-recipient status for a campaign:
@@ -205,7 +205,7 @@ async def get_campaign_recipients(
 @router.get("/sender-health")
 async def get_sender_health(
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_ANALYTICS")),
+    _: JWTPayload = Depends(require_permission("analytics:view")),
 ):
     """
     Tenant's overall sender reputation.

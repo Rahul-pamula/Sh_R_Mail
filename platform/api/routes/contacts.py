@@ -98,7 +98,7 @@ class ImportProcessResponse(BaseModel):
 @router.get("/stats", response_model=ContactStats)
 async def get_contact_stats(
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_CONTACT")),
+    _: JWTPayload = Depends(require_permission("contacts:view")),
 ):
     """Get contact usage stats for current tenant"""
     can_add, stats = ContactService.check_plan_limits(tenant_id, 0)
@@ -119,7 +119,7 @@ async def list_contacts(
     domain: Optional[str] = None,
     domains: Optional[str] = None,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """List contacts with pagination, search, and optional batch filter"""
     requested_domains = []
@@ -136,7 +136,7 @@ async def list_contact_domains(
     limit: int = 12,
     batch_id: Optional[str] = None,
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_CONTACT")),
+    _: JWTPayload = Depends(require_permission("contacts:view")),
 ):
     """Return the most common contact domains for the current tenant."""
     safe_limit = max(1, min(limit, 50))
@@ -149,7 +149,7 @@ async def list_contact_domains(
 async def preview_csv(
     file: UploadFile = File(...),
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
 
     """Step 1: Parse uploaded file and return headers + preview"""
@@ -180,7 +180,7 @@ async def initialize_import(
     request: ImportInitializeRequest,
     project_id: str, # For now passing via query param
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
 
     """
@@ -264,7 +264,7 @@ async def initialize_import(
 async def validate_import_limit(
     request: ImportValidateRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """
     Check if the user has enough space in their plan for the incoming file.
@@ -329,7 +329,7 @@ async def process_import_signal(
     job_id: str,
     request: ImportProcessRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
 
     """
@@ -401,7 +401,7 @@ async def process_import_signal(
 async def get_job_status(
     job_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:view"))
 ):
 
     """Fetch the realtime progress of a specific background job (Public ID scoped)"""
@@ -428,7 +428,7 @@ async def get_job_status(
 async def bulk_delete_contacts(
     body: BulkDeleteRequest,
     tenant_id: str = Depends(require_active_tenant),
-    _ = Depends(require_permission("MANAGE_CONTACT"))
+    _ = Depends(require_permission("contacts:import"))
 ):
     """Delete multiple selected contacts"""
     if not body.contact_ids:
@@ -483,7 +483,7 @@ async def get_all_tags(tenant_id: str = Depends(require_active_tenant)):
 async def bulk_tag_contacts(
     body: BulkTagRequest,
     tenant_id: str = Depends(require_active_tenant),
-    _ = Depends(require_permission("MANAGE_CONTACT"))
+    _ = Depends(require_permission("contacts:import"))
 ):
     """Add or remove tags for multiple contacts"""
     if not body.contact_ids:
@@ -523,7 +523,7 @@ async def bulk_tag_contacts(
 
 
 @router.delete("/all")
-async def delete_all_contacts(tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("MANAGE_CONTACT"))):
+async def delete_all_contacts(tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("contacts:import"))):
     """Delete ALL contacts for tenant (reset)"""
     deleted_count = ContactService.delete_all(tenant_id)
 
@@ -550,7 +550,7 @@ async def list_batches(tenant_id: str = Depends(require_active_tenant)):
 
 
 @router.delete("/batch/{batch_id}")
-async def delete_batch(batch_id: str, tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("MANAGE_CONTACT"))):
+async def delete_batch(batch_id: str, tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("contacts:import"))):
     """Delete all contacts from a specific import batch"""
     deleted_count = BatchService.delete_batch(tenant_id, batch_id)
     return {"deleted_count": deleted_count}
@@ -569,7 +569,7 @@ class ResolveErrorRequest(BaseModel):
 async def resolve_error(
     body: ResolveErrorRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """Resolve a failed contact by manually adding corrected data"""
     import json as json_lib
@@ -650,7 +650,7 @@ async def get_suppressed_contacts(
     page: int = 1,
     limit: int = 50,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """List contacts that bounced, unsubscribed, or complained"""
     return ContactService.get_suppression_list(tenant_id, jwt_payload, page, limit)
@@ -659,7 +659,7 @@ async def get_suppressed_contacts(
 async def get_contact(
     contact_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """Get a single contact by ID"""
     try:
@@ -679,7 +679,7 @@ async def update_contact_tags(
     contact_id: str,
     body: UpdateTagsRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """Update the tags array for a specific contact"""
     try:
@@ -702,7 +702,7 @@ async def update_contact(
     contact_id: str,
     body: UpdateContactRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_CONTACT"))
+    jwt_payload: JWTPayload = Depends(require_permission("contacts:import"))
 ):
     """Update a contact email and custom fields."""
     try:
@@ -741,7 +741,7 @@ async def export_contacts_async(
     background_tasks: BackgroundTasks,
     payload: Optional[ExportAsyncRequest] = None,
     tenant_id: str = Depends(require_active_tenant),
-    _ = Depends(require_permission("MANAGE_CONTACT"))
+    _ = Depends(require_permission("contacts:import"))
 ):
     """Start an async background task to export all contacts for the tenant"""
     try:
@@ -776,7 +776,7 @@ async def export_contacts_async(
         raise HTTPException(status_code=500, detail=f"Failed to queue export: {str(e)}")
 
 @router.get("/export")
-async def export_contacts(tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("MANAGE_CONTACT"))):
+async def export_contacts(tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("contacts:import"))):
     """Export all contacts for the tenant as a CSV file"""
     try:
         csv_data = ContactService.export_contacts(tenant_id)
@@ -793,7 +793,7 @@ async def export_contacts(tenant_id: str = Depends(require_active_tenant), _ = D
 async def export_batch_contacts_sync(
     batch_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    _ = Depends(require_permission("MANAGE_CONTACT"))
+    _ = Depends(require_permission("contacts:import"))
 ):
     """Fast synchronous export for a specific import batch — no job queue, no polling."""
     import gzip as _gzip
@@ -810,7 +810,7 @@ async def export_batch_contacts_sync(
 
 
 @router.delete("/{contact_id}")
-async def delete_contact(contact_id: str, tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("MANAGE_CONTACT"))):
+async def delete_contact(contact_id: str, tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("contacts:import"))):
     """Delete a single contact"""
     try:
         # Fetch batch id before delete for recalculation
