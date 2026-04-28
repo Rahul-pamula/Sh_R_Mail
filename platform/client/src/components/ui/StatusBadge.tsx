@@ -5,7 +5,7 @@ export type CampaignStatus =
     | 'paused' | 'failed' | 'throttled' | 'cancelled'
     | 'sending' | 'sent' | 'archived'
     | 'active' | 'inactive' | 'bounced' | 'unsubscribed'
-    | 'subscribed' | 'verified' | 'pending' | 'suspended';
+    | 'subscribed' | 'verified' | 'pending' | 'suspended' | 'awaiting_review';
 
 const statusConfig: Record<CampaignStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'default' | 'outline' }> = {
     // Contact statuses
@@ -32,6 +32,7 @@ const statusConfig: Record<CampaignStatus, { label: string; variant: 'success' |
     pending: { label: 'Pending', variant: 'warning' },
     active: { label: 'Active', variant: 'success' },
     suspended: { label: '⛔ Suspended', variant: 'danger' },
+    awaiting_review: { label: 'Awaiting Review', variant: 'warning' },
 };
 
 interface StatusBadgeProps {

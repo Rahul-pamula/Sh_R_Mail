@@ -161,17 +161,9 @@ export default function SenderIdentitiesPage() {
         }
     };
 
-    const checkStatus = async (id: string) => {
-        try {
-            await fetch(`${API_BASE}/senders/${id}/verify`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            await fetchData();
-        } catch (statusError) {
-            console.error(statusError);
-            error('Could not refresh sender status.');
-        }
+    const checkStatus = async () => {
+        setIsLoading(true);
+        await fetchData();
     };
 
     const metrics = [
@@ -204,7 +196,7 @@ export default function SenderIdentitiesPage() {
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
                 <div className="space-y-6">
-                    {can(user, 'ADD_SENDER') && (
+                    {can(user, 'sender:manage') && (
                         <SectionCard
                             title="Add New Sender"
                             description="Create sender addresses from verified domains so campaigns use deliberate, auditable FROM identities."
@@ -295,10 +287,10 @@ export default function SenderIdentitiesPage() {
                                                     </Badge>
                                                     {sender.status === 'pending' && (
                                                         <button
-                                                            onClick={() => checkStatus(sender.id)}
+                                                            onClick={() => checkStatus()}
                                                             className="text-xs font-medium text-[var(--accent)] transition hover:opacity-80"
                                                         >
-                                                            Check Status
+                                                            Refresh
                                                         </button>
                                                     )}
                                                 </div>
@@ -310,16 +302,20 @@ export default function SenderIdentitiesPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex justify-end gap-2">
-                                                    {sender.status === 'pending' && (
-                                                        <Button variant="ghost" size="sm" onClick={() => handleResend(sender.email)}>
-                                                            <RefreshCw className="h-3.5 w-3.5" />
-                                                            Resend
-                                                        </Button>
+                                                    {can(user, 'sender:manage') && (
+                                                        <>
+                                                            {sender.status === 'pending' && (
+                                                                <Button variant="ghost" size="sm" onClick={() => handleResend(sender.email)}>
+                                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                                    Resend
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setPendingDelete(sender)}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                Remove
+                                                            </Button>
+                                                        </>
                                                     )}
-                                                    <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setPendingDelete(sender)}>
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                        Remove
-                                                    </Button>
                                                 </div>
                                             </td>
                                         </tr>

@@ -17,7 +17,7 @@ const CARDS = [
     { href: '/settings/domain', icon: Globe, title: 'Sending Domain', description: 'Manage domain verification and DNS health.' },
     { href: '/settings/team', icon: Users, title: 'Team Members', description: 'Invite colleagues and govern workspace access.' },
     { href: '/settings/franchises', icon: Store, title: 'Franchise Accounts', description: 'Create and govern child workspaces without breaking tenant isolation.' },
-    { href: '/settings/requests', icon: MessageSquareDot, title: 'Workspace Requests', description: 'Managers submit billing or franchise requests; owners review and approve them.' },
+    { href: '/settings/requests', icon: MessageSquareDot, title: 'Workspace Requests', description: 'Admins submit billing or franchise requests; owners review and approve them.' },
     { href: '/settings/audit', icon: History, title: 'Audit History', description: 'Review team, franchise, and export activity across the workspace.' },
     { href: '/settings/exports', icon: Download, title: 'Export History', description: 'Track contact exports and team member downloads from one timeline.' },
     { href: '/settings/team/requests', icon: UserPlus, title: 'Access Requests', description: 'Approve or block join requests from your corporate domain.' },

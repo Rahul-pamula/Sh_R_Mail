@@ -68,7 +68,7 @@ export default function DomainSettingsPage() {
     const [selectedDomain, setSelectedDomain] = useState<any>(null);
 
     useEffect(() => {
-        if (user && !can(user, 'VIEW_DOMAIN')) {
+        if (user && !can(user, 'domains:view')) {
             router.replace('/dashboard');
         }
     }, [user, router]);
@@ -96,7 +96,7 @@ export default function DomainSettingsPage() {
         if (token) fetchDomains();
     }, [token]);
 
-    if (!user || !can(user, 'VIEW_DOMAIN')) return null;
+    if (!user || !can(user, 'domains:view')) return null;
     if (loading) return <PageLoader label="Sending Domains" />;
 
     if (user.workspaceType === 'FRANCHISE') {
@@ -227,12 +227,13 @@ function FranchiseDomainView({ domains, selectedDomain, setSelectedDomain }: any
    MAIN MANAGEMENT VIEW (Full Access Fork)
    ============================================================ */
 function MainDomainManagement({ domains, selectedDomain, setSelectedDomain, refresh }: any) {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const { success, error, info } = useToast();
     const [showAddModal, setShowAddModal] = useState(false);
     const [newDomain, setNewDomain] = useState('');
     const [adding, setAdding] = useState(false);
     const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+    const [showDnsRecords, setShowDnsRecords] = useState(false);
 
     const handleAddDomain = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -289,10 +290,12 @@ function MainDomainManagement({ domains, selectedDomain, setSelectedDomain, refr
                 title="Sending Domains"
                 subtitle="Manage sending infrastructure for your entire workspace."
                 action={
-                    <Button onClick={() => setShowAddModal(true)}>
-                        <Plus className="h-4 w-4" />
-                        Add Domain
-                    </Button>
+                    can(user, 'domains:add') ? (
+                        <Button onClick={() => setShowAddModal(true)}>
+                            <Plus className="h-4 w-4" />
+                            Add Domain
+                        </Button>
+                    ) : null
                 }
             />
 
@@ -331,7 +334,7 @@ function MainDomainManagement({ domains, selectedDomain, setSelectedDomain, refr
                             <InspectorPanel
                                 title={selectedDomain.domain_name}
                                 badge={<Badge variant={selectedStatusVariant}>{selectedDomain.status}</Badge>}
-                                action={selectedDomain.status !== 'verified' && (
+                                action={selectedDomain.status !== 'verified' && can(user, 'domains:verify') && (
                                     <Button variant="outline" onClick={() => handleVerify(selectedDomain)}>
                                         <RefreshCw className="h-4 w-4" />
                                         Verify
@@ -341,23 +344,52 @@ function MainDomainManagement({ domains, selectedDomain, setSelectedDomain, refr
                                 <KeyValueList items={[{ label: 'Status', value: selectedDomain.status }]} />
                             </InspectorPanel>
 
-                            <SectionCard title="DKIM Records">
-                                <DnsTable
-                                    rows={(selectedDomain.dkim_tokens || []).map((token: string) => ({
-                                        type: 'CNAME',
-                                        host: `${token}._domainkey`,
-                                        value: `${token}.dkim.amazonses.com`,
-                                    }))}
-                                    onCopy={copyToClipboard}
-                                />
-                            </SectionCard>
-
-                            <SectionCard tone="danger" title="Danger Zone">
+                            {/* DNS Configuration Section */}
+                            <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-sm text-[var(--text-muted)]">Remove this domain from your workspace.</p>
-                                    <Button variant="danger" onClick={() => setPendingRemoveId(selectedDomain.id)}>Remove</Button>
+                                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">DNS Configuration</h3>
+                                    {selectedDomain.status === 'verified' && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={() => setShowDnsRecords(!showDnsRecords)}
+                                        >
+                                            {showDnsRecords ? 'Hide' : 'View'} Records
+                                        </Button>
+                                    )}
                                 </div>
-                            </SectionCard>
+
+                                {(selectedDomain.status !== 'verified' || showDnsRecords) && (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-top-1">
+                                        <SectionCard title="DKIM Records">
+                                            <DnsTable
+                                                rows={(selectedDomain.dkim_tokens || []).map((token: string) => ({
+                                                    type: 'CNAME',
+                                                    host: `${token}._domainkey`,
+                                                    value: `${token}.dkim.amazonses.com`,
+                                                }))}
+                                                onCopy={copyToClipboard}
+                                            />
+                                        </SectionCard>
+
+                                        <SectionCard title="SPF Record">
+                                            <DnsTable
+                                                rows={[{ type: 'TXT', host: '@', value: 'v=spf1 include:amazonses.com ~all' }]}
+                                                onCopy={copyToClipboard}
+                                            />
+                                        </SectionCard>
+                                    </div>
+                                )}
+                            </div>
+
+                            {can(user, 'domains:delete') && (
+                                <SectionCard tone="danger" title="Danger Zone">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm text-[var(--text-muted)]">Remove this domain from your workspace.</p>
+                                        <Button variant="danger" onClick={() => setPendingRemoveId(selectedDomain.id)}>Remove</Button>
+                                    </div>
+                                </SectionCard>
+                            )}
                         </div>
                     )}
                 </div>

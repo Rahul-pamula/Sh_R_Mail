@@ -48,7 +48,7 @@ export default function WorkspaceRequestsPage() {
     const { success, error } = useToast();
 
     const isOwner = user?.role === 'OWNER';
-    const isManager = user?.role === 'MANAGER';
+    const isAdmin = user?.role === 'ADMIN';
 
     const [requests, setRequests] = useState<WorkspaceRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -171,9 +171,9 @@ export default function WorkspaceRequestsPage() {
         <div className="space-y-8 pb-8">
             <PageHeader
                 title="Workspace Requests"
-                subtitle="Managers submit billing or franchise requests here. Owners review and approve or reject each one before any action is taken."
+                subtitle="Admins submit billing or franchise requests here. Owners review and approve or reject each one before any action is taken."
                 action={
-                    isManager ? (
+                    isAdmin ? (
                         <Button onClick={() => setShowCreateModal(true)}>
                             <ClipboardList className="h-4 w-4" />
                             New Request
@@ -200,13 +200,13 @@ export default function WorkspaceRequestsPage() {
             <SectionCard
                 title={isOwner ? 'All Workspace Requests' : 'My Requests'}
                 description={isOwner
-                    ? 'Review requests from managers and take action. Approved requests must still be executed manually (billing changes via Billing page, franchises via Franchise Accounts).'
+                    ? 'Review requests from Admins and take action. Approved requests must still be executed manually (billing changes via Billing page, franchises via Franchise Accounts).'
                     : 'Track requests you have submitted to the workspace owner.'}
             >
                 <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)]">
                     <TableToolbar
                         title="Request Queue"
-                        description={isOwner ? 'Approve or reject pending requests from your managers.' : 'Submitted requests are reviewed by the owner.'}
+                        description={isOwner ? 'Approve or reject pending requests from your Admins.' : 'Submitted requests are reviewed by the owner.'}
                         trailing={<Badge variant="outline">{requests.length} total</Badge>}
                         className="rounded-none border-0 border-b border-[var(--border)]"
                     />

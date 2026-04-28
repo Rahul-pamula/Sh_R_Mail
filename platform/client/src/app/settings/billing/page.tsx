@@ -64,7 +64,7 @@ export default function BillingPage() {
     const { success, error: toastError } = useToast();
 
     useEffect(() => {
-        if (user && !can(user, 'VIEW_BILLING')) {
+        if (user && !can(user, 'billing:view')) {
             router.replace('/dashboard');
         }
     }, [user, router]);
@@ -155,7 +155,7 @@ export default function BillingPage() {
         return <div className="p-12 text-sm text-[var(--text-muted)]">Loading billing information...</div>;
     }
 
-    if (!user || !can(user, 'VIEW_BILLING')) {
+    if (!user || !can(user, 'billing:view')) {
         return null;
     }
 
@@ -192,7 +192,9 @@ export default function BillingPage() {
                     title="Downgrade scheduled"
                     description={`Your plan will change from ${plan_details.name} to ${scheduled_plan.name} on ${fmtDate(scheduled_plan_effective_at)}. Current limits remain active until then.`}
                 >
-                    <Button variant="secondary" size="sm" onClick={() => setDialog({ type: 'cancel' })}>Cancel Downgrade</Button>
+                    {can(user, 'billing:manage') && (
+                        <Button variant="secondary" size="sm" onClick={() => setDialog({ type: 'cancel' })}>Cancel Downgrade</Button>
+                    )}
                 </InlineAlert>
             )}
 
@@ -277,9 +279,13 @@ export default function BillingPage() {
                                             <Button variant="secondary" fullWidth disabled>Current Plan</Button>
                                         ) : isScheduled ? (
                                             <Button variant="secondary" fullWidth disabled>Downgrade Scheduled</Button>
-                                        ) : (
+                                        ) : can(user, 'billing:manage') ? (
                                             <Button fullWidth variant={isUpgrade ? 'primary' : 'secondary'} onClick={() => openDialog(plan)}>
                                                 {isUpgrade ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                                                {isUpgrade ? 'Upgrade' : 'Downgrade'}
+                                            </Button>
+                                        ) : (
+                                            <Button variant="secondary" fullWidth disabled>
                                                 {isUpgrade ? 'Upgrade' : 'Downgrade'}
                                             </Button>
                                         )}

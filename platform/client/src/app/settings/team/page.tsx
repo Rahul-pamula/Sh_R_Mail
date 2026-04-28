@@ -10,7 +10,7 @@ import { Badge, Button, ConfirmModal, InlineAlert, Input, KeyValueList, ModalShe
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
-type Role = 'owner' | 'manager' | 'member';
+type Role = 'OWNER' | 'ADMIN' | 'CREATOR' | 'VIEWER';
 type IsolationModel = 'team' | 'agency';
 
 interface Member {
@@ -34,8 +34,8 @@ interface Invite {
 const selectClassName = 'rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20';
 
 function RoleBadge({ role, isCurrentUser = false }: { role: Role; isCurrentUser?: boolean }) {
-    const variant = role === 'owner' ? 'warning' : role === 'manager' ? 'info' : 'outline';
-    return <Badge variant={variant}>{role}{isCurrentUser ? ' (You)' : ''}</Badge>;
+    const variant = role === 'OWNER' ? 'warning' : role === 'ADMIN' ? 'info' : role === 'CREATOR' ? 'outline' : 'ghost';
+    return <Badge variant={variant as any}>{role}{isCurrentUser ? ' (You)' : ''}</Badge>;
 }
 
 export default function TeamSettingsPage() {
@@ -49,33 +49,35 @@ export default function TeamSettingsPage() {
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteRole, setInviteRole] = useState<'manager' | 'member'>('member');
+    const [inviteRole, setInviteRole] = useState<Role>('CREATOR');
     const [inviteIsolation, setInviteIsolation] = useState<IsolationModel>('team');
     const [inviteStatus, setInviteStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
     const [pendingRemoveMember, setPendingRemoveMember] = useState<Member | null>(null);
     const [pendingCancelInvite, setPendingCancelInvite] = useState<Invite | null>(null);
     const [pendingTransferMember, setPendingTransferMember] = useState<Member | null>(null);
+    const [pendingRoleChange, setPendingRoleChange] = useState<{ userId: string; role: string; email: string } | null>(null);
     const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
     const [confirmBusy, setConfirmBusy] = useState(false);
     const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
     const [exportBusy, setExportBusy] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [exportRole, setExportRole] = useState<'all' | 'manager' | 'member'>('all');
+    const [exportRole, setExportRole] = useState<Role | 'all'>('all');
     const [exportInvitedBy, setExportInvitedBy] = useState<string>('all');
     const [validationResult, setValidationResult] = useState<any>(null);
     const [isValidating, setIsValidating] = useState(false);
+    const [inviteError, setInviteError] = useState<string | null>(null);
 
     const membersAbortRef = useRef<AbortController | null>(null);
     const invitesAbortRef = useRef<AbortController | null>(null);
 
-    const myRole = members.find((member) => member.user_id === user?.userId)?.role || 'member';
-    const isManagerOrOwner = myRole === 'manager' || myRole === 'owner';
+    const myRole = (members.find((member) => member.user_id === user?.userId)?.role?.toUpperCase() as Role) || 'VIEWER';
+    const isManagerOrOwner = myRole === 'ADMIN' || myRole === 'OWNER';
 
     const metrics = useMemo(() => {
         const baseMetrics = [
             { label: 'Active Members', value: members.length.toString() },
             { label: 'Pending Invites', value: invites.length.toString() },
-            { label: 'Owners / Managers', value: members.filter((member) => member.role !== 'member').length.toString() },
+            { label: 'Owners / Admins', value: members.filter((member) => member.role?.toUpperCase() === 'OWNER' || member.role?.toUpperCase() === 'ADMIN').length.toString() },
         ];
         if (validationResult && validationResult.limit !== -1) {
             baseMetrics.push({ 
@@ -88,7 +90,7 @@ export default function TeamSettingsPage() {
 
     useEffect(() => {
         if (!authLoading) {
-            if (user && !can(user, 'VIEW_TEAM')) {
+            if (user && !can(user, 'team:view')) {
                 router.replace('/dashboard');
             } else if (token) {
                 fetchTeam();
@@ -100,7 +102,7 @@ export default function TeamSettingsPage() {
         };
     }, [authLoading, token, user]);
 
-    if (authLoading || (user && !can(user, 'VIEW_TEAM'))) {
+    if (authLoading || (user && !can(user, 'team:view'))) {
         return null;
     }
 
@@ -144,11 +146,12 @@ export default function TeamSettingsPage() {
         if (!token) return;
         setIsValidating(true);
         try {
-            const res = await fetch(`${API_BASE}/team/invites/validate`, {
+            const res = await fetch(`${API_BASE}/team/invites/limit-check`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
-                setValidationResult(await res.json());
+                const data = await res.json();
+                setValidationResult(data);
             }
         } catch (err) {
             console.error('Validation fetch failed:', err);
@@ -158,8 +161,11 @@ export default function TeamSettingsPage() {
     };
 
     useEffect(() => {
-        if (token) fetchValidation();
+        if (token) {
+            fetchValidation();
+        }
     }, [token]);
+
 
     useEffect(() => {
         // Restore pending invite if returning from an upgrade
@@ -173,7 +179,7 @@ export default function TeamSettingsPage() {
                     localStorage.removeItem('pending_team_invite');
                 } else {
                     setInviteEmail(parsed.email || '');
-                    setInviteRole(parsed.role || 'member');
+                    setInviteRole(parsed.role || 'CREATOR');
                     setShowInviteModal(true);
                 }
             } catch (e) {
@@ -184,7 +190,7 @@ export default function TeamSettingsPage() {
     }, []);
 
     const handleUpgradeClick = () => {
-        if (inviteEmail || inviteRole !== 'member') {
+        if (inviteEmail || inviteRole !== 'CREATOR') {
             localStorage.setItem('pending_team_invite', JSON.stringify({ 
                 email: inviteEmail, 
                 role: inviteRole,
@@ -197,8 +203,9 @@ export default function TeamSettingsPage() {
 
     const resetInviteForm = () => {
         setInviteEmail('');
-        setInviteRole('member');
+        setInviteRole('CREATOR');
         setInviteStatus('idle');
+        setInviteError(null);
         localStorage.removeItem('pending_team_invite');
     };
 
@@ -207,6 +214,7 @@ export default function TeamSettingsPage() {
         if (!token || !inviteEmail.trim()) return;
 
         setInviteStatus('sending');
+        setInviteError(null);
         try {
             const res = await fetch(`${API_BASE}/team/invites`, {
                 method: 'POST',
@@ -217,7 +225,27 @@ export default function TeamSettingsPage() {
                 }),
             });
 
-            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                const reason = data?.detail || data?.message || `Server error (${res.status})`;
+                setInviteError(reason);
+                setInviteStatus('error');
+                return;
+            }
+
+            // Handle soft-failure 200s (LIMIT_EXCEEDED, ALREADY_MEMBER, RATE_LIMITED, etc.)
+            if (data.status && data.status !== 'OK') {
+                const reasonMap: Record<string, string> = {
+                    ALREADY_MEMBER: 'This person is already a member of the workspace.',
+                    INVITE_ALREADY_SENT: 'An active invitation has already been sent to this email.',
+                    LIMIT_EXCEEDED: `Seat limit reached. ${data.message || 'Upgrade your plan to invite more members.'}`,
+                    RATE_LIMITED: data.message || 'Too many invites sent. Please wait before trying again.',
+                };
+                setInviteError(reasonMap[data.status] || data.message || data.status);
+                setInviteStatus('error');
+                return;
+            }
 
             setInviteStatus('success');
             success(`Invitation sent to ${inviteEmail}.`);
@@ -229,6 +257,7 @@ export default function TeamSettingsPage() {
             }, 900);
         } catch (inviteError) {
             console.error(inviteError);
+            setInviteError('Could not reach the server. Please check your connection.');
             setInviteStatus('error');
         }
     };
@@ -366,7 +395,7 @@ export default function TeamSettingsPage() {
             const res = await fetch(`${API_BASE}/team/members/${pendingTransferMember.user_id}/transfer-ownership`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ new_owner_role_for_current_user: 'manager' }),
+                body: JSON.stringify({ new_owner_role_for_current_user: 'ADMIN' }),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -383,21 +412,33 @@ export default function TeamSettingsPage() {
         }
     };
 
-    const handleChangeMember = async (userId: string, field: 'role', value: string) => {
+    const handleChangeMember = (userId: string, field: 'role', value: string) => {
+        const member = members.find(m => m.user_id === userId);
+        if (field === 'role' && member) {
+            setPendingRoleChange({ userId, role: value, email: member.email });
+        }
+    };
+
+    const confirmRoleChange = async () => {
+        if (!pendingRoleChange) return;
+        setConfirmBusy(true);
         try {
-            const res = await fetch(`${API_BASE}/team/members/${userId}/role`, {
+            const res = await fetch(`${API_BASE}/team/members/${pendingRoleChange.userId}/role`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ [field]: value }),
+                body: JSON.stringify({ role: pendingRoleChange.role }),
             });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.detail || 'Update failed.');
             }
             success('Member permissions updated.');
+            setPendingRoleChange(null);
             fetchTeam();
         } catch (updateError: any) {
             error(updateError.message || 'Failed to update member.');
+        } finally {
+            setConfirmBusy(false);
         }
     };
 
@@ -419,7 +460,7 @@ export default function TeamSettingsPage() {
                                 <Download className="mr-2 h-4 w-4" />
                                  Export
                             </Button>
-                            {validationResult?.status === 'LIMIT_EXCEEDED' ? (
+                            {validationResult?.status === 'LIMIT_EXCEEDED' || (validationResult?.limit !== undefined && validationResult.limit !== -1 && validationResult.remaining <= 0) ? (
                                 <Button size="sm" variant="primary" onClick={handleUpgradeClick} className="bg-gradient-to-r from-[var(--accent)] to-[#6366f1] hover:opacity-90">
                                     <ArrowUp className="mr-2 h-4 w-4" />
                                     Upgrade to Add Members
@@ -445,7 +486,7 @@ export default function TeamSettingsPage() {
                 <InlineAlert
                     variant="info"
                     title="Workspace management is limited"
-                    description="Only owners and managers can invite members, remove users, or change workspace-level permissions."
+                    description="Only Owners and Admins can invite members, remove users, or change workspace-level permissions."
                 />
             )}
 
@@ -460,7 +501,7 @@ export default function TeamSettingsPage() {
                     <div className="divide-y divide-[var(--border)]">
                         {members.map((member) => {
                             const isCurrentUser = member.user_id === user?.userId;
-                            const canEditMember = myRole === 'owner' && !isCurrentUser;
+                            const canEditMember = myRole === 'OWNER' && !isCurrentUser;
                             return (
                                 <div key={member.user_id} className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="flex items-center gap-4">
@@ -477,13 +518,14 @@ export default function TeamSettingsPage() {
                                         <div className="flex flex-wrap items-center gap-2">
                                             {canEditMember ? (
                                                 <select
-                                                    value={member.role}
+                                                    value={member.role?.toUpperCase()}
                                                     onChange={(e) => handleChangeMember(member.user_id, 'role', e.target.value)}
                                                     className={selectClassName}
                                                 >
-                                                    <option value="owner">Owner</option>
-                                                    <option value="manager">Manager</option>
-                                                    <option value="member">Member</option>
+                                                    <option value="OWNER">Owner</option>
+                                                    <option value="ADMIN">Admin</option>
+                                                    <option value="CREATOR">Creator</option>
+                                                    <option value="VIEWER">Viewer</option>
                                                 </select>
                                             ) : (
                                                 <RoleBadge role={member.role} isCurrentUser={isCurrentUser} />
@@ -492,19 +534,19 @@ export default function TeamSettingsPage() {
 
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="text-xs text-[var(--text-muted)]">Joined {new Date(member.joined_at).toLocaleDateString()}</span>
-                                            {isCurrentUser && member.role !== 'owner' && (
+                                            {isCurrentUser && member.role?.toUpperCase() !== 'OWNER' && (
                                                 <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setConfirmLeaveOpen(true)}>
                                                     <Shield className="h-3.5 w-3.5" />
                                                     Leave
                                                 </Button>
                                             )}
-                                            {myRole === 'owner' && member.role !== 'owner' && !isCurrentUser && (
+                                            {myRole === 'OWNER' && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
                                                 <Button variant="ghost" size="sm" onClick={() => setPendingTransferMember(member)}>
                                                     <UserCog className="h-3.5 w-3.5" />
                                                     Make Owner
                                                 </Button>
                                             )}
-                                            {isManagerOrOwner && member.role !== 'owner' && !isCurrentUser && (
+                                            {isManagerOrOwner && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
                                                 <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setPendingRemoveMember(member)}>
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                     Remove
@@ -566,13 +608,14 @@ export default function TeamSettingsPage() {
                 <KeyValueList
                     columns={2}
                     items={[
-                        { label: 'Owner', value: 'Full access', helper: 'Can manage roles, domains, and billing.' },
-                        { label: 'Manager', value: 'Operational manager', helper: 'Can manage domains, invites, and shared workspace operations.' },
-                        { label: 'Team Member', value: 'Shared workspace contributor', helper: 'Can create campaigns and import contacts.' },
+                        { label: 'Owner', value: 'Full administrative control', helper: 'Manage roles, domains, and billing.' },
+                        { label: 'Admin', value: 'Operational control', helper: 'Manage domains, invites, and shared operations.' },
+                        { label: 'Creator', value: 'Content producer', helper: 'Create campaigns and manage contacts.' },
+                        { label: 'Viewer', value: 'Read-only access', helper: 'View campaigns and analytics.' },
                     ]}
                 />
                 <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4 text-sm text-[var(--text-muted)]">
-                    Owners and managers can manage sending domains and members.
+                    Owners and Admins can manage sending domains and team members.
                 </div>
             </SectionCard>
 
@@ -588,29 +631,40 @@ export default function TeamSettingsPage() {
                 maxWidthClass="max-w-md"
             >
                 <form onSubmit={handleSendInvite} className="space-y-6">
-                    {validationResult?.status === 'LIMIT_EXCEEDED' ? (
+                    {/* Plan gate: Free plan has team_members=false → show Upgrade wall immediately */}
+                    {validationResult?.status === 'LIMIT_EXCEEDED' || (validationResult?.limit !== undefined && validationResult.limit !== -1 && validationResult.remaining <= 0) ? (
                         <div className="space-y-6">
                             <div className="rounded-[var(--radius-lg)] border border-[var(--danger-border)] bg-[var(--danger-bg)]/20 p-6">
                                 <div className="flex items-center gap-3 text-[var(--danger)]">
                                     <AlertTriangle className="h-6 w-6" />
-                                    <h3 className="text-base font-bold">Team Limit Reached</h3>
+                                    <h3 className="text-base font-bold">
+                                        {validationResult?.limit === 1 ? 'Not Available on Your Plan' : 'Team Limit Reached'}
+                                    </h3>
                                 </div>
                                 <div className="mt-4 space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-[var(--text-muted)]">Your plan allows:</span>
-                                        <span className="font-semibold text-[var(--text-primary)]">{validationResult.limit} user{validationResult.limit !== 1 ? 's' : ''}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-[var(--text-muted)]">Current total:</span>
-                                        <span className="font-semibold text-[var(--text-primary)]">{validationResult.current} member{validationResult.current !== 1 ? 's' : ''}</span>
-                                    </div>
+                                    {validationResult?.limit === 1 ? (
+                                        <p className="text-[var(--text-muted)]">
+                                            Team members are not included in the <strong>Free</strong> plan. Upgrade to Starter or above to invite colleagues to your workspace.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-[var(--text-muted)]">Your plan allows:</span>
+                                                <span className="font-semibold text-[var(--text-primary)]">{validationResult?.limit} user{validationResult?.limit !== 1 ? 's' : ''}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[var(--text-muted)]">Current total:</span>
+                                                <span className="font-semibold text-[var(--text-primary)]">{validationResult?.current} member{validationResult?.current !== 1 ? 's' : ''}</span>
+                                            </div>
+                                        </>
+                                    )}
                                     <p className="mt-3 text-xs italic text-[var(--text-muted)] border-t border-[var(--danger-border)] pt-3">
-                                        🚫 Upgrade your plan to add managers and members.
+                                        🚫 Upgrade your plan to add Admins and Creators.
                                     </p>
                                 </div>
                             </div>
 
-                            {validationResult.recommended_plan && (
+                            {validationResult?.recommended_plan && (
                                 <div className="rounded-[var(--radius-lg)] border border-[var(--accent-border)] bg-[var(--accent)]/5 p-6">
                                     <div className="flex items-center gap-3 text-[var(--accent)]">
                                         <Zap className="h-5 w-5" />
@@ -623,6 +677,25 @@ export default function TeamSettingsPage() {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-sm font-semibold text-[var(--text-primary)]">{validationResult.recommended_plan.price}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Static starter upsell for Free plan (no recommended_plan in response) */}
+                            {validationResult?.limit === 1 && !validationResult?.recommended_plan && (
+                                <div className="rounded-[var(--radius-lg)] border border-[var(--accent-border)] bg-[var(--accent)]/5 p-6">
+                                    <div className="flex items-center gap-3 text-[var(--accent)]">
+                                        <Zap className="h-5 w-5" />
+                                        <h4 className="text-sm font-bold uppercase tracking-wider">Recommended Plan</h4>
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-lg font-bold text-[var(--text-primary)]">Starter</p>
+                                            <p className="text-xs text-[var(--text-muted)]">Allows up to 3 users</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-semibold text-[var(--text-primary)]">₹799/mo</p>
                                         </div>
                                     </div>
                                 </div>
@@ -652,7 +725,7 @@ export default function TeamSettingsPage() {
                             <div className="grid grid-cols-1 gap-6">
                                 <SectionCard title="Workspace Role" description="Controls administrative permissions inside the workspace." noPadding className="border-0 bg-transparent">
                                     <div className="grid gap-3">
-                                        {(user?.role === 'MANAGER' ? ['member'] as const : ['member', 'manager'] as const).map((role) => (
+                                        {(user?.role === 'ADMIN' ? ['CREATOR', 'VIEWER'] as const : ['ADMIN', 'CREATOR', 'VIEWER'] as const).map((role) => (
                                             <button
                                                 key={role}
                                                 type="button"
@@ -660,8 +733,12 @@ export default function TeamSettingsPage() {
                                                 disabled={validationResult?.used >= validationResult?.limit && validationResult?.limit !== -1}
                                                 className={`rounded-[var(--radius)] border p-4 text-left transition ${inviteRole === role ? 'border-[var(--accent)] bg-[var(--info-bg)]/40' : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)]'} disabled:opacity-50`}
                                             >
-                                                <p className="text-sm font-semibold text-[var(--text-primary)] capitalize">{role}</p>
-                                                <p className="mt-1 text-xs text-[var(--text-muted)]">{role === 'manager' ? 'Manage domains, invites, and member access.' : 'Build campaigns and work with audience data.'}</p>
+                                                <p className="text-sm font-semibold text-[var(--text-primary)] capitalize">{role.toLowerCase()}</p>
+                                                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                                                    {role === 'ADMIN' ? 'Full workspace management, domains, and team access.' : 
+                                                     role === 'CREATOR' ? 'Create campaigns and manage contacts.' : 
+                                                     'Read-only access to analytics and campaigns.'}
+                                                </p>
                                             </button>
                                         ))}
                                     </div>
@@ -672,7 +749,7 @@ export default function TeamSettingsPage() {
                                 <InlineAlert
                                     variant="danger"
                                     title="Failed to send invite"
-                                    description="The user may already exist in an isolated state or the invitation could not be created."
+                                    description={inviteError || 'The user may already exist in an isolated state or the invitation could not be created.'}
                                     icon={<AlertTriangle className="mt-0.5 h-4 w-4" />}
                                 />
                             )}
@@ -725,7 +802,7 @@ export default function TeamSettingsPage() {
                 onClose={() => setPendingTransferMember(null)}
                 onConfirm={handleTransferOwnership}
                 title="Transfer ownership?"
-                message={pendingTransferMember ? `${pendingTransferMember.email} will become the new owner of this workspace, and you will become a manager.` : 'Transfer ownership.'}
+                message={pendingTransferMember ? `${pendingTransferMember.email} will become the new owner of this workspace, and you will become an Admin.` : 'Transfer ownership.'}
                 confirmLabel="Transfer Ownership"
                 isLoading={confirmBusy && Boolean(pendingTransferMember)}
                 variant="warning"
@@ -764,8 +841,10 @@ export default function TeamSettingsPage() {
                                 disabled={exportBusy}
                             >
                                 <option value="all">All Roles</option>
-                                <option value="manager">Managers Only</option>
-                                <option value="member">Members Only</option>
+                                <option value="ADMIN">Admins Only</option>
+                                <option value="CREATOR">Creators Only</option>
+                                <option value="VIEWER">Viewers Only</option>
+                                <option value="CREATOR">Creators Only</option>
                             </select>
                         </div>
                         
@@ -777,16 +856,16 @@ export default function TeamSettingsPage() {
                                 value={exportInvitedBy}
                                 onChange={(e) => setExportInvitedBy(e.target.value)}
                                 className={selectClassName + ' w-full'}
-                                disabled={exportBusy || myRole === 'manager'}
+                                disabled={exportBusy || myRole === 'ADMIN'}
                             >
                                 <option value="all">All Members</option>
-                                {myRole === 'manager' ? (
+                                {myRole === 'ADMIN' ? (
                                     <option value={user?.userId || 'me'}>Invited by Me</option>
                                 ) : (
                                     <>
                                         <option value={user?.userId || 'me'}>Invited by Me</option>
                                         {members
-                                            .filter(m => m.role === 'manager' && m.user_id !== user?.userId)
+                                            .filter(m => m.role === 'ADMIN' && m.user_id !== user?.userId)
                                             .map(m => (
                                                 <option key={m.user_id} value={m.user_id}>
                                                     Invited by {m.full_name || m.email}
@@ -796,9 +875,9 @@ export default function TeamSettingsPage() {
                                     </>
                                 )}
                             </select>
-                            {myRole === 'manager' && (
+                            {myRole === 'ADMIN' && (
                                 <p className="mt-1 text-xs text-[var(--text-muted)]">
-                                    As a Manager, you can only export members you invited.
+                                    As an Admin, you can only export members you invited.
                                 </p>
                             )}
                         </div>
@@ -812,6 +891,27 @@ export default function TeamSettingsPage() {
                         </Button>
                     </div>
                 </form>
+            </ModalShell>
+            {/* Role Change Confirmation */}
+            <ModalShell
+                isOpen={!!pendingRoleChange}
+                onClose={() => setPendingRoleChange(null)}
+                title="Confirm Role Shift"
+                description={`You are about to change the role of ${pendingRoleChange?.email} to ${pendingRoleChange?.role}.`}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Shifting roles affects the level of administrative and operational control this user has within the workspace. Are you sure you want to proceed with this decision?
+                    </p>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="ghost" onClick={() => setPendingRoleChange(null)} disabled={confirmBusy}>
+                            Cancel
+                        </Button>
+                        <Button variant="primary" onClick={confirmRoleChange} isLoading={confirmBusy}>
+                            Confirm Shift
+                        </Button>
+                    </div>
+                </div>
             </ModalShell>
         </div>
     );

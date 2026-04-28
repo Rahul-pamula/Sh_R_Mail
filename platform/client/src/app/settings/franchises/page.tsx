@@ -36,16 +36,18 @@ export default function FranchiseSettingsPage() {
     const { success, error } = useToast();
 
     useEffect(() => {
-        if (user && !can(user, 'ADD_FRANCHISE')) {
+        if (user && !can(user, 'franchise:manage')) {
             router.replace('/dashboard');
         }
     }, [user, router]);
 
     const [franchises, setFranchises] = useState<Franchise[]>([]);
+    const [domains, setDomains] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [workspaceName, setWorkspaceName] = useState('');
     const [ownerEmail, setOwnerEmail] = useState('');
+    const [selectedDomainId, setSelectedDomainId] = useState('');
     const [createStatus, setCreateStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
     const [pendingSuspend, setPendingSuspend] = useState<Franchise | null>(null);
     const [pendingDelete, setPendingDelete] = useState<Franchise | null>(null);
@@ -58,7 +60,10 @@ export default function FranchiseSettingsPage() {
     ]), [franchises]);
 
     useEffect(() => {
-        if (token) fetchFranchises();
+        if (token) {
+            fetchFranchises();
+            fetchDomains();
+        }
     }, [token]);
 
     const fetchFranchises = async () => {
@@ -81,6 +86,25 @@ export default function FranchiseSettingsPage() {
         }
     };
 
+    const fetchDomains = async () => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE}/domains/`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const verified = data.filter((d: any) => d.status === 'verified');
+                setDomains(verified);
+                if (verified.length > 0) {
+                    setSelectedDomainId(verified[0].id);
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch domains', err);
+        }
+    };
+
     const resetCreateForm = () => {
         setWorkspaceName('');
         setOwnerEmail('');
@@ -89,6 +113,10 @@ export default function FranchiseSettingsPage() {
 
     const handleCreateFranchise = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!selectedDomainId) {
+            error('You must select a verified domain for the franchise.');
+            return;
+        }
         setCreateStatus('saving');
         try {
             const res = await fetch(`${API_BASE}/team/franchises`, {
@@ -97,7 +125,11 @@ export default function FranchiseSettingsPage() {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ workspace_name: workspaceName, email: ownerEmail }),
+                body: JSON.stringify({ 
+                    workspace_name: workspaceName, 
+                    email: ownerEmail,
+                    domain_id: selectedDomainId 
+                }),
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -168,7 +200,7 @@ export default function FranchiseSettingsPage() {
         return <div className="p-12 text-sm text-[var(--text-muted)]">Loading franchise accounts...</div>;
     }
 
-    if (!user || !can(user, 'ADD_FRANCHISE')) {
+    if (!user || !can(user, 'franchise:manage')) {
         return null;
     }
 
@@ -275,6 +307,29 @@ export default function FranchiseSettingsPage() {
                         placeholder="owner@franchise.com"
                         required
                     />
+
+                    <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-[var(--text-primary)]">
+                            Allocate Sending Domain
+                        </label>
+                        <select
+                            value={selectedDomainId}
+                            onChange={(e) => setSelectedDomainId(e.target.value)}
+                            className="flex w-full rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                            required
+                        >
+                            {domains.length === 0 ? (
+                                <option value="" disabled>No verified domains available</option>
+                            ) : (
+                                domains.map(d => (
+                                    <option key={d.id} value={d.id}>{d.domain_name}</option>
+                                ))
+                            )}
+                        </select>
+                        <p className="text-[10px] text-[var(--text-muted)]">
+                            Select a verified domain from your workspace to allocate to this franchise.
+                        </p>
+                    </div>
 
                     {createStatus === 'error' && (
                         <InlineAlert
