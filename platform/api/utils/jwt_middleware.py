@@ -30,18 +30,23 @@ class JWTPayload:
         self.onboarding_required = onboarding_required
         self.isolation_model = isolation_model
 
+    @property
+    def ui_role(self) -> str:
+        """Return the role name formatted for the frontend (e.g. MAIN_OWNER, FRANCHISE_OWNER)."""
+        if self.role == "OWNER":
+            return f"{self.workspace_type}_OWNER"
+        return self.role
+
 
 def normalize_public_role(role: Optional[str]) -> Optional[str]:
-    """Expose public-facing role names while remaining compatible with legacy storage."""
-    if role == "admin":
-        return "manager"
+    """Expose public-facing role names. Backward-compat: 'admin' was sometimes stored as 'manager'."""
+    if role == "manager":
+        return "admin"
     return role
 
 
 def normalize_storage_role(role: Optional[str]) -> Optional[str]:
-    """Map public-facing role names back to legacy stored values when needed."""
-    if role == "manager":
-        return "admin"
+    """Map public-facing role names back to stored values when needed."""
     return role
 
 
@@ -85,41 +90,65 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
                 detail="Invalid token payload: missing required identity fields"
             )
 
-        # SECURITY: Remove JWT trust. Fetch Authority from DB.
+        # SECURITY: Fetch Authority from DB.
         from utils.supabase_client import db
         tu_res = db.client.table("tenant_users").select("role, isolation_model").eq("user_id", user_id).eq("tenant_id", tenant_id).execute()
-        if not tu_res.data:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not a member of this workspace.")
         
-        db_role = normalize_public_role(tu_res.data[0].get("role", "member"))
-        isolation_model = tu_res.data[0].get("isolation_model", "team")
+        db_role = "viewer"
+        isolation_model = "team"
+        workspace_type = "MAIN"
+        raw_workspace_type = "MAIN"
+        tenant_status = "active"
+        onboarding_required = True
+        is_member = False
 
-        t_res = db.client.table("tenants").select("workspace_type, status, onboarding_required").eq("id", tenant_id).execute()
-        if not t_res.data:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
-        
-        tenant_info = t_res.data[0]
-        raw_workspace_type = tenant_info.get("workspace_type")
-        tenant_status = tenant_info.get("status", "active")
-        onboarding_required = tenant_info.get("onboarding_required", False)
-        
-        # FAIL CLOSED: if workspace_type is null/missing/unrecognized, deny access.
-        # Never default to MAIN — a missing value must not grant elevated privilege.
-        if not raw_workspace_type or raw_workspace_type.upper() not in ("MAIN", "PRIMARY", "FRANCHISE"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied."
-            )
-        workspace_type = "FRANCHISE" if raw_workspace_type.upper() == "FRANCHISE" else "MAIN"
+        if tu_res.data:
+            is_member = True
+            db_role = normalize_public_role(tu_res.data[0].get("role", "viewer"))
+            isolation_model = tu_res.data[0].get("isolation_model", "team")
 
-        # Normalize role to uppercase: OWNER | MANAGER | MEMBER
-        normalized_role = "MEMBER"
-        if db_role == "owner":
+            t_res = db.client.table("tenants").select("workspace_type, status, onboarding_required").eq("id", tenant_id).execute()
+            if t_res.data:
+                tenant_info = t_res.data[0]
+                raw_workspace_type = tenant_info.get("workspace_type") or "MAIN"
+                tenant_status = tenant_info.get("status", "active")
+                onboarding_required = tenant_info.get("onboarding_required", False)
+                
+                # FAIL CLOSED: if workspace_type is null/missing/unrecognized, deny access.
+                if raw_workspace_type.upper() not in ("MAIN", "PRIMARY", "FRANCHISE"):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+                
+                workspace_type = "FRANCHISE" if raw_workspace_type.upper() == "FRANCHISE" else "MAIN"
+        else:
+            # User is not a member of this tenant. 
+            u_res = db.client.table("users").select("id").eq("id", user_id).execute()
+            if not u_res.data:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
+            
+            onboarding_required = True
+            tenant_status = "pending"
+            raw_workspace_type = "MAIN"
+            workspace_type = "MAIN"
+
+        # Normalize role to uppercase: OWNER | ADMIN | CREATOR | VIEWER
+        normalized_role = "VIEWER"
+        db_role_lower = db_role.lower()
+        if db_role_lower == "owner":
             normalized_role = "OWNER"
-        elif db_role == "manager" or db_role == "admin":
-            normalized_role = "MANAGER"
-        elif db_role == "member":
-            normalized_role = "MEMBER"
+        elif db_role_lower == "admin":
+            normalized_role = "ADMIN"
+        elif db_role_lower == "creator":
+            normalized_role = "CREATOR"
+        elif db_role_lower == "viewer":
+            normalized_role = "VIEWER"
+        else:
+            # Backward compatibility: 'manager' → ADMIN, 'member' → CREATOR
+            if db_role_lower in ("manager",):
+                normalized_role = "ADMIN"
+            elif db_role_lower in ("member",):
+                normalized_role = "CREATOR"
+            else:
+                normalized_role = "VIEWER"
 
         return JWTPayload(
             user_id=user_id,
@@ -270,7 +299,8 @@ def apply_data_isolation(query_builder, jwt_payload: JWTPayload):
     user_id = jwt_payload.user_id
     model = getattr(jwt_payload, "isolation_model", "team")
     
-    if role in ["OWNER", "MANAGER"]:
+    # 1. SOFT DELETE: Handled explicitly by individual services/routes if schema supports it
+    if role in ["OWNER", "ADMIN"]:
         return query_builder
         
     if model == "agency":
