@@ -3,7 +3,7 @@ Settings Routes — Phase 8A
 Handles profile, organization, and API key management.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -14,8 +14,9 @@ from datetime import datetime
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 from utils.supabase_client import db
-from utils.jwt_middleware import require_admin_or_owner, verify_jwt_token, JWTPayload
+from utils.jwt_middleware import require_admin_or_owner, verify_jwt_token, JWTPayload, require_authenticated_user
 from utils.permissions import require_permission
+from services.audit_service import write_log
 
 
 
@@ -43,15 +44,16 @@ class ApiKeyCreate(BaseModel):
 
 
 def _public_role(role: Optional[str]) -> str:
-    if role == "admin":
-        return "manager"
-    return role or "member"
+    # Backward-compat: 'manager' was the old name for 'admin'
+    if role == "manager":
+        return "admin"
+    return role or "creator"
 
 
 # ── Profile ────────────────────────────────────────────────────────────
 
 @router.get("/profile")
-async def get_profile(claims: JWTPayload = Depends(require_permission("VIEW_SETTINGS"))):
+async def get_profile(claims: JWTPayload = Depends(require_permission("settings:view"))):
 
     """Return current user's profile info"""
     result = db.client.table("users").select(
@@ -65,7 +67,7 @@ async def get_profile(claims: JWTPayload = Depends(require_permission("VIEW_SETT
 
 
 @router.patch("/profile")
-async def update_profile(body: ProfileUpdate, claims: JWTPayload = Depends(require_permission("MANAGE_SETTINGS"))):
+async def update_profile(body: ProfileUpdate, claims: JWTPayload = Depends(require_permission("settings:update"))):
 
     """Update current user's name or timezone"""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -79,7 +81,7 @@ async def update_profile(body: ProfileUpdate, claims: JWTPayload = Depends(requi
 # ── Organization ───────────────────────────────────────────────────────
 
 @router.get("/organization")
-async def get_organization(claims: JWTPayload = Depends(require_permission("VIEW_SETTINGS"))):
+async def get_organization(claims: JWTPayload = Depends(require_permission("settings:view"))):
 
     """Return current tenant's organization info"""
     result = db.client.table("tenants").select(
@@ -94,7 +96,7 @@ async def get_organization(claims: JWTPayload = Depends(require_permission("VIEW
 
 
 @router.patch("/organization")
-async def update_organization(body: OrganizationUpdate, claims: JWTPayload = Depends(require_permission("MANAGE_SETTINGS"))):
+async def update_organization(body: OrganizationUpdate, claims: JWTPayload = Depends(require_permission("settings:manage"))):
 
     """Update current tenant's organization details"""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -102,13 +104,23 @@ async def update_organization(body: OrganizationUpdate, claims: JWTPayload = Dep
         raise HTTPException(status_code=400, detail="Nothing to update")
 
     result = db.client.table("tenants").update(updates).eq("id", claims.tenant_id).execute()
+    
+    await write_log(
+        tenant_id=claims.tenant_id,
+        user_id=claims.user_id,
+        action="workspace_updated",
+        resource_type="tenant",
+        resource_id=claims.tenant_id,
+        metadata=updates
+    )
+    
     return {"message": "Organization updated", "data": result.data[0] if result.data else {}}
 
 
 @router.patch("/organization/isolation-model")
 async def update_isolation_model(
     body: IsolationModelUpdate, 
-    from_utils_jwt = Depends(require_permission("CHANGE_ISOLATION_MODEL"))
+    from_utils_jwt = Depends(require_permission("settings:update"))
 ):
 
     """
@@ -125,6 +137,15 @@ async def update_isolation_model(
     db.client.table("tenants").update({
         "data_isolation_model": body.data_isolation_model
     }).eq("id", from_utils_jwt.tenant_id).execute()
+    
+    await write_log(
+        tenant_id=from_utils_jwt.tenant_id,
+        user_id=from_utils_jwt.user_id,
+        action="workspace_updated",
+        resource_type="tenant",
+        resource_id=from_utils_jwt.tenant_id,
+        metadata={"data_isolation_model": body.data_isolation_model}
+    )
     
     # Generate fresh JWT
     from routes.auth import create_access_token
@@ -144,10 +165,49 @@ async def update_isolation_model(
     }
 
 
+# ── Preferences ───────────────────────────────────────────────────────
+
+class PreferencesUpdate(BaseModel):
+    timezone: Optional[str] = None
+    date_format: Optional[str] = None
+    default_from_name: Optional[str] = None
+
+
+@router.get("/preferences")
+async def get_preferences(claims: JWTPayload = Depends(require_permission("settings:view"))):
+    """Return current user's and tenant's preferences"""
+    user_res = db.client.table("users").select("timezone").eq("id", claims.user_id).single().execute()
+    tenant_res = db.client.table("tenants").select("date_format, default_from_name").eq("id", claims.tenant_id).single().execute()
+
+    return {
+        "timezone": user_res.data.get("timezone") if user_res.data else "UTC",
+        "date_format": tenant_res.data.get("date_format") if tenant_res.data else "MMM DD, YYYY",
+        "default_from_name": tenant_res.data.get("default_from_name") if tenant_res.data else "",
+    }
+
+
+@router.patch("/preferences")
+async def update_preferences(body: PreferencesUpdate, claims: JWTPayload = Depends(require_permission("settings:update"))):
+    """Update user timezone and tenant-level preferences"""
+    if body.timezone:
+        db.client.table("users").update({"timezone": body.timezone}).eq("id", claims.user_id).execute()
+
+    tenant_updates = {}
+    if body.date_format is not None:
+        tenant_updates["date_format"] = body.date_format
+    if body.default_from_name is not None:
+        tenant_updates["default_from_name"] = body.default_from_name
+
+    if tenant_updates:
+        db.client.table("tenants").update(tenant_updates).eq("id", claims.tenant_id).execute()
+
+    return {"message": "Preferences updated"}
+
+
 # ── API Keys ───────────────────────────────────────────────────────────
 
 @router.get("/api-keys")
-async def list_api_keys(claims: JWTPayload = Depends(require_permission("VIEW_SETTINGS"))):
+async def list_api_keys(claims: JWTPayload = Depends(require_permission("settings:update"))):
 
     """List all active API keys for the tenant (never return the raw secret)"""
     result = db.client.table("api_keys").select(
@@ -158,7 +218,7 @@ async def list_api_keys(claims: JWTPayload = Depends(require_permission("VIEW_SE
 
 
 @router.post("/api-keys")
-async def create_api_key(body: ApiKeyCreate, claims: JWTPayload = Depends(require_permission("MANAGE_SETTINGS"))):
+async def create_api_key(body: ApiKeyCreate, claims: JWTPayload = Depends(require_permission("settings:update"))):
 
     """Generate a new API key. The raw key is shown ONCE — never stored in plain text."""
     raw_key = f"ee_{secrets.token_urlsafe(32)}"
@@ -183,7 +243,7 @@ async def create_api_key(body: ApiKeyCreate, claims: JWTPayload = Depends(requir
 
 
 @router.delete("/api-keys/{key_id}")
-async def revoke_api_key(key_id: str, claims: JWTPayload = Depends(require_permission("MANAGE_SETTINGS"))):
+async def revoke_api_key(key_id: str, claims: JWTPayload = Depends(require_permission("settings:update"))):
 
     """Revoke (soft-delete) an API key by setting revoked_at"""
     result = db.client.table("api_keys").update({
@@ -202,7 +262,7 @@ async def revoke_api_key(key_id: str, claims: JWTPayload = Depends(require_permi
 async def get_audit_history(
     limit: int = Query(50, ge=1, le=200),
     action_prefix: Optional[str] = Query(None),
-    claims: JWTPayload = Depends(require_permission("VIEW_SETTINGS")),
+    claims: JWTPayload = Depends(require_permission("settings:update")),
 ):
 
     """Return recent audit history for workspace governance actions."""
@@ -246,7 +306,7 @@ async def get_audit_history(
 @router.get("/exports/history")
 async def get_export_history(
     limit: int = Query(50, ge=1, le=200),
-    claims: JWTPayload = Depends(require_permission("VIEW_SETTINGS")),
+    claims: JWTPayload = Depends(require_permission("settings:update")),
 ):
 
     """Return recent export history across team exports and contact export jobs."""
@@ -340,7 +400,7 @@ async def get_export_history(
 # ── GDPR Compliance ────────────────────────────────────────────────────
 
 @router.post("/gdpr/erase-contact/{contact_id}")
-async def gdpr_erase_contact(contact_id: str, claims: JWTPayload = Depends(require_permission("MANAGE_SETTINGS"))):
+async def gdpr_erase_contact(contact_id: str, claims: JWTPayload = Depends(require_permission("settings:update"))):
 
     """
     GDPR Right to Erasure — anonymize a contact.
@@ -362,3 +422,85 @@ async def gdpr_erase_contact(contact_id: str, claims: JWTPayload = Depends(requi
     }).eq("id", contact_id).execute()
 
     return {"message": f"Contact {contact_id} anonymized per GDPR Right to Erasure"}
+    
+
+# ── Workspace Lifecycle ────────────────────────────────────────────────
+
+@router.delete("/workspace/{tenant_id}")
+async def leave_or_delete_workspace(
+    tenant_id: str,
+    jwt_payload: JWTPayload = Depends(require_authenticated_user)
+):
+    """
+    Remove current user from a workspace (Leave) OR delete the workspace entirely (Delete).
+    
+    RBAC Rules:
+    - OWNER: Can only delete if they are the LAST member (solo workspace). 
+             Otherwise, they MUST transfer ownership first.
+    - ADMIN/CREATOR/VIEWER: Just removes their own membership link (Leave).
+    """
+    from services.audit_service import audit_log
+    
+    # 1. Verify membership and role for the target tenant
+    membership_res = db.client.table("tenant_users").select("role")\
+        .eq("user_id", jwt_payload.user_id)\
+        .eq("tenant_id", tenant_id)\
+        .execute()
+        
+    if not membership_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You are not a member of this workspace."
+        )
+        
+    user_role = membership_res.data[0]["role"].lower()
+    
+    # 2. Logic for Non-Owners (Leave Workspace)
+    if user_role != "owner":
+        try:
+            db.client.table("tenant_users").delete()\
+                .eq("user_id", jwt_payload.user_id)\
+                .eq("tenant_id", tenant_id)\
+                .execute()
+                
+            await audit_log(
+                event="workspace:leave",
+                tenant_id=tenant_id,
+                user_id=jwt_payload.user_id,
+                details={"role": user_role}
+            )
+            
+            return {"message": "Successfully left the workspace."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to leave workspace: {str(e)}")
+            
+    # 3. Logic for Owners (Delete Workspace or Blocked Leave)
+    else:
+        # Check if there are other members
+        members_res = db.client.table("tenant_users").select("user_id", count="exact")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+            
+        member_count = members_res.count if hasattr(members_res, "count") else len(members_res.data)
+        
+        if member_count > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="As an Owner, you cannot leave a workspace with other members. Please transfer ownership or remove all other members first."
+            )
+            
+        # Solo Owner -> Full Wipe (Cascade Delete)
+        try:
+            # We delete the tenant record. Assuming foreign keys are set to CASCADE in DB.
+            db.client.table("tenants").delete().eq("id", tenant_id).execute()
+            
+            await audit_log(
+                event="workspace:delete",
+                tenant_id=tenant_id,
+                user_id=jwt_payload.user_id,
+                details={"reason": "Solo owner deletion"}
+            )
+            
+            return {"message": "Workspace successfully deleted."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete workspace: {str(e)}")
