@@ -22,7 +22,7 @@ import json
 
 router = APIRouter(prefix="/team", tags=["Team & Workspaces"])
 
-VALID_MEMBER_ROLES = {"owner", "manager", "member"}
+VALID_MEMBER_ROLES = {"owner", "admin", "creator", "viewer"}
 VALID_ISOLATION_MODELS = {"team", "agency"}
 
 def enforce_main_workspace(tenant_id: str):
@@ -32,7 +32,7 @@ def enforce_main_workspace(tenant_id: str):
 
 class InviteRequest(BaseModel):
     email: EmailStr
-    role: str = "member"
+    role: str = "creator"
     isolation_model: str = "team"
 
 class AcceptInviteRequest(BaseModel):
@@ -44,26 +44,36 @@ class UpdateRoleRequest(BaseModel):
 
 
 class TransferOwnershipRequest(BaseModel):
-    new_owner_role_for_current_user: str = "manager"
+    target_user_id: str
+    new_owner_role_for_current_user: str = "admin"
 
 
 class CreateFranchiseRequest(BaseModel):
     email: EmailStr
     workspace_name: str
+    domain_id: str # FIX: Mandatory domain allocation for child franchises
 
 
 # Helper to check if current user is owner/manager
 
 def _normalize_public_role(role: Optional[str]) -> str:
-    if role == "admin":
-        return "manager"
-    return role or "member"
+    if not role: return "viewer"
+    role_lower = role.lower()
+    if role_lower == "manager":
+        return "admin"
+    if role_lower == "member":
+        return "creator"
+    return role_lower
 
 
 def _normalize_storage_role(role: Optional[str]) -> str:
-    if role == "manager":
+    if not role: return "viewer"
+    role_lower = role.lower()
+    if role_lower == "admin":
         return "admin"
-    return role or "member"
+    if role_lower == "creator":
+        return "creator"
+    return role_lower
 
 
 def _iso_to_dt(value: str) -> datetime:
@@ -117,7 +127,7 @@ def _count_owners(tenant_id: str) -> int:
 @router.get("/members")
 async def get_team_members(
     tenant_id: str = Depends(require_active_tenant),
-    _: JWTPayload = Depends(require_permission("VIEW_TEAM")),
+    _: JWTPayload = Depends(require_permission("team:view")),
 ):
     """List all users in the current workspace."""
     # Since Supabase rest doesn't easily do clean many-to-many joins without RPC, we'll fetch both and map
@@ -151,7 +161,7 @@ async def export_team_members(
     role: Optional[str] = Query(None),
     invited_by: Optional[str] = Query(None),
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_TEAM")),
+    jwt_payload: JWTPayload = Depends(require_permission("team:view")),
 ):
     """Export current workspace members as a CSV."""
     if _normalize_public_role(jwt_payload.role) not in ["owner", "manager"]:
@@ -235,7 +245,7 @@ async def export_team_members(
 @router.get("/franchises")
 async def list_franchises(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_FRANCHISE")),
+    jwt_payload: JWTPayload = Depends(require_permission("franchise:manage")),
 ):
     """List child franchise workspaces for the current tenant."""
         
@@ -314,10 +324,26 @@ async def create_franchise(
     body: CreateFranchiseRequest,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_FRANCHISE")),
+    jwt_payload: JWTPayload = Depends(require_permission("franchise:manage")),
 ):
     """Create a child franchise workspace and invite its owner."""
-        
+    from utils.supabase_client import db
+
+    # 1. PREREQUISITE: Parent must have at least one verified domain
+    domain_res = db.client.table("domains")\
+        .select("id, domain_name, status")\
+        .eq("tenant_id", tenant_id)\
+        .eq("id", body.domain_id)\
+        .eq("status", "verified")\
+        .execute()
+    
+    if not domain_res.data:
+        raise HTTPException(
+            status_code=400, 
+            detail="You must select a verified domain from your workspace to allocate to the franchise."
+        )
+    
+    target_domain = domain_res.data[0]["domain_name"]
     workspace_name = body.workspace_name.strip()
     if len(workspace_name) < 2:
         raise HTTPException(status_code=400, detail="Workspace name is too short.")
@@ -347,6 +373,7 @@ async def create_franchise(
                 "workspace_type": "franchise",
                 "franchise_status": "pending_invite",
                 "parent_tenant_id": tenant_id,
+                "sending_domain": target_domain, # FIX: Allocate specific domain to franchise
                 "created_at": now,
                 "updated_at": now,
             }
@@ -396,7 +423,7 @@ async def suspend_franchise(
     franchise_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_FRANCHISE")),
+    jwt_payload: JWTPayload = Depends(require_permission("franchise:manage")),
 ):
     """Suspend a child franchise workspace."""
         
@@ -427,7 +454,7 @@ async def reactivate_franchise(
     franchise_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_FRANCHISE")),
+    jwt_payload: JWTPayload = Depends(require_permission("franchise:manage")),
 ):
     """Reactivate a suspended franchise workspace."""
         
@@ -458,7 +485,7 @@ async def delete_franchise(
     franchise_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("ADD_FRANCHISE")),
+    jwt_payload: JWTPayload = Depends(require_permission("franchise:manage")),
 ):
     """Delete a child franchise workspace and its pending invite, if any."""
         
@@ -491,9 +518,10 @@ async def delete_franchise(
     await write_log(
         tenant_id=tenant_id,
         user_id=jwt_payload.user_id,
-        action="franchise.deleted",
+        action="workspace_deleted",
         resource_type="tenant",
         resource_id=franchise_id,
+        metadata={"type": "franchise"},
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
@@ -529,15 +557,15 @@ async def validate_invite(token: str):
 @router.get("/invites")
 async def get_pending_invites(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:view"))
 ):
     """List pending invitations for the workspace (filtered by role)."""
-    if can(jwt_payload, "MANAGE_TEAM"):
+    if can(jwt_payload, "team:manage_roles"):
         # Owners see all invites for the tenant
-        res = db.client.table("team_invitations").select("*").eq("tenant_id", tenant_id).execute()
+        res = db.client.table("team_invitations").select("*").eq("tenant_id", tenant_id).eq("status", "pending").execute()
     else:
         # Standard members only see invites they personally sent
-        res = db.client.table("team_invitations").select("*").eq("tenant_id", tenant_id).eq("inviter_id", jwt_payload.user_id).execute()
+        res = db.client.table("team_invitations").select("*").eq("tenant_id", tenant_id).eq("inviter_id", jwt_payload.user_id).eq("status", "pending").execute()
 
     invites = res.data or []
     inviter_ids = [invite["inviter_id"] for invite in invites if invite.get("inviter_id")]
@@ -554,7 +582,7 @@ async def get_pending_invites(
     return invites
 
 
-@router.get("/invites/validate")
+@router.get("/invites/limit-check")
 async def validate_invite_limit(tenant_id: str = Depends(require_active_tenant)):
     """Check if the workspace has space for more members."""
     can_invite, stats = PlanService.check_user_limit(tenant_id, 1)
@@ -583,18 +611,25 @@ async def send_invite(
     request: Request,
     body: InviteRequest, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:invite"))
 ):
     """Invite a new member to the workspace."""
     
-    if body.role not in {"manager", "member"}:
-        raise HTTPException(status_code=400, detail="Invalid role.")
+    # 1. Validate role
+    target_role = body.role.lower()
+    if target_role not in VALID_MEMBER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {VALID_MEMBER_ROLES}")
+
+    # 2. STRICT: Only one owner allowed. Cannot invite owners.
+    if target_role == "owner":
+        raise HTTPException(status_code=400, detail="Cannot invite as owner. Use 'Transfer Ownership' instead.")
 
     if body.isolation_model not in VALID_ISOLATION_MODELS:
         raise HTTPException(status_code=400, detail="Invalid isolation model.")
 
-    if jwt_payload.ui_role == "MANAGER" and body.role != "member":
-        raise HTTPException(status_code=403, detail="Access denied.")
+    # 3. Hierarchy Check: Admin can only invite Creators/Viewers
+    if jwt_payload.role == "ADMIN" and target_role not in ["creator", "viewer"]:
+        raise HTTPException(status_code=403, detail="Admins can only invite Creators or Viewers.")
 
     redis = await redis_client.get_client()
     idempotency_key = request.headers.get("Idempotency-Key")
@@ -627,7 +662,7 @@ async def send_invite(
         return resp
 
     # Transaction-safe limit check & insert
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     
     async with get_conn(tenant_id=tenant_id) as conn:
         async with conn.transaction():
@@ -665,7 +700,7 @@ async def send_invite(
 
             # Insert invite
             token = secrets.token_urlsafe(32)
-            expires_at = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+            expires_at = datetime.now(timezone.utc) + timedelta(days=2)
             
             role = _normalize_storage_role(body.role)
             await conn.execute(
@@ -674,10 +709,10 @@ async def send_invite(
             )
             
             # Audit log
-            meta = json.dumps({"isolation_model": body.isolation_model})
+            # 6. Audit Log
             await conn.execute(
-                "INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, target_email, role, metadata, source) VALUES ($1, $2, $3, $4, $5, $6, $7, 'api')",
-                tenant_id, jwt_payload.user_id, "invite_created", "team_invitation", body.email, role, meta
+                "INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, metadata) VALUES ($1, $2, $3, $4, $5)",
+                tenant_id, jwt_payload.user_id, "invite_sent", "team_invitation", json.dumps({"target_email": body.email, "role": role})
             )
 
     # Email Sending (outside transaction to avoid blocking DB)
@@ -701,7 +736,7 @@ async def resend_invite(
     invite_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM")),
+    jwt_payload: JWTPayload = Depends(require_permission("team:invite")),
 ):
     """Resend a pending invitation with a fresh token and expiry."""
     invite_res = (
@@ -718,8 +753,8 @@ async def resend_invite(
     if _normalize_public_role(jwt_payload.role) not in ["owner", "manager"] and invite.get("inviter_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You do not have permission to resend this invitation.")
 
-    if _normalize_public_role(jwt_payload.role) == "manager" and _normalize_public_role(invite["role"]) != "member":
-        raise HTTPException(status_code=403, detail="Managers can only resend member invitations.")
+    if jwt_payload.role == "ADMIN" and _normalize_public_role(invite["role"]) not in ["creator", "viewer"]:
+        raise HTTPException(status_code=403, detail="Admins can only resend invitations for Creators or Viewers.")
 
     new_token = secrets.token_urlsafe(32)
     new_expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
@@ -754,7 +789,7 @@ async def cancel_invite(
     invite_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
     """Cancel a pending invitation."""
     # Fetch the invite to check permissions
@@ -824,20 +859,26 @@ async def accept_invite(
             try:
                 await conn.execute(
                     "INSERT INTO tenant_users (tenant_id, user_id, role, isolation_model, joined_at, invited_by) VALUES ($1, $2, $3, $4, $5, $6)",
-                    target_tenant_id, jwt_payload.user_id, invite["role"], invite.get("isolation_model", "team"), datetime.now(timezone.utc).isoformat(), invite.get("inviter_id")
+                    target_tenant_id, jwt_payload.user_id, invite["role"], invite.get("isolation_model", "team"), datetime.now(timezone.utc).replace(tzinfo=None), invite.get("inviter_id")
                 )
             except Exception as e:
+                import logging
+                logging.error(f"Failed to add user to workspace: {str(e)}")
                 if "duplicate key value" not in str(e).lower():
-                    raise HTTPException(status_code=500, detail="Failed to add user to workspace.")
+                    raise HTTPException(status_code=500, detail=f"Failed to add user to workspace: {str(e)}")
 
             # Update the invite instead of deleting
             await conn.execute("UPDATE team_invitations SET status = 'accepted' WHERE id = $1", invite["id"])
             
             # Audit log
-            meta = json.dumps({"role": invite["role"], "isolation_model": invite.get("isolation_model", "team")})
+            meta = json.dumps({
+                "target_email": invite["email"],
+                "role": invite["role"],
+                "isolation_model": invite.get("isolation_model", "team")
+            })
             await conn.execute(
-                "INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, target_email, role, metadata, source) VALUES ($1, $2, $3, $4, $5, $6, $7, 'api')",
-                target_tenant_id, jwt_payload.user_id, "invite_accepted", "team_invitation", invite["email"], invite["role"], meta
+                "INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, metadata) VALUES ($1, $2, $3, $4, $5)",
+                target_tenant_id, jwt_payload.user_id, "invite_accepted", "team_invitation", meta
             )
 
     if invite.get("invite_type") == "franchise" and invite.get("franchise_tenant_id"):
@@ -875,7 +916,7 @@ async def remove_member(
     user_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:invite"))
 ):
     """Remove a user from the workspace."""
         
@@ -887,8 +928,8 @@ async def remove_member(
     if not target:
         raise HTTPException(status_code=404, detail="Member not found.")
 
-    if _normalize_public_role(jwt_payload.role) == "manager" and _normalize_public_role(target["role"]) != "member":
-        raise HTTPException(status_code=403, detail="Managers can only remove members.")
+    if jwt_payload.role == "ADMIN" and _normalize_public_role(target["role"]) not in ["creator", "viewer"]:
+        raise HTTPException(status_code=403, detail="Admins can only remove Creators or Viewers.")
 
     if target["role"] == "owner" and _count_owners(tenant_id) <= 1:
         raise HTTPException(status_code=400, detail="You cannot remove the last owner of this workspace.")
@@ -898,7 +939,7 @@ async def remove_member(
     await write_log(
         tenant_id=tenant_id,
         user_id=jwt_payload.user_id,
-        action="team.member_removed",
+        action="member_removed",
         resource_type="tenant_user",
         resource_id=user_id,
         metadata={"removed_role": _normalize_public_role(target["role"])},
@@ -929,7 +970,7 @@ async def leave_workspace(
     await write_log(
         tenant_id=tenant_id,
         user_id=jwt_payload.user_id,
-        action="team.member_left",
+        action="member_left",
         resource_type="tenant_user",
         resource_id=user_id,
         ip_address=request.client.host if request.client else None,
@@ -945,14 +986,12 @@ async def update_member_role(
     request: Request,
     body: UpdateRoleRequest,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
     """Change a user's role and access mode in the workspace."""
-    # Only owners can change roles 
-    if jwt_payload.role != "owner":
-        raise HTTPException(status_code=403, detail="Only owners can change roles.")
-
-    if body.role and body.role not in {"manager", "member"}:
+    # Only owners can change roles (enforced by require_permission("team:manage_roles"))
+    
+    if body.role and body.role.lower() not in {"admin", "creator", "viewer"}:
         raise HTTPException(status_code=400, detail="Invalid role. Use ownership transfer to assign a new owner.")
         
     if body.isolation_model and body.isolation_model not in VALID_ISOLATION_MODELS:
@@ -984,7 +1023,7 @@ async def update_member_role(
     await write_log(
         tenant_id=tenant_id,
         user_id=jwt_payload.user_id,
-        action="team.member_updated",
+        action="role_changed" if "role" in updates else "member_updated",
         resource_type="tenant_user",
         resource_id=user_id,
         metadata={
@@ -998,58 +1037,6 @@ async def update_member_role(
     return {"message": "Member details updated."}
 
 
-@router.post("/members/{user_id}/transfer-ownership")
-async def transfer_ownership(
-    user_id: str,
-    body: TransferOwnershipRequest,
-    request: Request,
-    tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM")),
-):
-    """Transfer ownership from the current owner to another workspace member."""
-    if jwt_payload.ui_role not in ["MAIN_OWNER", "FRANCHISE_OWNER"]:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    if user_id == jwt_payload.user_id:
-        raise HTTPException(status_code=400, detail="You already own this workspace.")
-
-    if body.new_owner_role_for_current_user not in {"manager", "member"}:
-        raise HTTPException(status_code=400, detail="Current owner can only be downgraded to manager or member.")
-
-    target = _get_membership(tenant_id, user_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Target member not found.")
-
-    (
-        db.client.table("tenant_users")
-        .update({"role": "owner"})
-        .eq("tenant_id", tenant_id)
-        .eq("user_id", user_id)
-        .execute()
-    )
-    (
-        db.client.table("tenant_users")
-        .update({"role": _normalize_storage_role(body.new_owner_role_for_current_user)})
-        .eq("tenant_id", tenant_id)
-        .eq("user_id", jwt_payload.user_id)
-        .execute()
-    )
-
-    await write_log(
-        tenant_id=tenant_id,
-        user_id=jwt_payload.user_id,
-        action="team.ownership_transferred",
-        resource_type="tenant",
-        resource_id=tenant_id,
-        metadata={
-            "new_owner_user_id": user_id,
-            "previous_owner_new_role": body.new_owner_role_for_current_user,
-        },
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-
-    return {"message": "Ownership transferred successfully."}
 
 
 # === Enterprise JIT Auto-Discovery Routes ===
@@ -1057,7 +1044,7 @@ async def transfer_ownership(
 @router.get("/requests")
 async def get_join_requests(
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
     """List pending Enterprise JIT access requests."""
         
@@ -1090,7 +1077,7 @@ async def get_join_requests(
 async def approve_join_request(
     request_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
 
 
@@ -1130,7 +1117,7 @@ async def approve_join_request(
 async def deny_join_request(
     request_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
 
     """Deny a join request."""
@@ -1152,7 +1139,7 @@ async def deny_join_request(
 async def blacklist_join_request(
     request_id: str,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM"))
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles"))
 ):
 
     """Permanently block a user from joining."""
@@ -1185,7 +1172,7 @@ async def create_workspace_request(
     body: CreateWorkspaceRequestBody,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_SETTINGS")),
+    jwt_payload: JWTPayload = Depends(require_permission("settings:update")),
 ):
     """Manager submits a request for owner review (billing change, franchise creation, etc.)"""
     if jwt_payload.ui_role not in ["MANAGER", "MAIN_OWNER", "FRANCHISE_OWNER"]:
@@ -1228,7 +1215,7 @@ async def create_workspace_request(
 async def list_workspace_requests(
     status_filter: Optional[str] = Query(None, alias="status"),
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("VIEW_SETTINGS")),
+    jwt_payload: JWTPayload = Depends(require_permission("settings:update")),
 ):
     """List workspace requests. Owners see all; managers see their own only."""
     role = _normalize_public_role(jwt_payload.role)
@@ -1270,7 +1257,7 @@ async def approve_workspace_request(
     request_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM")),
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles")),
 ):
     """Owner approves a pending workspace request."""
     if jwt_payload.ui_role not in ["MAIN_OWNER", "FRANCHISE_OWNER"]:
@@ -1311,7 +1298,7 @@ async def reject_workspace_request(
     request_id: str,
     request: Request,
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("MANAGE_TEAM")),
+    jwt_payload: JWTPayload = Depends(require_permission("team:manage_roles")),
 ):
     """Owner rejects a pending workspace request."""
     if jwt_payload.ui_role not in ["MAIN_OWNER", "FRANCHISE_OWNER"]:
@@ -1345,3 +1332,46 @@ async def reject_workspace_request(
     )
 
     return {"message": "Request rejected."}
+@router.post("/transfer-ownership")
+async def transfer_ownership(
+    body: TransferOwnershipRequest,
+    request: Request,
+    tenant_id: str = Depends(require_active_tenant),
+    jwt_payload: JWTPayload = Depends(require_permission("workspace:transfer"))
+):
+    """
+    Transfer workspace ownership to another member.
+    """
+    target_user_id = body.target_user_id
+    new_role = _normalize_storage_role(body.new_owner_role_for_current_user)
+    
+    if target_user_id == jwt_payload.user_id:
+        raise HTTPException(status_code=400, detail="You are already the owner.")
+
+    if new_role not in ["admin", "creator", "viewer"]:
+         raise HTTPException(status_code=400, detail="Invalid role for current owner.")
+
+    async with get_conn(tenant_id=tenant_id) as conn:
+        async with conn.transaction():
+            # 1. Verify target is a member
+            target = await conn.fetchrow("SELECT id, role FROM tenant_users WHERE tenant_id = $1 AND user_id = $2", tenant_id, target_user_id)
+            if not target:
+                raise HTTPException(status_code=404, detail="Target user is not a member of this workspace.")
+            
+            # 2. Update new owner
+            await conn.execute("UPDATE tenant_users SET role = 'owner' WHERE id = $1", target["id"])
+            
+            # 3. Demote current owner
+            await conn.execute("UPDATE tenant_users SET role = $1 WHERE user_id = $2 AND tenant_id = $3", new_role, jwt_payload.user_id, tenant_id)
+            
+            # 4. Update workspace metadata
+            await conn.execute("UPDATE tenants SET owner_id = $1 WHERE id = $2", target_user_id, tenant_id)
+
+            # 5. Audit logs
+            meta = json.dumps({"from": jwt_payload.user_id, "to": target_user_id, "demoted_to": new_role})
+            await conn.execute(
+                "INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, metadata) VALUES ($1, $2, $3, $4, $5)",
+                tenant_id, jwt_payload.user_id, "workspace.ownership_transferred", "tenant", meta
+            )
+
+    return {"message": "Ownership successfully transferred."}
