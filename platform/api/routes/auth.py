@@ -249,7 +249,7 @@ def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str,
         user_id=user_id,
         tenant_id=tenant_id,
         token=token,
-        role=normalize_public_role(role) or "member",
+        role=normalize_public_role(role) or "viewer",
         onboarding_required=onboarding_required,
         tenant_status=tenant_status,
         email_verified=email_verified,
@@ -516,7 +516,10 @@ async def login(request: Request, body_request: LoginRequest, response: Response
         "tenant_id": tenant_id,
         "email": user["email"],
         "role": role,
-        "isolation_model": isolation_model
+        "isolation_model": isolation_model,
+        "tenant_status": tenant_status,
+        "workspace_type": tenant.get("workspace_type", "MAIN"),
+        "onboarding_required": tenant.get("onboarding_required", False)
     }
     access_token = create_access_token(token_data)
 
@@ -579,7 +582,7 @@ async def get_current_user(jwt_payload: JWTPayload = Depends(require_authenticat
         # DB-verified authority — never from JWT payload
         "role": jwt_payload.role,
         "workspace_type": jwt_payload.workspace_type,   # "MAIN" or "FRANCHISE"
-        "ui_role": jwt_payload.ui_role,                  # "MAIN_OWNER" | "FRANCHISE_OWNER" | "MANAGER" | "MEMBER"
+        "ui_role": jwt_payload.ui_role,                  # "MAIN_OWNER" | "FRANCHISE_OWNER" | "ADMIN" | "CREATOR" | "VIEWER"
         "tenant_status": jwt_payload.tenant_status,
         "onboarding_required": jwt_payload.onboarding_required
     }
@@ -675,6 +678,7 @@ async def create_new_workspace(
     db.client.table("tenants").insert({
         "id": new_tenant_id,
         "company_name": body.company_name,
+        "email": jwt_payload.email, # FIX: Ensure email is provided for NOT NULL constraint
         "status": "onboarding", # Standardized status for new tenants
         "workspace_type": "primary",
         "onboarding_required": True,
@@ -1085,12 +1089,23 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         if not user.get("is_active", True):
             return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=AccountDisabled")
             
-        # Get their primary tenant
+        # Production Hardening: Priority Workspace Selection
+        # We fetch all memberships and prioritize 'active' workspaces over 'onboarding' ones.
+        # This prevents users from being trapped in a junk/ghost workspace if they are members of a real one.
         tenant_user_result = db.client.table("tenant_users").select(
-            "tenant_id, role, isolation_model"
-        ).eq("user_id", user["id"]).order("joined_at").limit(1).execute()
+            "tenant_id, role, isolation_model, joined_at, tenants!inner(status, workspace_type, onboarding_required)"
+        ).eq("user_id", user["id"]).execute()
         
-        if not tenant_user_result.data:
+        memberships = tenant_user_result.data or []
+        print(f"DEBUG: Found {len(memberships)} memberships for user {email}")
+        for m in memberships:
+            # Safely get status, handling both object and list (Supabase can be tricky with joins)
+            t_data = m.get("tenants")
+            if isinstance(t_data, list): t_data = t_data[0] if t_data else {}
+            status = t_data.get("status")
+            print(f"DEBUG: Membership: tenant_id={m['tenant_id']}, role={m['role']}, status={status}, joined_at={m.get('joined_at')}")
+
+        if not memberships:
             # Check waiting room
             join_req_result = db.client.table("join_requests").select("tenant_id, status").eq("user_id", user["id"]).execute()
             if not join_req_result.data:
@@ -1106,16 +1121,30 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
             if join_req["status"] == "blocked":
                 return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=AccountBlocked")
         else:
-            tenant_user = tenant_user_result.data[0]
+            # SORTING LOGIC: Prioritize 'active' over 'onboarding'.
+            # Within status, prioritize the most recently joined.
+            def sort_key(m):
+                t_data = m.get("tenants")
+                if isinstance(t_data, list): t_data = t_data[0] if t_data else {}
+                status_val = 1 if t_data.get("status") == "active" else 0
+                joined_val = m.get("joined_at") or ""
+                return (status_val, joined_val)
+
+            memberships.sort(key=sort_key, reverse=True)
+            
+            tenant_user = memberships[0]
             tenant_id = tenant_user["tenant_id"]
             role = tenant_user["role"]
             isolation_model = tenant_user.get("isolation_model", "team")
             
-            tenant_result = db.client.table("tenants").select("status, workspace_type, onboarding_required").eq("id", tenant_id).execute()
-            tenant_data = tenant_result.data[0] if tenant_result.data else {}
+            tenant_data = tenant_user["tenants"]
+            if isinstance(tenant_data, list): tenant_data = tenant_data[0] if tenant_data else {}
+            
             tenant_status = tenant_data.get("status", "active")
             mapped_type = tenant_data.get("workspace_type", "MAIN")
             onboarding_required = tenant_data.get("onboarding_required", False)
+            
+            print(f"DEBUG: Selected tenant_id={tenant_id}, status={tenant_status}")
         
         user_id = user["id"]
     else:
@@ -1137,10 +1166,36 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
             "created_at": datetime.utcnow().isoformat()
         }).execute()
         
-        # Check for Enterprise JIT Auto-Discovery
+        # Check for Enterprise JIT Auto-Discovery OR Team Invitations
         jit_tenant_id = get_verified_domain_tenant(email)
         
-        if jit_tenant_id:
+        # Check for pending team invitations (PRIORITY over auto-creating a new workspace)
+        invite_res = db.client.table("team_invitations").select("tenant_id, role, isolation_model").eq("email", email).eq("status", "pending").execute()
+        pending_invite = invite_res.data[0] if invite_res.data else None
+        
+        if pending_invite:
+            # User was invited! Link them to that workspace instead of creating a ghost one.
+            tenant_id = pending_invite["tenant_id"]
+            role = pending_invite["role"]
+            isolation_model = pending_invite.get("isolation_model", "team")
+            
+            # Automatically accept/join
+            db.client.table("tenant_users").insert({
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "role": role,
+                "isolation_model": isolation_model,
+                "joined_at": datetime.utcnow().isoformat()
+            }).execute()
+            
+            # Update invite status
+            db.client.table("team_invitations").update({"status": "accepted"}).eq("email", email).eq("tenant_id", tenant_id).execute()
+            
+            tenant_status = "active"
+            mapped_type = "MAIN" # Default to MAIN for invites
+            onboarding_required = False
+            
+        elif jit_tenant_id:
             tenant_id = jit_tenant_id
             
             db.client.table("join_requests").insert({
@@ -1203,7 +1258,10 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         "tenant_id": tenant_id,
         "email": email,
         "role": role,
-        "isolation_model": isolation_model
+        "isolation_model": isolation_model,
+        "tenant_status": tenant_status,
+        "workspace_type": mapped_type,
+        "onboarding_required": onboarding_required
     }
     
     access_token = create_access_token(token_data)
