@@ -1548,8 +1548,14 @@ graph TD
 
 ```mermaid
 graph TD
+    classDef owner fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef admin fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef creator fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef viewer fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef system fill:#94a3b8,stroke:#64748b,stroke-width:1px,color:#fff,rx:5px,ry:5px;
+    classDef workspace fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 5 5;
 
-%% ROOT
+    %% ROOT
 A[ShrMail Platform]
 
 %% WORKSPACE
@@ -1646,6 +1652,13 @@ G --> G3[Admin Cannot Change Billing]
 G --> G4[Admin Cannot Create Franchise Directly]
 G --> G5[Creators Have Limited Access]
 G --> G6[Franchise is Separate Workspace]
+
+    class C1,F1 owner;
+    class C2,F2 admin;
+    class C3,F3 creator;
+    class C4 viewer;
+    class D1,D2,D3,D4,D5,D6,D7,D8,D9,R1,R2,R3,S1,S2 system;
+    class B,F workspace;
 ```
 
 ### Phase 8 Scope Summary
@@ -1758,6 +1771,8 @@ flowchart TD
     F --> O[Revoke membership access]
     O --> P[Invalidate sessions]
     P --> K
+    class A,B,C,D,E,F owner;
+    class G,H,I,J,K,L,M,N,O,P system;
 ```
 
 **📋 Planned Tasks — Phase 8.2**
@@ -1806,6 +1821,10 @@ flowchart TD
 
 ```mermaid
 flowchart LR
+    classDef owner fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef system fill:#94a3b8,stroke:#64748b,stroke-width:1px,color:#fff,rx:5px,ry:5px;
+
+    flowchart LR
     A[Parent Owner starts Add Franchise Owner] --> B[Enter franchise owner email]
     B --> C[Create pending child workspace]
     C --> D[Send franchise invitation email]
@@ -1867,6 +1886,8 @@ flowchart TD
     I --> J[Mark export completed]
     J --> K[Email signed link to requester]
     K --> L[Download from Export History or email]
+    class A admin;
+    class B,C,D,E,F,G,H,I,J,K,L system;
 ```
 
 **📋 Planned Tasks — Phase 8.4**
@@ -1924,6 +1945,8 @@ flowchart TD
     G --> J[Audit + rate-limit + export log]
     I --> H
     J --> H
+    class A admin;
+    class B,C,D,E,F,G,H,I,J system;
 ```
 
 **📋 Planned Tasks — Phase 8.5**
