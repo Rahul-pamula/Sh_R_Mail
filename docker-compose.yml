@@ -222,22 +222,6 @@ services:
     networks:
       - email_engine_net
 
-  # ── Cloudflare Tunnel ──────────────────────────────────
-  # Exposes the local services to the internet via a secure tunnel.
-  # Requires CLOUDFLARE_TUNNEL_TOKEN in .env.
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: email_engine_tunnel
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - api
-      - client
-    networks:
-      - email_engine_net
-
 # ── Shared Network ─────────────────────────────────────────
 networks:
   email_engine_net:
