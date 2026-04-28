@@ -1,34 +1,39 @@
 import { useAuth } from '@/context/AuthContext';
 
-export type UserRole = 'OWNER' | 'MANAGER' | 'MEMBER';
+export type UserRole = 'OWNER' | 'ADMIN' | 'CREATOR' | 'VIEWER';
 export type WorkspaceType = 'MAIN' | 'FRANCHISE';
 
 export type Action = 
-    | 'ADD_DOMAIN'
-    | 'VIEW_DOMAIN'
-    | 'DELETE_DOMAIN'
-    | 'ADD_FRANCHISE'
-    | 'VIEW_FRANCHISE'
-    | 'MANAGE_FRANCHISE'
-    | 'VIEW_BILLING'
-    | 'MANAGE_BILLING'
-    | 'ADD_MANAGER'
-    | 'ADD_MEMBER'
-    | 'ADD_SENDER'
-    | 'VIEW_SENDER'
-    | 'VIEW_SETTINGS'
-    | 'MANAGE_SETTINGS'
-    | 'VIEW_TEAM'
-    | 'MANAGE_TEAM'
-    | 'VIEW_CONTACT'
-    | 'MANAGE_CONTACT'
-    | 'VIEW_ASSETS'
-    | 'ADD_ASSETS'
-    | 'VIEW_TEMPLATE'
-    | 'MANAGE_TEMPLATE'
-    | 'VIEW_CAMPAIGN'
-    | 'CREATE_CAMPAIGN'
-    | 'VIEW_ANALYTICS';
+    | 'workspace:rename'
+    | 'workspace:delete'
+    | 'workspace:transfer'
+    | 'workspace:view'
+    | 'team:invite'
+    | 'team:manage_roles'
+    | 'team:view'
+    | 'billing:manage'
+    | 'billing:view'
+    | 'domains:add'
+    | 'domains:verify'
+    | 'domains:delete'
+    | 'domains:view'
+    | 'campaign:create'
+    | 'campaign:edit'
+    | 'campaign:send'
+    | 'campaign:manage'
+    | 'campaign:view'
+    | 'contacts:import'
+    | 'contacts:export'
+    | 'contacts:view'
+    | 'analytics:view'
+    | 'settings:view'
+    | 'settings:update'
+    | 'api_keys:manage'
+    | 'franchise:manage'
+    | 'template:view'
+    | 'template:manage'
+    | 'sender:manage'
+    | 'settings:manage';
 
 
 interface UserContext {
@@ -36,45 +41,61 @@ interface UserContext {
     workspaceType: WorkspaceType;
 }
 
+/**
+ * Production-grade RBAC permission check for UI elements.
+ */
 export function can(user: UserContext | null | undefined, action: Action): boolean {
     if (!user || !user.role || !user.workspaceType) {
-        // Fail-safe: if missing context, deny all
         return false;
     }
 
-    // STRICT WORKSPACE OVERRIDE:
-    // Franchise workspaces cannot manage infrastructure or spawn sub-franchises.
-    if (user.workspaceType === 'FRANCHISE') {
-        if (action === 'ADD_DOMAIN' || action === 'DELETE_DOMAIN' || action === 'ADD_FRANCHISE') {
+    const { role, workspaceType } = user;
+
+    // 1. WORKSPACE ISOLATION: Franchise workspaces cannot delete infrastructure
+    if (workspaceType === 'FRANCHISE') {
+        if (['workspace:delete', 'workspace:transfer', 'domains:delete'].includes(action)) {
             return false;
         }
     }
 
-    const { role } = user;
-
+    // 2. ROLE-BASED ACCESS
     switch (role) {
         case 'OWNER':
             return true;
 
-        case 'MANAGER':
-            if (action === 'ADD_DOMAIN' || action === 'DELETE_DOMAIN' || action === 'ADD_FRANCHISE' || action === 'MANAGE_FRANCHISE' || action === 'VIEW_FRANCHISE' || action === 'VIEW_BILLING' || action === 'MANAGE_BILLING' || action === 'ADD_MANAGER') return false;
-            return true;
+        case 'ADMIN':
+            // Admins can do everything EXCEPT critical owner actions
+            const ownerOnlyActions = [
+                'workspace:rename', 'workspace:delete', 'workspace:transfer',
+                'team:manage_roles', 'billing:manage', 'domains:delete', 
+                'domains:add', 'domains:verify', 'api_keys:manage',
+                'franchise:manage'
+            ];
+            return !ownerOnlyActions.includes(action);
 
-        case 'MEMBER':
-            // Members can ONLY view Operational data
-            switch (action) {
-                case 'VIEW_CAMPAIGN':
-                case 'VIEW_ANALYTICS':
-                case 'VIEW_CONTACT':
-                case 'VIEW_TEMPLATE':
-                case 'VIEW_ASSETS':
-                    return true;
-                default:
-                    return false;
-            }
+        case 'CREATOR':
+            // Creators focus on content production
+            const creatorActions = [
+                'campaign:create', 'campaign:edit', 'campaign:view',
+                'contacts:import', 'contacts:view', 'analytics:view',
+                'team:view', 'domains:view', 'billing:view',
+                'template:view', 'template:manage',
+                'workspace:view', 'settings:view', 'settings:update'
+            ];
+            // Explicitly deny manage permissions even if not in ownerOnlyActions
+            if (['billing:manage', 'settings:manage'].includes(action)) return false;
+            return creatorActions.includes(action as any);
+
+        case 'VIEWER':
+            // Viewers are read-only
+            const viewerActions = [
+                'campaign:view', 'analytics:view', 'contacts:view',
+                'team:view', 'domains:view', 'billing:view',
+                'template:view', 'workspace:view', 'settings:view'
+            ];
+            return viewerActions.includes(action as any);
 
         default:
             return false;
     }
-
 }
