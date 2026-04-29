@@ -36,7 +36,6 @@ export default function AccountPage() {
     const [decliningInviteId, setDecliningInviteId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const createInputRef = useRef<HTMLInputElement | null>(null);
-    const createSectionRef = useRef<HTMLDivElement | null>(null);
     const shouldOpenCreateFlow = searchParams.get('create') === 'true';
 
     const onboardingCount = workspaces.filter((workspace) => workspace.status === 'onboarding').length;
@@ -51,7 +50,6 @@ export default function AccountPage() {
         if (!shouldOpenCreateFlow) return;
 
         setIsCreateModalOpen(true);
-        createSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         const timeout = window.setTimeout(() => {
             createInputRef.current?.focus();
         }, 150);
@@ -259,33 +257,7 @@ export default function AccountPage() {
                 />
             )}
 
-            <div ref={createSectionRef}>
-                <SectionCard
-                    title="Create Workspace"
-                    description="Spin up a fresh workspace without disturbing your existing tenant structure. Every new workspace starts with its own onboarding path."
-                    className={shouldOpenCreateFlow ? 'border-[var(--accent)]/40 shadow-sm shadow-[var(--accent)]/10' : ''}
-                    action={
-                        <Button onClick={() => setIsCreateModalOpen(true)}>
-                            <Plus className="h-4 w-4" />
-                            Create Workspace
-                        </Button>
-                    }
-                >
-                    <div className="grid gap-4 md:grid-cols-[minmax(0,420px)_1fr] md:items-end">
-                        <Input
-                            ref={createInputRef}
-                            id="account-create-workspace"
-                            label="Workspace name"
-                            value={createName}
-                            onChange={(event) => setCreateName(event.target.value)}
-                            placeholder="Acme Growth"
-                        />
-                        <p className="text-sm leading-6 text-[var(--text-muted)]">
-                            Workspace creation is account-layer only. The new tenant gets its own onboarding path and its own isolated business state.
-                        </p>
-                    </div>
-                </SectionCard>
-            </div>
+
 
             <ModalShell
                 isOpen={isCreateModalOpen}
