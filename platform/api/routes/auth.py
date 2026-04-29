@@ -39,6 +39,7 @@ from utils.jwt_middleware import require_authenticated_user, JWTPayload, normali
 from repositories.user_repository import UserRepository
 from repositories.auth_repository import AuthRepository
 from repositories.audit_repository import AuditRepository
+from services.account_service import AccountService
 
 
 # JWT Configuration
@@ -145,6 +146,8 @@ class AuthResponse(BaseModel):
     full_name: Optional[str] = None
     workspace_type: str = "MAIN"
     workspace_name: Optional[str] = None
+    user_status: str = "active"
+    deletion_scheduled_at: Optional[str] = None
 
 
 class SwitchWorkspaceRequest(BaseModel):
@@ -231,7 +234,7 @@ def _set_refresh_cookie(response, refresh_token: str):
     )
 
 
-def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str, onboarding_required: bool, tenant_status: str, email_verified: bool = False, full_name: Optional[str] = None) -> AuthResponse:
+def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str, onboarding_required: bool, tenant_status: str, email_verified: bool = False, full_name: Optional[str] = None, user_status: str = "active", deletion_scheduled_at: Optional[str] = None) -> AuthResponse:
     """Return a stable auth contract with public role names."""
     from utils.supabase_client import db
     tenant_res = db.client.table("tenants").select("workspace_type, company_name").eq("id", tenant_id).execute()
@@ -255,7 +258,9 @@ def _build_auth_response(*, user_id: str, tenant_id: str, token: str, role: str,
         email_verified=email_verified,
         full_name=full_name,
         workspace_type=mapped_type,
-        workspace_name=workspace_name
+        workspace_name=workspace_name,
+        user_status=user_status,
+        deletion_scheduled_at=deletion_scheduled_at,
     )
 
 
@@ -340,6 +345,7 @@ async def signup(request: Request, body_request: SignupRequest, response: Respon
                 "id": tenant_id,
                 "email": body_request.email,
                 "status": "onboarding",
+                "onboarding_required": True,
                 "created_at": datetime.utcnow().isoformat()
             })
 
@@ -356,6 +362,9 @@ async def signup(request: Request, body_request: SignupRequest, response: Respon
 
             tenant_status = "onboarding"
             role = "owner"
+
+            AccountService.set_last_active_tenant_id(user_id, tenant_id)
+            AccountService.log_workspace_creation(user_id, tenant_id, request.client.host if request.client else None)
         
         # 5. Generate JWT token
         token_data = {
@@ -460,8 +469,15 @@ async def login(request: Request, body_request: LoginRequest, response: Response
             detail="Account is disabled"
         )
 
+    if (user.get("user_status") or "active") == "anonymized":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is no longer available."
+        )
+
     # Get user's primary tenant via repository
-    tenant_user = auth_repo.get_tenant_user_link(user["id"])
+    preferred_workspace = AccountService.resolve_preferred_workspace(user["id"])
+    tenant_user = auth_repo.get_tenant_user_by_tenant(user["id"], preferred_workspace["tenant_id"]) if preferred_workspace else None
 
     if not tenant_user:
         # Check join requests via repository
@@ -491,7 +507,7 @@ async def login(request: Request, body_request: LoginRequest, response: Response
 
             tenant_status = "pending_join"
     else:
-        tenant_id = tenant_user["tenant_id"]
+        tenant_id = preferred_workspace["tenant_id"]
         role = tenant_user["role"]
     
     # Get tenant status via repository
@@ -519,12 +535,14 @@ async def login(request: Request, body_request: LoginRequest, response: Response
         "isolation_model": isolation_model,
         "tenant_status": tenant_status,
         "workspace_type": tenant.get("workspace_type", "MAIN"),
-        "onboarding_required": tenant.get("onboarding_required", False)
+        "onboarding_required": tenant_status == "onboarding" or tenant.get("onboarding_required", False)
     }
     access_token = create_access_token(token_data)
 
     # Update last login via repository
     user_repo.update_last_login(user["id"], datetime.now(timezone.utc).isoformat())
+    if tenant_user:
+        AccountService.set_last_active_tenant_id(user["id"], tenant_id)
 
     # Create refresh token & set cookie
     refresh_token = _create_refresh_token(user["id"], tenant_id)
@@ -549,6 +567,8 @@ async def login(request: Request, body_request: LoginRequest, response: Response
         tenant_status=tenant_status,
         email_verified=user.get("email_verified", False),
         full_name=user.get("full_name"),
+        user_status=user.get("user_status", "active"),
+        deletion_scheduled_at=user.get("deletion_scheduled_at"),
     )
 
 
@@ -564,7 +584,7 @@ async def get_current_user(jwt_payload: JWTPayload = Depends(require_authenticat
     from utils.supabase_client import db
 
     user_result = db.client.table("users").select(
-        "id, email, full_name, email_verified, is_active, created_at, last_login_at, theme_preference"
+        "id, email, full_name, email_verified, is_active, created_at, last_login_at, theme_preference, user_status, deletion_scheduled_at"
     ).eq("id", jwt_payload.user_id).execute()
 
     if not user_result.data:
@@ -572,13 +592,31 @@ async def get_current_user(jwt_payload: JWTPayload = Depends(require_authenticat
 
     user = user_result.data[0]
 
+    tenant_res = (
+        db.client.table("tenants")
+        .select("company_name, workspace_name, organization_name")
+        .eq("id", jwt_payload.tenant_id)
+        .limit(1)
+        .execute()
+    )
+    tenant_info = tenant_res.data[0] if tenant_res.data else {}
+    workspace_name = (
+        tenant_info.get("company_name")
+        or tenant_info.get("workspace_name")
+        or tenant_info.get("organization_name")
+        or "Workspace"
+    )
+
     return {
         "user_id": user["id"],
         "email": user["email"],
         "full_name": user.get("full_name"),
         "email_verified": user.get("email_verified", False),
+        "user_status": user.get("user_status", "active"),
+        "deletion_scheduled_at": user.get("deletion_scheduled_at"),
         "theme_preference": user.get("theme_preference") or "system",
         "tenant_id": jwt_payload.tenant_id,
+        "workspace_name": workspace_name,
         # DB-verified authority — never from JWT payload
         "role": jwt_payload.role,
         "workspace_type": jwt_payload.workspace_type,   # "MAIN" or "FRANCHISE"
@@ -630,32 +668,16 @@ async def update_theme_preference(
 @router.get("/workspaces")
 async def get_user_workspaces(jwt_payload: JWTPayload = Depends(require_authenticated_user)):
     """Get all workspaces the authenticated user belongs to."""
-    from utils.supabase_client import db
-    
-    # Get all tenant links for this user
-    links = db.client.table("tenant_users").select("tenant_id, role, isolation_model").eq("user_id", jwt_payload.user_id).execute()
-    if not links.data:
-        return []
-        
-    tenant_ids = [row["tenant_id"] for row in links.data]
-    roles_by_tenant = {row["tenant_id"]: row["role"] for row in links.data}
-    
-    # Get tenant details - selecting multiple name columns for robust fallback
-    tenants = db.client.table("tenants").select("id, company_name, workspace_name, organization_name, status").in_("id", tenant_ids).execute()
-    
-    results = []
-    for t in (tenants.data or []):
-        # Determine the best display name using fallback hierarchy
-        display_name = t.get("company_name") or t.get("workspace_name") or t.get("organization_name") or "Unnamed Workspace"
-        
-        results.append({
-            "tenant_id": t["id"],
-            "company_name": display_name,
-            "role": normalize_public_role(roles_by_tenant.get(t["id"])),
-            "status": t.get("status")
-        })
-        
-    return results
+    workspaces = AccountService.list_workspaces(jwt_payload.user_id)
+    return [
+        {
+            "tenant_id": workspace["tenant_id"],
+            "company_name": workspace["workspace_name"],
+            "role": normalize_public_role(workspace["role"]),
+            "status": workspace["status"],
+        }
+        for workspace in workspaces
+    ]
 
 class CreateWorkspaceRequest(BaseModel):
     company_name: str = Field(..., min_length=2, max_length=100)
@@ -664,6 +686,7 @@ class CreateWorkspaceRequest(BaseModel):
 async def create_new_workspace(
     body: CreateWorkspaceRequest,
     response: Response,
+    request: Request,
     jwt_payload: JWTPayload = Depends(require_authenticated_user)
 ):
     """Create a completely new, isolated workspace for the user and switch to it."""
@@ -671,6 +694,11 @@ async def create_new_workspace(
     from datetime import datetime, timezone
     import uuid
     
+    allowed = AccountService.check_workspace_creation_allowed(jwt_payload.user_id)
+    if not allowed.get("allowed"):
+        status_code = 429 if allowed.get("reason") == "RATE_LIMITED" else 403
+        raise HTTPException(status_code=status_code, detail=allowed["message"])
+
     new_tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
@@ -716,9 +744,11 @@ async def create_new_workspace(
     # 5. Create refresh token & set cookie (CRITICAL for session persistence)
     refresh_token = _create_refresh_token(jwt_payload.user_id, new_tenant_id)
     _set_refresh_cookie(response, refresh_token)
+    AccountService.set_last_active_tenant_id(jwt_payload.user_id, new_tenant_id)
+    AccountService.log_workspace_creation(jwt_payload.user_id, new_tenant_id, request.client.host if request.client else None)
     
     # 6. Fetch user details for response contract
-    user_res = db.client.table("users").select("full_name, email_verified").eq("id", jwt_payload.user_id).execute()
+    user_res = db.client.table("users").select("full_name, email_verified, user_status, deletion_scheduled_at").eq("id", jwt_payload.user_id).execute()
     user_data = user_res.data[0] if user_res.data else {}
     
     return _build_auth_response(
@@ -729,7 +759,9 @@ async def create_new_workspace(
         onboarding_required=True,
         tenant_status="onboarding",
         email_verified=user_data.get("email_verified", False),
-        full_name=user_data.get("full_name")
+        full_name=user_data.get("full_name"),
+        user_status=user_data.get("user_status", "active"),
+        deletion_scheduled_at=user_data.get("deletion_scheduled_at"),
     )
 
 
@@ -775,6 +807,7 @@ async def switch_workspace(
     # Create new refresh token for this tenant & set cookie
     refresh_token = _create_refresh_token(jwt_payload.user_id, body.tenant_id)
     _set_refresh_cookie(response, refresh_token)
+    AccountService.set_last_active_tenant_id(jwt_payload.user_id, body.tenant_id)
     
     user_res = db.client.table("users").select("full_name, email_verified").eq("id", jwt_payload.user_id).execute()
     user_data = user_res.data[0] if user_res.data else {}
@@ -1121,30 +1154,22 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
             if join_req["status"] == "blocked":
                 return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=AccountBlocked")
         else:
-            # SORTING LOGIC: Prioritize 'active' over 'onboarding'.
-            # Within status, prioritize the most recently joined.
-            def sort_key(m):
-                t_data = m.get("tenants")
-                if isinstance(t_data, list): t_data = t_data[0] if t_data else {}
-                status_val = 1 if t_data.get("status") == "active" else 0
-                joined_val = m.get("joined_at") or ""
-                return (status_val, joined_val)
-
-            memberships.sort(key=sort_key, reverse=True)
-            
-            tenant_user = memberships[0]
+            preferred_workspace = AccountService.resolve_preferred_workspace(user["id"])
+            tenant_user = next((membership for membership in memberships if membership["tenant_id"] == preferred_workspace["tenant_id"]), memberships[0]) if preferred_workspace else memberships[0]
             tenant_id = tenant_user["tenant_id"]
             role = tenant_user["role"]
             isolation_model = tenant_user.get("isolation_model", "team")
-            
+
             tenant_data = tenant_user["tenants"]
-            if isinstance(tenant_data, list): tenant_data = tenant_data[0] if tenant_data else {}
-            
+            if isinstance(tenant_data, list):
+                tenant_data = tenant_data[0] if tenant_data else {}
+
             tenant_status = tenant_data.get("status", "active")
             mapped_type = tenant_data.get("workspace_type", "MAIN")
-            onboarding_required = tenant_data.get("onboarding_required", False)
-            
+            onboarding_required = tenant_status == "onboarding" or tenant_data.get("onboarding_required", False)
+
             print(f"DEBUG: Selected tenant_id={tenant_id}, status={tenant_status}")
+            AccountService.set_last_active_tenant_id(user["id"], tenant_id)
         
         user_id = user["id"]
     else:
@@ -1219,6 +1244,7 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
                 "id": tenant_id,
                 "email": email,
                 "status": "onboarding",
+                "onboarding_required": True,
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
             
@@ -1250,6 +1276,8 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
             role = "owner"
             mapped_type = "MAIN"
             onboarding_required = True
+            AccountService.set_last_active_tenant_id(user_id, tenant_id)
+            AccountService.log_workspace_creation(user_id, tenant_id, None)
 
     # Generate Secure JWT
     isolation_model = locals().get("isolation_model", "team")

@@ -25,7 +25,7 @@ logging.basicConfig(
 
 # Import route modules
 from fastapi.staticfiles import StaticFiles
-from routes import campaigns, webhooks, auth, onboarding, contacts, templates, assets, password_reset, billing, settings, domains, team, senders, infrastructure, notifications
+from routes import campaigns, webhooks, auth, onboarding, contacts, templates, assets, password_reset, billing, settings, domains, team, senders, infrastructure, notifications, account
 
 # Rate limiter — shared instance backed by Redis for multi-tenant scaling
 from utils.rate_limiter import limiter
@@ -185,6 +185,7 @@ app.add_middleware(
 app.include_router(webhooks.router)
 app.include_router(campaigns.router)
 app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(onboarding.router)
 app.include_router(contacts.router)
 app.include_router(templates.router)
@@ -227,4 +228,3 @@ async def health_check():
         "version": "1.5.0",
         "db": db_status,
     }
-

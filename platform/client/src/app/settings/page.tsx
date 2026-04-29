@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Building2, CreditCard, Download, Globe, History, Key, MailCheck, MessageSquareDot, Settings, Shield, Store, User, UserPlus, Users } from 'lucide-react';
+import { Building2, CreditCard, Download, Globe, History, Key, Lock, MailCheck, MessageSquareDot, Settings, Shield, Store, User, UserPlus, Users } from 'lucide-react';
 import { Badge, EmptyState, PageHeader, SectionCard, StatCard } from '@/components/ui';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const CARDS = [
-    { href: '/settings/profile', icon: User, title: 'Profile', description: 'Update your name, timezone, and personal account details.' },
+    { href: '/account', icon: User, title: 'Account Center', description: 'Review your identity, workspace memberships, invitations, and create new workspaces.' },
+    { href: '/account/security', icon: Lock, title: 'Account Security', description: 'Change password, manage future MFA, and control account deletion at the account layer.' },
     { href: '/settings/organization', icon: Building2, title: 'Organization', description: 'Set your company name and physical mailing address.' },
     { href: '/settings/billing', icon: CreditCard, title: 'Billing & Plan', description: 'Review your subscription, limits, and plan changes.', badge: 'Plan' },
     { href: '/settings/compliance', icon: Shield, title: 'Compliance & GDPR', description: 'Manage exports, erasure requests, and consent operations.' },

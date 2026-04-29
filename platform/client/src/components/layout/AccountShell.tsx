@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Lock, Mail, User } from 'lucide-react';
+import { Lock, LogOut, Mail, User } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui';
@@ -17,7 +17,7 @@ const ACCOUNT_NAV = [
 ];
 
 export default function AccountShell({ children }: AccountShellProps) {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const pathname = usePathname();
 
     return (
@@ -51,12 +51,15 @@ export default function AccountShell({ children }: AccountShellProps) {
                             <Mail className="h-4 w-4" />
                             <span className="max-w-[260px] truncate">{user?.email || 'Unknown account'}</span>
                         </div>
-                        <Link href="/dashboard">
-                            <Button variant="secondary">
-                                <ArrowLeft className="h-4 w-4" />
-                                Return to Workspace
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="ghost"
+                            onClick={() => {
+                                void logout();
+                            }}
+                        >
+                            <LogOut className="h-4 w-4" />
+                            Sign Out
+                        </Button>
                     </div>
                 </div>
 

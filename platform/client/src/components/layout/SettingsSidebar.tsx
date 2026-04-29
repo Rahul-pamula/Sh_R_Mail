@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     Settings, User, Building2, CreditCard, Shield, Key, Globe,
-    Users, Bell, Lock, Sliders, Store, History, MessageSquareDot,
+    Users, Bell, Sliders, Store, History, MessageSquareDot,
     ArrowLeft, Mail
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -27,9 +27,8 @@ const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
     {
         label: 'Account',
         items: [
-            { href: '/settings/profile',       icon: User,      label: 'Profile' },
+            { href: '/account',               icon: User,      label: 'Account Center' },
             { href: '/settings/preferences',   icon: Sliders,   label: 'Preferences' },
-            { href: '/settings/security',      icon: Lock,      label: 'Security' },
             { href: '/settings/notifications', icon: Bell,      label: 'Notifications' },
         ],
     },

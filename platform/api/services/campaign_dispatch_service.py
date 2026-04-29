@@ -218,6 +218,19 @@ def _resolve_domain_name(supabase: Any, campaign: Dict[str, Any], tenant_id: str
     return result.data[0].get("domain_name") or ""
 
 
+def _workspace_is_active(supabase: Any, tenant_id: str) -> bool:
+    result = (
+        supabase.table("tenants")
+        .select("workspace_status")
+        .eq("id", tenant_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return False
+    return (result.data[0].get("workspace_status") or "active") == "active"
+
+
 async def queue_campaign_dispatch(
     supabase: Any,
     mq_client: Any,
@@ -228,6 +241,9 @@ async def queue_campaign_dispatch(
     mark_campaign_sending: bool = False,
     touch_scheduled_at: bool = False,
 ) -> Dict[str, Any]:
+    if not _workspace_is_active(supabase, tenant_id):
+        raise ValueError("Workspace is not active. Campaign dispatch is blocked.")
+
     now_iso = datetime.now(timezone.utc).isoformat()
     campaign_id = campaign["id"]
 

@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Search, Bell, Menu, User, Settings, CreditCard, LogOut, ChevronDown, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Search, Bell, Menu, User, Settings, CreditCard, ChevronDown, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import NotificationPopover from './NotificationPopover';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface HeaderProps {
     setMobileMenuOpen?: () => void;
@@ -121,6 +122,9 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
 
             {/* Right side: Notifications & Profile */}
             <div className="flex items-center gap-3 flex-1 justify-end relative" ref={dropdownRef}>
+                <div className="hidden lg:block">
+                    <WorkspaceSwitcher variant="header" />
+                </div>
 
                 {/* Notifications Button */}
                 <NotificationPopover />
@@ -183,11 +187,11 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                         {/* Navigation Links */}
                         <div className="px-2">
                             <Link 
-                                href="/settings/profile" 
+                                href="/account" 
                                 onClick={() => setIsProfileOpen(false)}
                                 className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
-                                <User className="w-4 h-4" /> Personal Profile
+                                <User className="w-4 h-4" /> Account
                             </Link>
 
                             <Link 
@@ -203,33 +207,9 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                                 onClick={() => setIsProfileOpen(false)}
                                 className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
-                                <CreditCard className="w-4 h-4" /> Account & Billing
+                                <CreditCard className="w-4 h-4" /> Workspace Billing
                             </Link>
                             
-                            <button 
-                                onClick={() => {
-                                    setIsProfileOpen(false);
-                                    logout();
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors mt-1"
-                            >
-                                <RefreshCw className="w-4 h-4" /> Refresh Session
-                            </button>
-                        </div>
-
-                        <div className="h-[1px] bg-[var(--border)] my-2"></div>
-
-                        {/* Logout */}
-                        <div className="px-2">
-                            <button 
-                                onClick={() => {
-                                    setIsProfileOpen(false);
-                                    logout();
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                            >
-                                <LogOut className="w-4 h-4" /> Sign Out
-                            </button>
                         </div>
                     </div>
                 )}

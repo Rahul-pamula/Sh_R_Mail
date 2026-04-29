@@ -252,6 +252,18 @@ class EmailHandler:
                 recipient_email = task_row["recipient_email"]
                 domain_name     = recipient_email.split("@")[-1].lower()
 
+                tenant_state_res = self.db.table("tenants").select("workspace_status").eq("id", tenant_id).limit(1).execute()
+                workspace_status = (tenant_state_res.data[0].get("workspace_status") if tenant_state_res.data else None) or "active"
+                if workspace_status != "active":
+                    await execute(
+                        "UPDATE email_tasks SET status = 'failed', last_error = $2 WHERE id = $1",
+                        task_uuid,
+                        "Workspace is pending deletion; email processing stopped.",
+                    )
+                    await message.ack()
+                    logger.warning(f"[{task_id}] Workspace {tenant_id} is {workspace_status}; stopping email task.")
+                    return
+
                 # 2. Kill Switch Check
                 pause_mode = "NONE"
                 try:
