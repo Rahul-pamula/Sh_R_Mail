@@ -1,4 +1,4 @@
-import { HTMLAttributes, ReactNode } from 'react';
+import React, { HTMLAttributes, ReactNode } from 'react';
 
 type SectionCardTone = 'default' | 'subtle' | 'success' | 'warning' | 'danger';
 
@@ -9,6 +9,7 @@ interface SectionCardProps extends HTMLAttributes<HTMLDivElement> {
     footer?: ReactNode;
     tone?: SectionCardTone;
     noPadding?: boolean;
+    children?: ReactNode;
 }
 
 const toneClasses: Record<SectionCardTone, string> = {

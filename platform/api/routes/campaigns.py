@@ -287,13 +287,33 @@ async def delete_campaign(campaign_id: str, tenant_id: str = Depends(require_act
         
     status = result.data[0]["status"]
     
+    from services.audit_service import write_log
+    
     if status == "draft":
         # Safe to delete (hard delete)
         db.client.table("campaigns").delete().eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
+        
+        await write_log(
+            tenant_id=tenant_id,
+            user_id=jwt_payload.user_id,
+            action="campaign.delete",
+            resource_type="campaign",
+            resource_id=campaign_id,
+            metadata={"status": "draft", "outcome": "hard_delete"}
+        )
         return {"status": "deleted", "id": campaign_id, "message": "Draft campaign deleted successfully."}
     else:
         # Prevent deletion of analytics, hide it instead
         db.client.table("campaigns").update({"is_archived": True}).eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
+        
+        await write_log(
+            tenant_id=tenant_id,
+            user_id=jwt_payload.user_id,
+            action="campaign.delete",
+            resource_type="campaign",
+            resource_id=campaign_id,
+            metadata={"status": status, "outcome": "archived"}
+        )
         return {"status": "archived", "id": campaign_id, "message": "Campaign has been removed."}
 
 @router.put("/{campaign_id}")

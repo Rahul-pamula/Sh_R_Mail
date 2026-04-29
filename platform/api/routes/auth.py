@@ -34,7 +34,7 @@ from utils.rate_limiter import limiter, enforce_auth_rate_limit
 # CAPTCHA verification utility
 from utils.captcha import verify_captcha
 # JWT middleware
-from utils.jwt_middleware import require_authenticated_user, JWTPayload, normalize_public_role
+from utils.jwt_middleware import require_authenticated_user, JWTPayload, normalize_public_role, verify_jwt_token
 # Repository layer — isolates all DB access
 from repositories.user_repository import UserRepository
 from repositories.auth_repository import AuthRepository
@@ -185,6 +185,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
+    # Ensure token_version is present in payload (default to 1 if not provided)
+    if "token_version" not in to_encode:
+        to_encode["token_version"] = 1
+        
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
@@ -372,7 +376,8 @@ async def signup(request: Request, body_request: SignupRequest, response: Respon
             "tenant_id": tenant_id,
             "email": body_request.email,
             "role": role,
-            "isolation_model": "team"
+            "isolation_model": "team",
+            "token_version": 1  # New users start at v1
         }
         
         access_token = create_access_token(token_data)
@@ -535,7 +540,8 @@ async def login(request: Request, body_request: LoginRequest, response: Response
         "isolation_model": isolation_model,
         "tenant_status": tenant_status,
         "workspace_type": tenant.get("workspace_type", "MAIN"),
-        "onboarding_required": tenant_status == "onboarding" or tenant.get("onboarding_required", False)
+        "onboarding_required": tenant_status == "onboarding" or tenant.get("onboarding_required", False),
+        "token_version": user.get("token_version", 1)
     }
     access_token = create_access_token(token_data)
 
@@ -737,7 +743,8 @@ async def create_new_workspace(
         "tenant_id": new_tenant_id,
         "email": jwt_payload.email,
         "role": "owner",
-        "isolation_model": "team"
+        "isolation_model": "team",
+        "token_version": jwt_payload.token_version
     }
     new_token = create_access_token(token_data)
     
@@ -799,7 +806,8 @@ async def switch_workspace(
         "tenant_id": body.tenant_id,
         "email": jwt_payload.email,
         "role": role,
-        "isolation_model": isolation_model
+        "isolation_model": isolation_model,
+        "token_version": jwt_payload.token_version
     }
     
     access_token = create_access_token(token_data)
@@ -864,7 +872,7 @@ async def refresh_token(request: Request, response: Response):
     db.client.table("refresh_tokens").delete().eq("id", token_record["id"]).execute()
 
     # Get user to construct payload and fetch fresh role/tenant_status
-    user_res = db.client.table("users").select("email, email_verified, is_active").eq("id", user_id).execute()
+    user_res = db.client.table("users").select("email, email_verified, is_active, token_version").eq("id", user_id).execute()
     if not user_res.data or not user_res.data[0].get("is_active"):
         response.delete_cookie("refresh_token", path="/")
         raise HTTPException(status_code=401, detail="User account disabled or not found")
@@ -885,7 +893,8 @@ async def refresh_token(request: Request, response: Response):
         "tenant_id": tenant_id,
         "email": user["email"],
         "role": tenant_user["role"],
-        "isolation_model": tenant_user.get("isolation_model", "team")
+        "isolation_model": tenant_user.get("isolation_model", "team"),
+        "token_version": user.get("token_version", 1)
     }
 
     new_access_token = create_access_token(token_data)
@@ -908,23 +917,44 @@ async def refresh_token(request: Request, response: Response):
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    """Clears HttpOnly refresh cookie and deletes it from DB."""
+    """Clear refresh token cookie and revoke from DB."""
     from utils.supabase_client import db
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
         try:
             db.client.table("refresh_tokens").delete().eq("token_hash", token_hash).execute()
-        except Exception as e:
-            import logging
-            logging.getLogger("auth").warning(f"Failed to delete refresh token on logout: {e}")
-            
+        except Exception:
+            pass
+    
     response.delete_cookie("refresh_token", path="/")
-    # Also delete the middleware cookies via API response for good measure if needed, but client deletes them too
     response.delete_cookie("auth_token", path="/")
     response.delete_cookie("tenant_status", path="/")
     response.delete_cookie("email_verified", path="/")
     return {"status": "logged_out"}
+
+
+@router.post("/revoke-all")
+async def revoke_all_sessions(request: Request, response: Response, jwt_payload: JWTPayload = Depends(verify_jwt_token)):
+    """
+    SECURITY: Revoke ALL active sessions for the current user.
+    Increments token_version in DB, making all existing JWTs invalid.
+    Also deletes all refresh tokens for this user.
+    """
+    from utils.supabase_client import db
+    user_repo = UserRepository(db.client)
+    
+    # 1. Increment token_version in DB
+    user_repo.increment_token_version(jwt_payload.user_id)
+    
+    # 2. Delete all refresh tokens for this user
+    db.client.table("refresh_tokens").delete().eq("user_id", jwt_payload.user_id).execute()
+    
+    # 3. Clear current session cookie
+    response.delete_cookie("refresh_token", path="/")
+    response.delete_cookie("auth_token", path="/")
+    
+    return {"message": "All sessions revoked. Please log in again."}
 
 
 # === OAuth Routes ===
@@ -1188,6 +1218,7 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
             "full_name": full_name,
             "email_verified": True, # OAuth emails are inherently verified
             "is_active": True,
+            "token_version": 1,
             "created_at": datetime.utcnow().isoformat()
         }).execute()
         
@@ -1289,7 +1320,8 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         "isolation_model": isolation_model,
         "tenant_status": tenant_status,
         "workspace_type": mapped_type,
-        "onboarding_required": onboarding_required
+        "onboarding_required": onboarding_required,
+        "token_version": user.get("token_version", 1) if 'user' in locals() else 1
     }
     
     access_token = create_access_token(token_data)

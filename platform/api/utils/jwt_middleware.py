@@ -20,7 +20,7 @@ ALGORITHM = "HS256"
 
 class JWTPayload:
     """Validated JWT payload & DB Context"""
-    def __init__(self, user_id: str, tenant_id: str, email: str, role: str, workspace_type: str, tenant_status: str, onboarding_required: bool, isolation_model: str = "team"):
+    def __init__(self, user_id: str, tenant_id: str, email: str, role: str, workspace_type: str, tenant_status: str, onboarding_required: bool, token_version: int = 1, isolation_model: str = "team"):
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.email = email
@@ -28,6 +28,7 @@ class JWTPayload:
         self.workspace_type = workspace_type
         self.tenant_status = tenant_status
         self.onboarding_required = onboarding_required
+        self.token_version = token_version
         self.isolation_model = isolation_model
 
     @property
@@ -90,8 +91,29 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
                 detail="Invalid token payload: missing required identity fields"
             )
 
-        # SECURITY: Fetch Authority from DB.
+        # SECURITY: Fetch Authority & Token Version from DB.
         from utils.supabase_client import db
+        
+        # 1. Check user status and current token version
+        u_res = db.client.table("users").select("id, token_version, is_active").eq("id", user_id).execute()
+        if not u_res.data:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
+        
+        user_data = u_res.data[0]
+        if not user_data.get("is_active", True):
+             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled.")
+
+        db_token_version = user_data.get("token_version") or 1
+        jwt_token_version = payload.get("token_version") or 0
+
+        # REVOCATION CHECK: If JWT version is older than DB version, reject.
+        if jwt_token_version < db_token_version:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired. Please log in again."
+            )
+
+        # 2. Fetch tenant membership and role
         tu_res = db.client.table("tenant_users").select("role, isolation_model").eq("user_id", user_id).eq("tenant_id", tenant_id).execute()
         
         db_role = "viewer"
@@ -100,10 +122,8 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
         raw_workspace_type = "MAIN"
         tenant_status = "active"
         onboarding_required = True
-        is_member = False
 
         if tu_res.data:
-            is_member = True
             db_role = normalize_public_role(tu_res.data[0].get("role", "viewer"))
             isolation_model = tu_res.data[0].get("isolation_model", "team")
 
@@ -121,10 +141,6 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
                 workspace_type = "FRANCHISE" if raw_workspace_type.upper() == "FRANCHISE" else "MAIN"
         else:
             # User is not a member of this tenant. 
-            u_res = db.client.table("users").select("id").eq("id", user_id).execute()
-            if not u_res.data:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
-            
             onboarding_required = True
             tenant_status = "pending"
             raw_workspace_type = "MAIN"
@@ -158,6 +174,7 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
             workspace_type=workspace_type,
             tenant_status=tenant_status,
             onboarding_required=onboarding_required,
+            token_version=db_token_version,
             isolation_model=isolation_model
         )
         

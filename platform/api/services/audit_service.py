@@ -34,16 +34,7 @@ async def write_log(
 ) -> None:
     """
     Convenience wrapper — writes an immutable audit log entry.
-
-    Usage:
-        await write_log(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            action="contact.delete",
-            resource_type="contact",
-            resource_id=contact_id,
-            metadata={"count": 1}  # non-PII only
-        )
+    Also triggers automated security alerts for critical events.
     """
     from utils.supabase_client import db
     audit_repo = AuditRepository(db.client)
@@ -57,3 +48,44 @@ async def write_log(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    
+    # [AUDIT FIX 11] Automated Security Alerting
+    try:
+        await _process_security_alerts(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=action,
+            metadata=metadata
+        )
+    except Exception:
+        pass # Alerting failure should not block the main flow
+
+
+async def _process_security_alerts(tenant_id: str, user_id: Optional[str], action: str, metadata: Optional[dict]) -> None:
+    """Detects critical patterns in audit logs and triggers notifications."""
+    from utils.notification_rules import notify_admins
+    
+    # 1. Critical Deletion Alert (>1000 items)
+    if action in ["contact.bulk_delete", "contact.delete_all"]:
+        count = (metadata or {}).get("count", 0)
+        if count > 1000:
+            await notify_admins(
+                tenant_id=tenant_id,
+                sender_id="system", # System-generated alert
+                event_type="security_alert",
+                title="🚨 Critical Security Alert: Bulk Deletion",
+                message=f"A large bulk deletion was performed. {count:,} contacts were removed.",
+                data={"action": action, "count": count, "performed_by": user_id}
+            )
+
+    # 2. Potential Compromise: Suspicious Login (Placeholder for more complex logic)
+    # For now, we alert if a login occurs on a known suspicious action or high frequency.
+    if action == "auth.suspicious_activity":
+        await notify_admins(
+            tenant_id=tenant_id,
+            sender_id="system",
+            event_type="security_alert",
+            title="⚠️ Suspicious Activity Detected",
+            message=f"Anomalous behavior detected for user session: {metadata.get('reason', 'Unknown')}",
+            data=metadata
+        )

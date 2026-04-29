@@ -241,8 +241,26 @@ async def queue_campaign_dispatch(
     mark_campaign_sending: bool = False,
     touch_scheduled_at: bool = False,
 ) -> Dict[str, Any]:
+    """
+    Core orchestration:
+    1. Validates workspace and quota.
+    2. Snapshots campaign content.
+    3. Publishes tasks to RabbitMQ.
+    """
     if not _workspace_is_active(supabase, tenant_id):
         raise ValueError("Workspace is not active. Campaign dispatch is blocked.")
+
+    # [AUDIT FIX 10] Hard Quota Enforcement at Dispatch Level
+    # This prevents 'ghost' campaigns from being sent by background workers 
+    # if the tenant has exceeded their monthly limit since the campaign was scheduled.
+    from utils.billing import check_can_send_campaign
+    try:
+        check_can_send_campaign(tenant_id=tenant_id, audience_size=len(contacts))
+    except Exception as e:
+        # Wrap HTTPException if it occurs outside a route context, 
+        # but usually queue_campaign_dispatch is called from routes or async tasks 
+        # where raising is handled by the framework or parent.
+        raise ValueError(f"Quota validation failed: {str(e)}")
 
     now_iso = datetime.now(timezone.utc).isoformat()
     campaign_id = campaign["id"]

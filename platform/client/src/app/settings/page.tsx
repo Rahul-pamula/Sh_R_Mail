@@ -9,8 +9,6 @@ import { Badge, EmptyState, PageHeader, SectionCard, StatCard } from '@/componen
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 const CARDS = [
-    { href: '/account', icon: User, title: 'Account Center', description: 'Review your identity, workspace memberships, invitations, and create new workspaces.' },
-    { href: '/account/security', icon: Lock, title: 'Account Security', description: 'Change password, manage future MFA, and control account deletion at the account layer.' },
     { href: '/settings/organization', icon: Building2, title: 'Organization', description: 'Set your company name and physical mailing address.' },
     { href: '/settings/billing', icon: CreditCard, title: 'Billing & Plan', description: 'Review your subscription, limits, and plan changes.', badge: 'Plan' },
     { href: '/settings/compliance', icon: Shield, title: 'Compliance & GDPR', description: 'Manage exports, erasure requests, and consent operations.' },

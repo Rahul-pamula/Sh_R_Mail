@@ -180,31 +180,11 @@ def _write_bounce_to_redis(tenant_id: str):
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-def _resolve_tenant_ids_for_email(email: str) -> list[str]:
-    """
-    Resolve which tenant(s) recently sent email to this address.
-    Returns an empty list if unknown → prevents cross-tenant suppression.
-    """
-    try:
-        contact_res = (
-            db.client.table("contacts")
-            .select("id, tenant_id")
-            .eq("email", email)
-            .execute()
-        )
-        if not contact_res.data:
-            return []
-        return list({row["tenant_id"] for row in contact_res.data if row.get("tenant_id")})
-    except Exception as e:
-        logger.error(f"[WEBHOOK] Failed to resolve tenant for {email}: {e}")
-        return []
-
-
 def _suppress_contact(
     email: str,
     reason: str,
+    tenant_id: str,
     bounce_reason: Optional[str] = None,
-    tenant_id: Optional[str] = None,
 ):
     """
     Mark a contact as suppressed — STRICTLY SCOPED TO ONE TENANT.
@@ -212,26 +192,17 @@ def _suppress_contact(
     Design principle: A bounce in Tenant A MUST NEVER suppress Tenant B's contact,
     even if both tenants have the same email address.
     """
+    if not tenant_id:
+        logger.error(f"[WEBHOOK] Cannot suppress {email} without a tenant_id. Cross-tenant suppression blocked.")
+        return
+
     try:
         query = (
             db.client.table("contacts")
             .select("id, tenant_id, bounce_count")
             .eq("email", email)
+            .eq("tenant_id", tenant_id)
         )
-
-        if tenant_id:
-            # Caller knows the exact tenant — filter directly
-            query = query.eq("tenant_id", tenant_id)
-        else:
-            # Fallback: resolve from dispatch records — only tenants that SENT to this email
-            resolved_tenants = _resolve_tenant_ids_for_email(email)
-            if not resolved_tenants:
-                logger.warning(
-                    f"[WEBHOOK] No tenant resolved for {email} — skipping suppression "
-                    "to avoid cross-tenant damage."
-                )
-                return
-            query = query.in_("tenant_id", resolved_tenants)
 
         res = query.execute()
         if not res.data:
@@ -283,12 +254,17 @@ async def handle_bounce(request: Request):
     email = body.get("email") or body.get("recipient")
     if not email:
         raise HTTPException(status_code=422, detail="Missing 'email' field in body.")
+    tenant_id = body.get("tenant_id")
+    if not tenant_id:
+        logger.error(f"[WEBHOOK] Generic bounce missing tenant_id for {email}. Cannot safely suppress.")
+        return {"status": "ignored", "reason": "missing_tenant_id"}
+
     bounce_type = body.get("type", "hard").lower()
     if "soft" in bounce_type or "temporary" in bounce_type:
         logger.info(f"[WEBHOOK] Soft bounce for {email} — skipping suppression.")
         return {"status": "ignored", "reason": "soft_bounce"}
     bounce_reason_detail = body.get("reason", bounce_type)
-    _suppress_contact(email, "bounce", bounce_reason_detail)
+    _suppress_contact(email, "bounce", tenant_id=tenant_id, bounce_reason=bounce_reason_detail)
     
     # Audit log
     audit_repo.insert_log(
@@ -313,7 +289,13 @@ async def handle_spam_complaint(request: Request):
     email = body.get("email") or body.get("recipient")
     if not email:
         raise HTTPException(status_code=422, detail="Missing 'email' field in body.")
-    _suppress_contact(email, "spam")
+
+    tenant_id = body.get("tenant_id")
+    if not tenant_id:
+        logger.error(f"[WEBHOOK] Generic spam missing tenant_id for {email}. Cannot safely suppress.")
+        return {"status": "ignored", "reason": "missing_tenant_id"}
+
+    _suppress_contact(email, "spam", tenant_id=tenant_id)
     
     # Audit log
     audit_repo.insert_log(
@@ -399,10 +381,12 @@ async def handle_ses_webhook(
 
                 if bounce_type == "permanent":
                     # Permanent: NoEmail, MailboxDoesNotExist, etc. → immediate suppress
-                    _suppress_contact(email, "bounce", bounce_reason=b_reason, tenant_id=tenant_id)
                     if tenant_id:
+                        _suppress_contact(email, "bounce", tenant_id=tenant_id, bounce_reason=b_reason)
                         _write_bounce_to_redis(tenant_id)  # feed the circuit breaker
-                    logger.info(f"[SES] Hard bounce suppressed: {email} [{bounce_sub}]")
+                        logger.info(f"[SES] Hard bounce suppressed: {email} [{bounce_sub}]")
+                    else:
+                        logger.error(f"[SES] Missing tenant_id in tags for {email}. Cannot safely suppress.")
 
                 elif bounce_type == "transient":
                     # Transient: MailboxFull, MessageTooLarge, etc. → worker retry handles it
@@ -422,8 +406,11 @@ async def handle_ses_webhook(
             for r in recipients:
                 email = r.get("emailAddress")
                 if email:
-                    _suppress_contact(email, "spam", tenant_id=tenant_id)
-                    logger.info(f"[SES] Spam complaint: {email}")
+                    if tenant_id:
+                        _suppress_contact(email, "spam", tenant_id=tenant_id)
+                        logger.info(f"[SES] Spam complaint: {email}")
+                    else:
+                        logger.error(f"[SES] Spam complaint missing tenant_id in tags for {email}. Cannot safely suppress.")
 
         elif event_type == "Delivery":
             logger.debug("[SES] Delivery confirmation event received")

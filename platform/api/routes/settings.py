@@ -439,7 +439,7 @@ async def leave_or_delete_workspace(
              Otherwise, they MUST transfer ownership first.
     - ADMIN/CREATOR/VIEWER: Just removes their own membership link (Leave).
     """
-    from services.audit_service import audit_log
+    from services.audit_service import write_log
     
     # 1. Verify membership and role for the target tenant
     membership_res = db.client.table("tenant_users").select("role")\
@@ -463,11 +463,11 @@ async def leave_or_delete_workspace(
                 .eq("tenant_id", tenant_id)\
                 .execute()
                 
-            await audit_log(
-                event="workspace:leave",
+            await write_log(
                 tenant_id=tenant_id,
+                action="workspace:leave",
                 user_id=jwt_payload.user_id,
-                details={"role": user_role}
+                metadata={"role": user_role}
             )
             
             return {"message": "Successfully left the workspace."}
@@ -494,11 +494,11 @@ async def leave_or_delete_workspace(
             # We delete the tenant record. Assuming foreign keys are set to CASCADE in DB.
             db.client.table("tenants").delete().eq("id", tenant_id).execute()
             
-            await audit_log(
-                event="workspace:delete",
+            await write_log(
                 tenant_id=tenant_id,
+                action="workspace:delete",
                 user_id=jwt_payload.user_id,
-                details={"reason": "Solo owner deletion"}
+                metadata={"reason": "Solo owner deletion"}
             )
             
             return {"message": "Workspace successfully deleted."}

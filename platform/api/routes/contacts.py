@@ -446,6 +446,16 @@ async def bulk_delete_contacts(
     batch_ids = {row.get("import_batch_id") for row in (batch_ids.data or []) if row.get("import_batch_id")}
 
     deleted_count = ContactService.delete_bulk(tenant_id, body.contact_ids)
+    
+    # Audit Logging for Bulk Delete
+    from services.audit_service import write_log
+    await write_log(
+        tenant_id=tenant_id,
+        user_id=jwt_payload.user_id,
+        action="contact.bulk_delete",
+        resource_type="contact",
+        metadata={"count": deleted_count}
+    )
 
     # Recalc affected batches
     from services.batch_service import BatchService
@@ -526,6 +536,16 @@ async def bulk_tag_contacts(
 async def delete_all_contacts(tenant_id: str = Depends(require_active_tenant), _ = Depends(require_permission("contacts:import"))):
     """Delete ALL contacts for tenant (reset)"""
     deleted_count = ContactService.delete_all(tenant_id)
+
+    # Audit Logging for Wipe Out
+    from services.audit_service import write_log
+    await write_log(
+        tenant_id=tenant_id,
+        user_id=jwt_payload.user_id,
+        action="contact.delete_all",
+        resource_type="contact",
+        metadata={"count": deleted_count}
+    )
 
     # Also clean up all batch records
     try:

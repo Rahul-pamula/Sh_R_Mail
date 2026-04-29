@@ -281,6 +281,24 @@ class EmailHandler:
                     await message.nack(requeue=True)
                     return
 
+                try:
+                    campaign_kill_key = f"tenant:{tenant_id}:campaign:{campaign_id}:stop"
+                    if await self.redis_client.get(campaign_kill_key):
+                        logger.warning(f"[{task_id}] CAMPAIGN KILL SWITCH ACTIVE for campaign {campaign_id}. Cancelling.")
+                        await execute("UPDATE email_tasks SET status = 'cancelled' WHERE id = $1", task_uuid)
+                        self.db.table("campaign_dispatch").upsert([{
+                            "id": str(dispatch_id),
+                            "campaign_id": str(campaign_id),
+                            "subscriber_id": str(task_row["c_id"]),
+                            "status": "CANCELLED",
+                            "updated_at": "now()",
+                        }], on_conflict="id").execute()
+                        await self._check_campaign_completion(str(campaign_id))
+                        await message.ack()
+                        return
+                except Exception:
+                    pass
+
                 # 3. Adaptive Throttling & Jitter
                 from services.reputation_engine import ReputationEngine
                 rep_engine = ReputationEngine(self.redis_client, self.db)
@@ -302,6 +320,21 @@ class EmailHandler:
                     if final_pause == "HARD":
                         await execute("UPDATE email_tasks SET status = 'pending' WHERE id = $1", task_uuid)
                         await message.nack(requeue=True)
+                        return
+
+                    campaign_kill_key = f"tenant:{tenant_id}:campaign:{campaign_id}:stop"
+                    if await self.redis_client.get(campaign_kill_key):
+                        logger.warning(f"[{task_id}] PRE-SEND CAMPAIGN KILL SWITCH ACTIVE for {campaign_id}. Cancelling.")
+                        await execute("UPDATE email_tasks SET status = 'cancelled' WHERE id = $1", task_uuid)
+                        self.db.table("campaign_dispatch").upsert([{
+                            "id": str(dispatch_id),
+                            "campaign_id": str(campaign_id),
+                            "subscriber_id": str(task_row["c_id"]),
+                            "status": "CANCELLED",
+                            "updated_at": "now()",
+                        }], on_conflict="id").execute()
+                        await self._check_campaign_completion(str(campaign_id))
+                        await message.ack()
                         return
                 except Exception:
                     pass

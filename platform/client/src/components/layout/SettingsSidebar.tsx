@@ -27,7 +27,6 @@ const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
     {
         label: 'Account',
         items: [
-            { href: '/account',               icon: User,      label: 'Account Center' },
             { href: '/settings/preferences',   icon: Sliders,   label: 'Preferences' },
             { href: '/settings/notifications', icon: Bell,      label: 'Notifications' },
         ],
