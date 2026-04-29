@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 
 function CallbackContent() {
-    const { handleAuthSuccess } = useAuth();
+    const { handleAuthSuccess, finishAuthFlow } = useAuth();
     const searchParams = useSearchParams();
     const router = useRouter();
     const [error, setError] = useState('');
@@ -23,6 +23,7 @@ function CallbackContent() {
         const token = searchParams.get('token');
         if (token) {
             try {
+                sessionStorage.setItem('post_auth_flow_pending', '1');
                 const data = {
                     token,
                     user_id: searchParams.get('user_id'),
@@ -37,19 +38,20 @@ function CallbackContent() {
 
                 const userData = handleAuthSuccess(data);
 
-                if (userData.tenantStatus === 'onboarding') {
-                    router.push('/onboarding/workspace');
-                } else {
-                    router.push('/dashboard');
-                }
+                finishAuthFlow(token, userData).catch((error) => {
+                    sessionStorage.removeItem('post_auth_flow_pending');
+                    console.error("Failed to resolve callback destination", error);
+                    router.push(userData.tenantStatus === 'onboarding' ? '/onboarding/workspace' : '/dashboard');
+                });
             } catch (err) {
+                sessionStorage.removeItem('post_auth_flow_pending');
                 console.error("Failed to establish session", err);
                 setError('Failed to securely establish session.');
             }
         } else {
             setError('Invalid callback response from provider');
         }
-    }, [searchParams, handleAuthSuccess, router]);
+    }, [searchParams, handleAuthSuccess, finishAuthFlow, router]);
 
     if (error) {
         return (

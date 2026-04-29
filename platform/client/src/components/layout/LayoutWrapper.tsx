@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import SettingsSidebar from "@/components/layout/SettingsSidebar";
 import Header from "@/components/layout/Header";
+import AccountShell from "@/components/layout/AccountShell";
 
 interface LayoutWrapperProps {
     children: React.ReactNode;
@@ -21,6 +22,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     const publicRoutes = ['/', '/login', '/signup', '/docs', '/forgot-password', '/reset-password', '/verify-email', '/waiting-room', '/team/join', '/contact', '/pricing', '/auth/callback', '/unsubscribe'];
     const isPublicRoute = publicRoutes.includes(pathname || '');
     const isOnboardingRoute = pathname?.startsWith('/onboarding');
+    const isAccountRoute = pathname?.startsWith('/account');
     const isSettingsRoute = pathname?.startsWith('/settings');
 
     // Full-screen routes are reserved for focused builders/editors only.
@@ -30,14 +32,17 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         )
     );
 
+    // Account routes live outside workspace chrome and should feel identity-scoped.
+    const showAccountChrome = !isPublicRoute && !isOnboardingRoute && !isFullScreenRoute && isAuthenticated && isAccountRoute;
+
     // Settings use their own local rail and should not compete with the full app sidebar.
-    const showAppChrome = !isPublicRoute && !isOnboardingRoute && !isFullScreenRoute && isAuthenticated;
+    const showAppChrome = !isPublicRoute && !isOnboardingRoute && !isFullScreenRoute && isAuthenticated && !isAccountRoute;
     const showSidebar = showAppChrome;
     const showHeader = showAppChrome;
 
 
     // Show loading state
-    const isRedirectingToOnboarding = isAuthenticated && user?.tenantStatus === 'onboarding' && !isOnboardingRoute && !isPublicRoute;
+    const isRedirectingToOnboarding = isAuthenticated && user?.tenantStatus === 'onboarding' && !isOnboardingRoute && !isPublicRoute && !isAccountRoute;
     if (isLoading || isRedirectingToOnboarding || (showAppChrome && !currentWorkspace)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[var(--bg-primary)]">
@@ -46,6 +51,10 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
                 </div>
             </div>
         );
+    }
+
+    if (showAccountChrome) {
+        return <AccountShell>{children}</AccountShell>;
     }
 
     return (

@@ -558,6 +558,73 @@ graph TD
 - Planned: RLS.
 - Actual: RLS heavily enforced. Migration from Supabase PostgREST to `asyncpg` connection pool to allow `SET LOCAL app.current_tenant_id` for true transaction-level data isolation.
 
+## Phase 1.8 — Account Layer & Workspace Navigation
+
+### WHY
+- Multi-workspace UX problem
+- Need for centralized navigation
+- Prevent onboarding inconsistencies
+- Enable scalable SaaS structure
+
+### ARCHITECTURE PRINCIPLE
+Account = identity + navigation
+Workspace = business logic
+
+🚫 No business logic in account layer
+
+### ONBOARDING ALIGNMENT
+- onboarding is workspace-scoped
+- tied to tenant_id
+- runs per workspace
+- not global per user
+
+### FLOW DEFINITIONS
+- New user → create workspace → onboarding → enter
+- 1 workspace → direct entry
+- multiple → account dashboard
+- new workspace → onboarding again
+
+**[BACKEND]**
+- Add `GET /account/workspaces`
+- Add `GET /account/invitations`
+- Add `POST /account/switch`
+- Add `user_preferences` table:
+  - `user_id`
+  - `last_active_tenant_id`
+- Add `workspace_creation_logs` table:
+  - `user_id`
+  - `created_at`
+  - `ip_address`
+- Add workspace limit per user
+- Add creation rate limiting
+
+**[FRONTEND]**
+- `/account` dashboard
+- workspace list UI
+- invitations section
+- create workspace button
+- workspace switcher (global header)
+- smart login routing:
+  - `1 workspace` → direct
+  - `multiple` → `/account`
+
+### INTEGRATION
+- uses Phase 1 auth system
+- integrates Phase 1.7 invitations
+- does NOT affect Phase 2+
+
+### ROLLOUT PLAN
+- A → backend
+- B → switcher
+- C → dashboard
+- D → routing
+
+### CRITICAL RULES
+- no business logic in account layer
+- tenant isolation must remain
+- all APIs validate `tenant_users`
+- no regression allowed
+
 ## Phase 2 — Contacts Engine
 **WHY:** Contacts are the core dataset. This phase creates a stable, scalable lifecycle for importing, managing, suppressing, and tagging audiences.
 
@@ -2644,4 +2711,3 @@ graph TD
   - Overall excellent coverage of empty states (`EmptyState` component) and loading spinners across primary entities.
 
 ---
-

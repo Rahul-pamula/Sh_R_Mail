@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { fetchAccountWorkspaces } from '@/lib/account';
 
 interface User {
     userId: string;
@@ -32,6 +33,7 @@ interface AuthContextType {
     signup: (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string) => Promise<void>;
     logout: () => Promise<void>;
     handleAuthSuccess: (data: any, emailOverride?: string) => User;
+    finishAuthFlow: (tokenOverride?: string | null, userOverride?: User | null, redirectPath?: string) => Promise<void>;
     refreshUserStatus: () => Promise<void>;
     updateUserContext: (updates: Partial<User>) => void;
     switchWorkspace: (tenantId: string) => Promise<void>;
@@ -45,12 +47,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const VALID_THEMES = new Set(['light', 'dark', 'system']);
+const POST_AUTH_FLOW_KEY = 'post_auth_flow_pending';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceState | null>(null);
+    const [isResolvingDestination, setIsResolvingDestination] = useState(false);
 
     useEffect(() => {
         console.log("Workspace:", currentWorkspace);
@@ -105,6 +109,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return userData;
     }, []);
 
+    const finishAuthFlow = useCallback(async (tokenOverride?: string | null, userOverride?: User | null, redirectPath?: string) => {
+        const activeToken = tokenOverride || localStorage.getItem('auth_token');
+        const storedUser = (() => {
+            if (typeof window === 'undefined') return null;
+            const raw = localStorage.getItem('user_data');
+            return raw ? JSON.parse(raw) as User : null;
+        })();
+        const activeUser = userOverride || storedUser;
+
+        if (!activeToken || !activeUser) {
+            router.push('/login');
+            return;
+        }
+
+        setIsResolvingDestination(true);
+        try {
+            if (activeUser.tenantStatus === 'pending_join') {
+                sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+                const inviteRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/account/invitations`, {
+                    headers: { Authorization: `Bearer ${activeToken}` },
+                });
+                if (inviteRes.ok) {
+                    const invitations = await inviteRes.json();
+                    if (Array.isArray(invitations) && invitations.length > 0) {
+                        router.push('/account');
+                        return;
+                    }
+                }
+
+                router.push('/waiting-room');
+                return;
+            }
+
+            const workspaces = await fetchAccountWorkspaces(activeToken);
+            if (!Array.isArray(workspaces) || workspaces.length === 0) {
+                sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+                router.push('/account');
+                return;
+            }
+
+            if (workspaces.length > 1) {
+                sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+                router.push('/account');
+                return;
+            }
+
+            const onlyWorkspace = workspaces[0];
+            if (onlyWorkspace?.status === 'onboarding' || activeUser.tenantStatus === 'onboarding') {
+                sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+                router.push('/onboarding/workspace');
+                return;
+            }
+
+            sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+            router.push(redirectPath || '/dashboard');
+        } catch (error) {
+            console.error('Failed to resolve post-auth route:', error);
+            sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+            router.push(activeUser.tenantStatus === 'onboarding' ? '/onboarding/workspace' : (redirectPath || '/dashboard'));
+        } finally {
+            setIsResolvingDestination(false);
+        }
+    }, [router]);
+
     // Check for existing session on mount
     useEffect(() => {
         const checkAuth = async () => {
@@ -141,7 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         if (VALID_THEMES.has(meData.theme_preference)) {
                             setTheme(meData.theme_preference);
                         }
-                        handleAuthSuccess({ ...meData, token });
+                        const hydratedUser = handleAuthSuccess({ ...meData, token });
+                        if (pathname === '/login' || pathname === '/signup') {
+                            await finishAuthFlow(token, hydratedUser);
+                        }
                     } else if (meRes.status === 401) {
                         // 3. Token expired? Attempt silent refresh
                         console.log('Access token expired, attempting silent refresh...');
@@ -154,7 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             });
                             if (retryRes.ok) {
                                 const retryData = await retryRes.json();
-                                handleAuthSuccess({ ...retryData, token: newToken });
+                                const refreshedUser = handleAuthSuccess({ ...retryData, token: newToken });
+                                if (pathname === '/login' || pathname === '/signup') {
+                                    await finishAuthFlow(newToken, refreshedUser);
+                                }
                             } else {
                                 console.warn('Retry after refresh failed');
                                 logout();
@@ -175,71 +249,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [handleAuthSuccess]);
+    }, [finishAuthFlow, handleAuthSuccess, pathname, setTheme]);
 
 
 
     // Protect routes
     useEffect(() => {
-        if (isLoading) return;
+        if (isLoading || isResolvingDestination) return;
 
         const publicRoutes = ['/', '/login', '/signup', '/docs', '/forgot-password', '/reset-password', '/verify-email', '/waiting-room', '/team/join', '/contact', '/pricing', '/auth/callback', '/unsubscribe'];
         const isPublicRoute = publicRoutes.includes(pathname || '');
         const isOnboardingRoute = pathname?.startsWith('/onboarding');
+        const isAccountRoute = pathname?.startsWith('/account');
 
         if (!isAuthenticated && !isPublicRoute && !isOnboardingRoute) {
             if (pathname !== '/login') router.push('/login');
             return;
         }
 
-        // Production Hardening: Check if the user has an active alternative to avoid the "Onboarding Trap"
-        // We do this BEFORE the isOnboardingRoute return to allow escaping even if already on the onboarding page.
-        if (isAuthenticated && user?.tenantStatus === 'onboarding' && !isPublicRoute) {
-            const checkEscape = async () => {
-                try {
-                    const wsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/workspaces`, {
-                        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
-                    });
-                    if (wsRes.ok) {
-                        const workspaces = await wsRes.json();
-                        const activeWs = workspaces.find((w: any) => w.status === 'active');
-                        if (activeWs) {
-                            console.log("Onboarding Trap Detected: Switching to active workspace", activeWs.tenant_id);
-                            await switchWorkspace(activeWs.tenant_id);
-                            return true;
-                        }
-                    }
-                } catch (err) {
-                    console.warn("Failed to check alternative workspaces during onboarding guard", err);
-                }
-                return false;
-            };
-
-            checkEscape().then(escaped => {
-                if (!escaped && !isOnboardingRoute && pathname !== '/onboarding/workspace') {
-                    router.push('/onboarding/workspace');
-                }
-            });
-            
-            // If already on onboarding route, we still want to return early to prevent further logic
-            if (isOnboardingRoute) return;
+        if (isAuthenticated && user?.tenantStatus === 'onboarding' && !isPublicRoute && !isOnboardingRoute && !isAccountRoute) {
+            router.push('/onboarding/workspace');
+            return;
         }
 
-        if (isOnboardingRoute && isAuthenticated) return;
+        if (isOnboardingRoute && isAuthenticated && user?.tenantStatus === 'onboarding') return;
 
-        if (isAuthenticated && user?.tenantStatus === 'pending_join' && pathname !== '/waiting-room' && !isPublicRoute) {
+        if (isAuthenticated && user?.tenantStatus === 'pending_join' && pathname !== '/waiting-room' && !isPublicRoute && !isAccountRoute) {
             router.push('/waiting-room');
             return;
         }
 
-        if (isAuthenticated && user?.tenantStatus === 'active' && (pathname === '/login' || pathname === '/signup')) {
-            router.push('/dashboard');
+        const hasPendingPostAuthFlow = typeof window !== 'undefined' && sessionStorage.getItem(POST_AUTH_FLOW_KEY) === '1';
+
+        if (isAuthenticated && hasPendingPostAuthFlow) {
+            finishAuthFlow(localStorage.getItem('auth_token'), user).catch((error) => {
+                console.error('Failed to recover post-auth destination:', error);
+            });
             return;
         }
-    }, [isLoading, isAuthenticated, pathname, user]);
+
+        if (isAuthenticated && (pathname === '/login' || pathname === '/signup')) {
+            finishAuthFlow(localStorage.getItem('auth_token'), user).catch((error) => {
+                console.error('Failed to resolve authenticated auth-route destination:', error);
+            });
+            return;
+        }
+    }, [finishAuthFlow, isLoading, isAuthenticated, isResolvingDestination, pathname, router, user]);
 
     const login = async (email: string, password: string, redirectPath?: string) => {
         setIsLoading(true);
+        sessionStorage.setItem(POST_AUTH_FLOW_KEY, '1');
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
                 method: 'POST',
@@ -255,14 +314,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await response.json();
             const userData = handleAuthSuccess(data, email);
 
-            if (userData.tenantStatus === 'pending_join') {
-                router.push('/waiting-room');
-            } else if (userData.tenantStatus === 'onboarding') {
-                router.push('/onboarding/workspace');
-            } else {
-                router.push(redirectPath || '/dashboard');
-            }
+            await finishAuthFlow(data.token, userData, redirectPath);
         } catch (error) {
+            sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
             console.error('Login error:', error);
             throw error;
         } finally {
@@ -291,6 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             await login(email, password, redirectPath);
         } catch (error) {
+            sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
             console.error('Signup error:', error);
             throw error;
         } finally {
@@ -395,7 +450,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const token = localStorage.getItem('auth_token');
             if (!token) throw new Error("No token found");
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/switch-workspace`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/account/switch`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -407,10 +462,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!response.ok) throw new Error('Failed to switch workspace');
 
             const data = await response.json();
-            handleAuthSuccess(data);
-            
-            // Full redirect to clear any state/guards
-            window.location.href = '/dashboard';
+            const userData = handleAuthSuccess(data);
+            const nextPath = userData.tenantStatus === 'onboarding' ? '/onboarding/workspace' : '/dashboard';
+            window.location.href = nextPath;
         } catch (error) {
             console.error('Workspace switch error:', error);
             throw error;
@@ -468,6 +522,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 signup,
                 logout,
                 handleAuthSuccess,
+                finishAuthFlow,
                 refreshUserStatus,
                 updateUserContext,
                 switchWorkspace,

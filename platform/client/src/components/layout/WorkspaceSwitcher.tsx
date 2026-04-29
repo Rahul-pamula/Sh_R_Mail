@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Building2, ChevronDown, Check, Plus, Loader2 } from 'lucide-react';
+import { Building2, ChevronDown, Check, Plus, Loader2, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 interface Workspace {
@@ -14,9 +14,10 @@ interface Workspace {
 
 interface WorkspaceSwitcherProps {
     collapsed?: boolean;
+    variant?: 'sidebar' | 'header';
 }
 
-export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitcherProps) {
+export default function WorkspaceSwitcher({ collapsed = false, variant = 'sidebar' }: WorkspaceSwitcherProps) {
     const { user, currentWorkspace: activeWorkspace, token, switchWorkspace } = useAuth();
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -76,6 +77,7 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
 
     const displayName = activeWorkspace?.name || activeInList?.company_name || user?.tenantId?.slice(0, 8) || 'Workspace';
     const initial = displayName.charAt(0).toUpperCase();
+    const isHeader = variant === 'header';
 
     const normalizeRole = (role: string) => role?.toUpperCase() || 'VIEWER';
     const formatRole = (role: string) => {
@@ -95,7 +97,7 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
     };
 
     // Collapsed mode: just show the workspace initial
-    if (collapsed) {
+    if (!isHeader && collapsed) {
         return (
             <div className="px-2 mb-2">
                 <button
@@ -112,15 +114,16 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
     }
 
     return (
-        <div className="px-3 mb-3 relative" ref={dropdownRef}>
+        <div className={isHeader ? 'relative' : 'px-3 mb-3 relative'} ref={dropdownRef}>
             {/* Trigger Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
-                    w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all duration-150
+                    flex items-center gap-3 rounded-lg border transition-all duration-150
                     ${isOpen
                         ? 'border-[var(--accent)]/40 bg-[var(--accent)]/5 shadow-sm shadow-[var(--accent)]/10'
                         : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] hover:border-[var(--border)]'}
+                    ${isHeader ? 'min-w-[220px] px-3 py-2' : 'w-full p-2.5'}
                 `}
             >
                 {/* Workspace Icon */}
@@ -133,9 +136,9 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
                     <p className="text-[13px] font-semibold text-[var(--text-primary)] truncate leading-tight">
                         {displayName}
                     </p>
-                    {activeWorkspace && (
-                        <p className={`text-[10px] font-medium uppercase tracking-wider leading-tight mt-0.5 ${roleColor(activeWorkspace.role)}`}>
-                            {formatRole(activeWorkspace.role)}
+                    {(activeWorkspace || activeInList) && (
+                        <p className={`text-[10px] font-medium uppercase tracking-wider leading-tight mt-0.5 ${roleColor((activeWorkspace || activeInList).role)}`}>
+                            {formatRole((activeWorkspace || activeInList).role)}
                         </p>
                     )}
                 </div>
@@ -146,7 +149,7 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
 
             {/* Dropdown */}
             {isOpen && (
-                <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl shadow-2xl shadow-black/20 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className={`${isHeader ? 'absolute right-0 top-full mt-2 w-[320px]' : 'absolute left-3 right-3 top-full mt-1'} z-50 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl shadow-2xl shadow-black/20 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150`}>
                     {/* Header */}
                     <div className="px-3 py-2 border-b border-[var(--border)]">
                         <p className="text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-60">
@@ -221,15 +224,18 @@ export default function WorkspaceSwitcher({ collapsed = false }: WorkspaceSwitch
                         </div>
                     )}
 
-                    {/* Create new workspace link */}
+                    {/* Account center link */}
                     <div className="border-t border-[var(--border)] p-1">
                         <Link
-                            href="/onboarding/new"
+                            href="/account"
                             onClick={() => setIsOpen(false)}
-                            className="flex items-center gap-2 px-3 py-2 text-[13px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
+                            className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
-                            Create New Workspace
+                            <span className="flex items-center gap-2">
+                                <Plus className="w-4 h-4" />
+                                Account Center
+                            </span>
+                            <ArrowRight className="w-4 h-4" />
                         </Link>
                     </div>
                 </div>

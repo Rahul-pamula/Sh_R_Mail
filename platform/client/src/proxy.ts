@@ -4,6 +4,14 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
+    if (pathname === '/settings/security') {
+        return NextResponse.redirect(new URL('/account/security', request.url));
+    }
+
+    if (pathname === '/onboarding/new') {
+        return NextResponse.redirect(new URL('/account?create=true', request.url));
+    }
+
     // Get auth token from cookies or localStorage (via header)
     const token = request.cookies.get('auth_token')?.value;
 
@@ -16,9 +24,10 @@ export function proxy(request: NextRequest) {
 
     // Onboarding routes
     const isOnboardingRoute = pathname.startsWith('/onboarding');
+    const isAccountRoute = pathname.startsWith('/account');
 
     // Protected app routes
-    const isProtectedRoute = ['/dashboard', '/campaigns', '/contacts', '/analytics'].some(
+    const isProtectedRoute = ['/dashboard', '/campaigns', '/contacts', '/analytics', '/account'].some(
         route => pathname.startsWith(route)
     );
 
@@ -36,12 +45,11 @@ export function proxy(request: NextRequest) {
 
     const allowUnverifiedRoutes = ['/verify-email', '/logout'];
 
-    // Rule 2: If has token and on auth route → redirect based on status
+    // Rule 2: Auth routes must stay account-aware.
+    // Let the client resolve 1-workspace vs multi-workspace vs pending-join
+    // instead of forcing everyone to dashboard from the edge.
     if (token && isAuthRoute) {
-        if (tenantStatus === 'onboarding') {
-            return NextResponse.redirect(new URL('/onboarding/workspace', request.url));
-        }
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.next();
     }
 
     // Rule 2.5: Email verification gate for protected routes
@@ -51,12 +59,12 @@ export function proxy(request: NextRequest) {
 
     // Rule 3: STRICT DASHBOARD ACCESS CONTROL
     // If user is accessing dashboard but status is 'onboarding' → FORCE redirect to onboarding
-    if (token && isProtectedRoute && tenantStatus === 'onboarding') {
+    if (token && isProtectedRoute && tenantStatus === 'onboarding' && !isAccountRoute) {
         return NextResponse.redirect(new URL('/onboarding/workspace', request.url));
     }
 
     // Rule 4: If user is 'active' and tries to access onboarding pages → redirect to dashboard
-    if (token && isOnboardingRoute && tenantStatus === 'active') {
+    if (token && isOnboardingRoute && tenantStatus === 'active' && pathname !== '/onboarding/new') {
         return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
