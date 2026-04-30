@@ -6,10 +6,14 @@ import { Mail, Lock, Building2, User, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { AuthShell } from '@/components/auth';
 import { Button, InlineAlert, Input } from '@/components/ui';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 export default function SignupPage() {
     const { signup } = useAuth();
+    const router = useRouter();
+    const { executeRecaptcha } = useGoogleReCaptcha();
     const searchParams = useSearchParams();
     const redirectPath = searchParams.get('redirect'); // e.g. /team/join?token=xxx
     const isInviteFlow = !!redirectPath;
@@ -34,6 +38,17 @@ export default function SignupPage() {
             return;
         }
 
+        // 1. Execute CAPTCHA
+        let captchaToken = '';
+        if (executeRecaptcha) {
+            try {
+                captchaToken = await executeRecaptcha('signup');
+            } catch (err) {
+                console.error('reCAPTCHA execution failed:', err);
+                // Fall through, backend will handle if it's strictly required
+            }
+        }
+
         try {
             await signup(
                 formData.email,
@@ -42,9 +57,12 @@ export default function SignupPage() {
                 isInviteFlow ? '' : formData.tenant_name,
                 formData.first_name,
                 formData.last_name,
-                redirectPath || undefined
+                redirectPath || undefined,
+                captchaToken
             );
-            // Auth context handles the redirect (back to /team/join if invite flow)
+            
+            // Redirect to OTP verification page
+            router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
         } catch (err: any) {
             setError(err.message || 'Error creating account');
             setIsSubmitting(false);

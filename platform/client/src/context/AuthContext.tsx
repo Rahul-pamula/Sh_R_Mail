@@ -14,6 +14,7 @@ interface User {
     role: 'OWNER' | 'ADMIN' | 'CREATOR' | 'VIEWER';
     workspaceType: 'MAIN' | 'FRANCHISE';
     workspaceName: string;
+    emailVerified: boolean;
     onboardingRequired?: boolean;
 }
 
@@ -29,8 +30,8 @@ interface AuthContextType {
     isLoading: boolean;
     currentWorkspace: WorkspaceState | null;
     token: string | null;
-    login: (email: string, password: string, redirectPath?: string) => Promise<void>;
-    signup: (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string) => Promise<void>;
+    login: (email: string, password: string, redirectPath?: string, captchaToken?: string) => Promise<void>;
+    signup: (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string, captchaToken?: string) => Promise<void>;
     logout: () => Promise<void>;
     handleAuthSuccess: (data: any, emailOverride?: string) => User;
     finishAuthFlow: (tokenOverride?: string | null, userOverride?: User | null, redirectPath?: string) => Promise<void>;
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             onboardingRequired: data.onboarding_required === true || data.onboarding_required === 'true',
             workspaceType: (data.workspace_type || 'MAIN').toUpperCase() as 'MAIN' | 'FRANCHISE',
             workspaceName: data.workspace_name || 'Workspace',
+            emailVerified: data.email_verified === true || data.email_verified === 'true',
             role: (validRoles.includes(role) ? role : 'VIEWER') as User['role'],
         };
 
@@ -125,6 +127,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setIsResolvingDestination(true);
         try {
+            if (!activeUser.emailVerified) {
+                // EXCEPTION: Franchise workspace viewers bypass OTP verification for simplicity (or whatever your business logic dictates)
+                if (activeUser.role !== 'owner' && activeUser.workspaceType === 'FRANCHISE') {
+                    // Let them through
+                } else {
+                    sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
+                    router.push(`/verify-email?email=${encodeURIComponent(activeUser.email)}`);
+                    return;
+                }
+            }
+
             if (activeUser.tenantStatus === 'pending_join') {
                 sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
                 const inviteRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/account/invitations`, {
@@ -267,6 +280,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
+        if (isAuthenticated && !user?.emailVerified && !isPublicRoute) {
+            router.push(`/verify-email?email=${encodeURIComponent(user?.email || '')}`);
+            return;
+        }
+
         if (isAuthenticated && user?.tenantStatus === 'onboarding' && !isPublicRoute && !isOnboardingRoute && !isAccountRoute) {
             router.push('/onboarding/workspace');
             return;
@@ -296,14 +314,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [finishAuthFlow, isLoading, isAuthenticated, isResolvingDestination, pathname, router, user]);
 
-    const login = async (email: string, password: string, redirectPath?: string) => {
+    const login = async (email: string, password: string, redirectPath?: string, captchaToken?: string) => {
         setIsLoading(true);
         sessionStorage.setItem(POST_AUTH_FLOW_KEY, '1');
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email, password, captcha_token: captchaToken }),
             });
 
             if (!response.ok) {
@@ -324,7 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const signup = async (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string) => {
+    const signup = async (email: string, password: string, tenantName: string, firstName?: string, lastName?: string, redirectPath?: string, captchaToken?: string) => {
         setIsLoading(true);
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/signup`, {
@@ -334,7 +352,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     email,
                     password,
                     full_name: `${firstName || ''} ${lastName || ''}`.trim() || email.split('@')[0],
-                    ...(tenantName ? { tenant_name: tenantName } : {})
+                    ...(tenantName ? { tenant_name: tenantName } : {}),
+                    captcha_token: captchaToken
                 }),
             });
 

@@ -64,7 +64,7 @@ phases = [
     {"text": "[BACKEND] All onboarding endpoints use JWT-only tenant resolution consistently", "done": True},
     {"text": "[FRONTEND] Login page", "done": True},
     {"text": "[FRONTEND] Signup page", "done": True},
-    {"text": "[FRONTEND] reCAPTCHA on Signup form", "done": False},
+    {"text": "[FRONTEND] reCAPTCHA on Signup form", "done": True},
     {"text": "[FRONTEND] Onboarding wizard (workspace > use-case > integrations > scale > complete)", "done": True},
     {"text": "[FRONTEND] Interactive onboarding checklist on dashboard", "done": True},
     {"text": "[FRONTEND] Sidebar navigation layout", "done": True},
@@ -76,14 +76,14 @@ phases = [
     {"text": "[SECURITY] Onboarding tenants are blocked from active-tenant routes", "done": True},
     {"text": "[SECURITY] Social Auth (Google, GitHub) via OAuth 2.0 / Supabase", "done": True},
     {"text": "[SECURITY] Rate limiting on login + registration endpoints (per IP, per email)", "done": False},
-    {"text": "[SECURITY] Email verification required before onboarding completes", "done": False},
-    {"text": "[SECURITY] Short-lived access tokens (15-30 min) + silent refresh tokens", "done": False},
-    {"text": "[SECURITY] Token revocation via token_version counter (force-logout all devices)", "done": False},
+    {"text": "[SECURITY] Email verification required before onboarding completes (OTP-based)", "done": True},
+    {"text": "[SECURITY] Short-lived access tokens (15-30 min) + silent refresh tokens", "done": True},
+    {"text": "[SECURITY] Token revocation via token_version counter (force-logout all devices)", "done": True},
   ]},
   {"title": "PHASE 1.5 — Auth Hardening & Audit Logging", "tasks": [
     {"text": "[BACKEND] Remove custom /auth/forgot-password endpoint", "done": True},
     {"text": "[BACKEND] Remove custom /auth/reset-password endpoint", "done": True},
-    {"text": "[BACKEND] reCAPTCHA token verification endpoint/middleware", "done": False},
+    {"text": "[BACKEND] reCAPTCHA token verification endpoint/middleware", "done": True},
     {"text": "[BACKEND] Audit logs table (who did what, when, on which record — metadata only)", "done": True},
     {"text": "[BACKEND] Audit log table is write-only / immutable (no UPDATE or DELETE allowed)", "done": False},
     {"text": "[BACKEND] Log severity levels: INFO / WARNING / CRITICAL on every log row", "done": False},
@@ -378,6 +378,37 @@ phases = [
     {"text": "[SCALE] Circuit breaker on SES SMTP (fail fast on consecutive failures, auto-reset)", "done": False},
     {"text": "[SCALE] Cost monitoring dashboard (per-tenant SES cost vs plan revenue)", "done": False},
   ]},
+  {"title": "PHASE 14 — Platform Command Center (Master Admin)", "tasks": [
+    {"text": "[BACKEND] Super-Admin API (tenant management, billing overrides, global stats)", "done": False},
+    {"text": "[BACKEND] Security: is_platform_admin middleware enforcement", "done": False},
+    {"text": "[BACKEND] Dynamic 'SEQ' Reputation Scoring (0-100)", "done": False},
+    {"text": "[BACKEND] Bounce-Rate 'Drift' Watchdog (anomaly detection)", "done": False},
+    {"text": "[BACKEND] 'Kill-Switch' Worker Logic (instant NACK on suspended tenants)", "done": False},
+    {"text": "[BACKEND] Privacy-Preserving Proxy (PII masking in Shadow Mode)", "done": False},
+    {"text": "[FRONTEND] Super Dashboard (platform-wide health & revenue)", "done": False},
+    {"text": "[FRONTEND] Tenant Directory with drill-down views", "done": False},
+    {"text": "[FRONTEND] Shadow Mode Header Toggle & Banner UI", "done": False},
+  ]},
+  {"title": "PHASE 15 — Internal Team Management & Staff RBAC", "tasks": [
+    {"text": "[BACKEND] Internal RBAC Matrix (Owner, Support Lead, Compliance, Viewer)", "done": False},
+    {"text": "[BACKEND] Staff Invitation System", "done": False},
+    {"text": "[BACKEND] Admin Audit Log (immutable employee history)", "done": False},
+    {"text": "[FRONTEND] Master Team Settings (employee management)", "done": False},
+    {"text": "[FRONTEND] Role-Aware UI (hiding/disabling sensitive admin actions)", "done": False},
+  ]},
+  {"title": "PHASE 16 — Unified Profile & Account Settings", "tasks": [
+    {"text": "[FRONTEND] User Profile Page (Avatar, Name, Password reset)", "done": False},
+    {"text": "[FRONTEND] Multi-Factor Authentication (MFA) setup UI", "done": False},
+    {"text": "[FRONTEND] Workspace Branding (Logo upload & Brand Colors)", "done": False},
+    {"text": "[FRONTEND] Global Billing Dashboard (Stripe history & upgrades)", "done": False},
+    {"text": "[FRONTEND] Workspace Member Management UI", "done": False},
+  ]},
+  {"title": "PHASE 17 — Advanced Intelligence & AI", "tasks": [
+    {"text": "[AI] Bayesian A/B/n Testing Engine (Multi-Armed Bandit)", "done": False},
+    {"text": "[AI] Machine Learning STO (Send-Time Optimization)", "done": False},
+    {"text": "[AI] Automatic 'Zombie' Removal (Sunset Policy worker)", "done": False},
+    {"text": "[AI] Smart Subject Suggestion (LLM-driven analysis)", "done": False},
+  ]},
 ]
 
 # Format task text with HTML badge for the [CATEGORY] prefix
@@ -531,8 +562,12 @@ html_template = """<!DOCTYPE html>
 </body>
 </html>"""
 
+# Determine docs path (same directory as this script)
+docs_dir = os.path.dirname(os.path.abspath(__file__))
+output_path = os.path.join(docs_dir, "progress.html")
+
 html_out = html_template.replace("MAGIC_JSON", json.dumps(formatted_phases))
-with open("progress.html", "w", encoding="utf-8") as f:
+with open(output_path, "w", encoding="utf-8") as f:
     f.write(html_out)
 
 print(f"Generated progress.html successfully! ({sum(len(p['tasks']) for p in phases)} total tasks across {len(phases)} phases)")

@@ -33,7 +33,8 @@ function CallbackContent() {
                     email: searchParams.get('email'),
                     full_name: searchParams.get('full_name'),
                     workspace_type: searchParams.get('workspace_type'),
-                    onboarding_required: searchParams.get('onboarding_required') === 'true'
+                    onboarding_required: searchParams.get('onboarding_required') === 'true',
+                    email_verified: searchParams.get('email_verified') === 'true'
                 };
 
                 const userData = handleAuthSuccess(data);

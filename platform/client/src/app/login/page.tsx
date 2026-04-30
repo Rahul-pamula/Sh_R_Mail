@@ -8,8 +8,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthShell } from '@/components/auth';
 import { Button, InlineAlert, Input } from '@/components/ui';
 
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+
 export default function LoginPage() {
     const { login } = useAuth();
+    const { executeRecaptcha } = useGoogleReCaptcha();
     const router = useRouter();
     const searchParams = useSearchParams();
     const [email, setEmail] = useState('');
@@ -30,8 +33,19 @@ export default function LoginPage() {
             return;
         }
 
+        // 1. Execute CAPTCHA
+        let captchaToken = '';
+        if (executeRecaptcha) {
+            try {
+                captchaToken = await executeRecaptcha('login');
+            } catch (err) {
+                console.error('reCAPTCHA execution failed:', err);
+                // Fall through, backend will handle if it's strictly required
+            }
+        }
+
         try {
-            await login(email, password);
+            await login(email, password, redirectPath, captchaToken);
             router.push(redirectPath);
         } catch (err: any) {
             setError(err.message || 'Invalid credentials');

@@ -899,9 +899,9 @@ async def request_campaign_review(
             pass
 
         try:
-            ws_res = db.client.table("tenants").select("name").eq("id", tenant_id).execute()
+            ws_res = db.client.table("tenants").select("workspace_name").eq("id", tenant_id).execute()
             if ws_res.data:
-                workspace_name = ws_res.data[0].get("name") or "your workspace"
+                workspace_name = ws_res.data[0].get("workspace_name") or ws_res.data[0].get("company_name") or "your workspace"
         except Exception:
             pass
 

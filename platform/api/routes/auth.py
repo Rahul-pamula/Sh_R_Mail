@@ -134,6 +134,12 @@ class LoginRequest(BaseModel):
     )
 
 
+class VerifyOtpRequest(BaseModel):
+    """Request to verify an email OTP"""
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+
+
 class AuthResponse(BaseModel):
     """Authentication response"""
     user_id: str
@@ -296,10 +302,45 @@ async def signup(request: Request, body_request: SignupRequest, response: Respon
     existing_user = user_repo.get_by_email(body_request.email)
 
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+        if existing_user.get("email_verified"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        else:
+            # User exists but is unverified.
+            # Update their password in case they entered a new one
+            password_hash = hash_password(body_request.password)
+            db.client.table("users").update({
+                "password_hash": password_hash,
+                "full_name": body_request.full_name
+            }).eq("id", existing_user["id"]).execute()
+
+            # Resend the OTP
+            from services.email_service import send_otp_email
+            import random
+
+            otp_code = "".join([str(random.randint(0, 9)) for _ in range(6)])
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+            auth_repo.create_email_verification_token(existing_user["id"], otp_code, expires_at.isoformat())
+            
+            await send_otp_email(body_request.email, otp_code)
+
+            # Return a generic response (frontend ignores this and instantly calls /login)
+            return AuthResponse(
+                user_id=existing_user["id"],
+                tenant_id="00000000-0000-0000-0000-000000000000",
+                token="dummy_token",
+                role="viewer",
+                onboarding_required=True,
+                tenant_status="onboarding",
+                email_verified=False,
+                full_name=body_request.full_name,
+                workspace_type="MAIN",
+                workspace_name="Workspace",
+                user_status="active",
+                deletion_scheduled_at=None
+            )
     
     # Generate IDs
     user_id = str(uuid.uuid4())
@@ -389,16 +430,17 @@ async def signup(request: Request, body_request: SignupRequest, response: Respon
         refresh_token = _create_refresh_token(user_id, tenant_id)
         _set_refresh_cookie(response, refresh_token)
 
-        # 7. Send email verification link
-        from services.email_service import send_email_verification
-        import secrets
+        # 7. Send email verification OTP
+        from services.email_service import send_otp_email
+        import random
 
-        verify_token = secrets.token_hex(64)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-        auth_repo.create_email_verification_token(user_id, verify_token, expires_at.isoformat())
+        otp_code = "".join([str(random.randint(0, 9)) for _ in range(6)])
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        auth_repo.create_email_verification_token(user_id, otp_code, expires_at.isoformat())
         
         # Fire and forget sending email
-        await send_email_verification(body_request.email, verify_token)
+        print(f"DEBUG: Calling send_otp_email for {body_request.email}")
+        await send_otp_email(body_request.email, otp_code)
         
         return _build_auth_response(
             user_id=user_id,
@@ -598,26 +640,33 @@ async def get_current_user(jwt_payload: JWTPayload = Depends(require_authenticat
 
     user = user_result.data[0]
 
-    tenant_res = (
-        db.client.table("tenants")
-        .select("company_name, workspace_name, organization_name")
-        .eq("id", jwt_payload.tenant_id)
-        .limit(1)
-        .execute()
-    )
-    tenant_info = tenant_res.data[0] if tenant_res.data else {}
-    workspace_name = (
-        tenant_info.get("company_name")
-        or tenant_info.get("workspace_name")
-        or tenant_info.get("organization_name")
-        or "Workspace"
-    )
+    # Fetch tenant name for workspace context
+    try:
+        tenant_result = db.client.table("tenants").select("workspace_name, company_name, workspace_type").eq("id", jwt_payload.tenant_id).execute()
+        if tenant_result.data:
+            workspace_name = tenant_result.data[0].get("workspace_name") or tenant_result.data[0].get("company_name") or "My Workspace"
+            workspace_type = tenant_result.data[0].get("workspace_type", "MAIN")
+        else:
+            workspace_name = "My Workspace"
+            workspace_type = "MAIN"
+    except Exception as e:
+        logger.warning(f"Failed to fetch workspace name: {e}")
+        workspace_name = "My Workspace"
+        workspace_type = "MAIN"
+        
+    # Check if we should enforce verification (only for primary accounts)
+    is_primary = workspace_type.lower() in ["primary", "main"]
+    
+    # If it's a franchise/secondary account, we bypass verification enforcement
+    effective_verified = user.get("email_verified", False)
+    if not is_primary:
+        effective_verified = True
 
     return {
         "user_id": user["id"],
         "email": user["email"],
         "full_name": user.get("full_name"),
-        "email_verified": user.get("email_verified", False),
+        "email_verified": effective_verified,
         "user_status": user.get("user_status", "active"),
         "deletion_scheduled_at": user.get("deletion_scheduled_at"),
         "theme_preference": user.get("theme_preference") or "system",
@@ -631,6 +680,71 @@ async def get_current_user(jwt_payload: JWTPayload = Depends(require_authenticat
         "onboarding_required": jwt_payload.onboarding_required
     }
 
+
+@router.post("/verify-otp")
+async def verify_otp(body: VerifyOtpRequest):
+    """
+    Verify a 6-digit OTP for email verification.
+    """
+    from utils.supabase_client import db
+    user_repo = UserRepository(db.client)
+    
+    # 1. Fetch user
+    user = user_repo.get_by_email(body.email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+    # 2. Check tokens table
+    res = db.client.table("email_verification_tokens").select("*").eq("user_id", user["id"]).eq("token", body.otp).execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+        
+    token_record = res.data[0]
+    expires_at = datetime.fromisoformat(token_record["expires_at"].replace("Z", "+00:00"))
+    
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
+        
+    # 3. Mark user as verified
+    db.client.table("users").update({"email_verified": True}).eq("id", user["id"]).execute()
+    
+    # 4. Cleanup token
+    db.client.table("email_verification_tokens").delete().eq("user_id", user["id"]).execute()
+    
+    return {"status": "success", "message": "Email verified successfully"}
+
+
+@router.post("/resend-otp")
+async def resend_otp(email: str):
+    """Resend a 6-digit OTP for email verification."""
+    from utils.supabase_client import db
+    from services.email_service import send_otp_email
+    import random
+    user_repo = UserRepository(db.client)
+    auth_repo = AuthRepository(db.client)
+    
+    user = user_repo.get_by_email(email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+    if user.get("email_verified"):
+        return {"status": "success", "message": "Email already verified"}
+        
+    # Generate new OTP
+    otp_code = "".join([str(random.randint(0, 9)) for _ in range(6)])
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    # Update or insert token
+    # First delete any existing to avoid duplicates if unique constraint exists
+    db.client.table("email_verification_tokens").delete().eq("user_id", user["id"]).execute()
+    auth_repo.create_email_verification_token(user["id"], otp_code, expires_at.isoformat())
+    
+    # Send email
+    print(f"DEBUG: Calling send_otp_email (resend) for {email}")
+    await send_otp_email(email, otp_code)
+    
+    return {"status": "success", "message": "Verification code resent"}
 
 @router.patch("/me/theme")
 @limiter.limit("10/minute")
@@ -1156,6 +1270,11 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         if not user.get("is_active", True):
             return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?error=AccountDisabled")
             
+        # If they use OAuth, we trust the provider and mark them as verified locally
+        if not user.get("email_verified"):
+            db.client.table("users").update({"email_verified": True}).eq("id", user["id"]).execute()
+            user["email_verified"] = True
+            
         # Production Hardening: Priority Workspace Selection
         # We fetch all memberships and prioritize 'active' workspaces over 'onboarding' ones.
         # This prevents users from being trapped in a junk/ghost workspace if they are members of a real one.
@@ -1348,7 +1467,8 @@ async def process_oauth_user(email: str, full_name: str, provider: str):
         "tenant_id": tenant_id,
         "role": normalize_public_role(role),
         "workspace_type": mapped_type,
-        "onboarding_required": "true" if onboarding_required else "false"
+        "onboarding_required": "true" if onboarding_required else "false",
+        "email_verified": "true"
     })
     
     return RedirectResponse(f"{FRONTEND_CALLBACK_URL}?{params}")

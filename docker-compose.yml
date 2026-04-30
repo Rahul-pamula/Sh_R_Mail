@@ -44,7 +44,8 @@ services:
       # NEVER enable this in production with multiple API replicas
       - ENABLE_EMBEDDED_CAMPAIGN_SCHEDULER=false
     volumes:
-      - ./platform/api/assets:/app/assets
+      - ./platform/api:/app/platform/api
+      - ./platform/api/assets:/app/platform/api/assets
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
@@ -75,6 +76,8 @@ services:
       - WORKER_PREFETCH_COUNT=10
       - WORKER_MAX_RETRIES=3
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./platform:/app/platform
     command: python email_sender.py
     depends_on:
       api:
@@ -107,6 +110,8 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - IMPORT_QUEUE_NAME=import_tasks_v4
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./platform:/app/platform
     command: python import_worker.py
     depends_on:
       api:
@@ -130,6 +135,8 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL}
       - REDIS_URL=${REDIS_URL}
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./platform:/app/platform
     command: python background_worker.py
     depends_on:
       api:
@@ -157,6 +164,8 @@ services:
       - REDIS_URL=${REDIS_URL}
       - SCHEDULER_POLL_INTERVAL=60
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./platform:/app/platform
     command: python scheduler.py
     depends_on:
       api:
@@ -185,6 +194,8 @@ services:
       - SYSTEM_SMTP_FROM_EMAIL=${SYSTEM_SMTP_FROM_EMAIL}
       - SYSTEM_SMTP_FROM_NAME=${SYSTEM_SMTP_FROM_NAME}
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./platform:/app/platform
     command: python centralized_email_worker.py
     depends_on:
       api:

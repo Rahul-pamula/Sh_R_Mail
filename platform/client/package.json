@@ -28,6 +28,7 @@
         "react": "^18",
         "react-dom": "^18",
         "react-email-editor": "^1.7.11",
+        "react-google-recaptcha-v3": "^1.11.0",
         "react-quill": "^2.0.0",
         "tailwind-merge": "^2.3.0"
     },

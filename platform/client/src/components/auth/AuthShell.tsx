@@ -6,7 +6,7 @@ import { SectionCard } from '@/components/ui';
 
 interface AuthShellProps {
     title: string;
-    description: string;
+    description: string | ReactNode;
     children: ReactNode;
     asideTitle?: string;
     asideDescription?: string;

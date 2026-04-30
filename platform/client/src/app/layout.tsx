@@ -17,6 +17,8 @@ export const metadata: Metadata = {
     description: "B2B email marketing and infrastructure platform",
 };
 
+import { CaptchaProvider } from "@/context/CaptchaProvider";
+
 export default function RootLayout({
     children,
 }: {
@@ -32,11 +34,13 @@ export default function RootLayout({
             <body className={inter.className}>
                 <ThemeProvider>
                     <AuthProvider>
-                        <ToastProvider>
-                            <LayoutWrapper>
-                                {children}
-                            </LayoutWrapper>
-                        </ToastProvider>
+                        <CaptchaProvider>
+                            <ToastProvider>
+                                <LayoutWrapper>
+                                    {children}
+                                </LayoutWrapper>
+                            </ToastProvider>
+                        </CaptchaProvider>
                     </AuthProvider>
                 </ThemeProvider>
             </body>

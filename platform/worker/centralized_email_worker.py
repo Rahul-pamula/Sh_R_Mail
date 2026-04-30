@@ -43,6 +43,7 @@ jinja_env = Environment(
 SUBJECTS = {
     "reset_password": "Reset your ShrFlow password",
     "verify_email": "Verify your ShrFlow account",
+    "verify_otp": "Your Verification Code — ShrFlow",
     "team_invite": "You've been invited to join a Workspace!",
     "access_request": "Action Required: New Workspace Access Request",
     "sender_verification": "Verify your sender address — ShrFlow",

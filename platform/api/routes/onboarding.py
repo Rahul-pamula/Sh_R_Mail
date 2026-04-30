@@ -146,7 +146,7 @@ async def get_onboarding_status(jwt_payload: JWTPayload = Depends(require_permis
     invite_data = None
     try:
         inv_res = db.client.table("team_invitations")\
-            .select("*, tenants(company_name)")\
+            .select("*, tenants!team_invitations_tenant_id_fkey(company_name)")\
             .eq("email", jwt_payload.email)\
             .eq("status", "pending")\
             .execute()

@@ -63,7 +63,7 @@ class RabbitMQManager:
                 durable=True,
                 arguments={
                     "x-dead-letter-exchange": "dead_letter_exchange",
-                    "x-dead-letter-routing-key": "email.failed"
+                    "x-dead-letter-routing-key": "task.failed"
                 }
             )
             await bg_queue.bind(self.bg_exchange, routing_key="task.process")
@@ -74,7 +74,7 @@ class RabbitMQManager:
                 durable=True,
                 arguments={
                     "x-dead-letter-exchange": "dead_letter_exchange",
-                    "x-dead-letter-routing-key": "email.failed"
+                    "x-dead-letter-routing-key": "task.failed"
                 }
             )
             await import_queue.bind(self.bg_exchange, routing_key="task.import")
