@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             if (!activeUser.emailVerified) {
                 // EXCEPTION: Franchise workspace viewers bypass OTP verification for simplicity (or whatever your business logic dictates)
-                if (activeUser.role !== 'owner' && activeUser.workspaceType === 'FRANCHISE') {
+                if (activeUser.role !== 'OWNER' && activeUser.workspaceType === 'FRANCHISE') {
                     // Let them through
                 } else {
                     sessionStorage.removeItem(POST_AUTH_FLOW_KEY);
