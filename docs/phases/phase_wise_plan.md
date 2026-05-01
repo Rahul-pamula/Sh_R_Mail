@@ -625,7 +625,89 @@ Workspace = business logic
 - all APIs validate `tenant_users`
 - no regression allowed
 
+---
+
+## Phase 1.9 — MCP Framework & Developer Intelligence
+**WHY:** Establish a standardized "AI-to-Code" bridge (Model Context Protocol) to allow AI agents to assist in system monitoring, debugging, and automated testing during the build process.
+
+### Phase 1.9 Architecture Flow
+
+```mermaid
+graph TD
+    classDef mcp fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:10px,ry:10px;
+    classDef logic fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef client fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:10px,ry:10px;
+    classDef storage fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,rx:5px,ry:5px;
+
+    AIClient([AI Client / Agent]) --> |"Talks via stdio/SSE"| MCPServer[ShrFlow MCP Server]
+    class AIClient client;
+    class MCPServer mcp;
+
+    subgraph MCPLayer [MCP Interface Layer]
+        Tools[MCP Tools: DB, Logs, Workers]
+        Resources[MCP Resources: Docs, Plans]
+        MCPServer --> Tools
+        MCPServer --> Resources
+        class Tools mcp;
+        class Resources mcp;
+    end
+
+    subgraph AppInternal [App Internal Logic]
+        DBLogic[Database / RLS Manager]
+        LogLogic[Log Tailing Service]
+        QueueLogic[RabbitMQ / Redis Monitor]
+        
+        Tools --> DBLogic
+        Tools --> LogLogic
+        Tools --> QueueLogic
+        class DBLogic logic;
+        class LogLogic logic;
+        class QueueLogic logic;
+    end
+
+    subgraph Persistence [Data & State]
+        PG[(PostgreSQL / Supabase)]
+        Redis[(Redis State)]
+        Docs[(Project Roadmap)]
+        
+        DBLogic --> PG
+        LogLogic --> Docs
+        QueueLogic --> Redis
+        class PG storage;
+        class Redis storage;
+        class Docs storage;
+    end
+```
+
+**[BACKEND]**
+- Initialize `scripts/mcp/` directory with `mcp_server.py` foundation using the Python MCP SDK.
+- Implement a shared database connection manager for MCP that respects existing Supabase credentials.
+- Define `db_inspector` tool to safely read database schema, column types, and RLS policy metadata.
+- Define `audit_viewer` tool to query immutable audit records chronologically for debugging.
+- Define `worker_monitor` tool to check RabbitMQ queue depths and active Redis distributed locks.
+- Implement resource providers for live-tailing application logs and project documentation.
+
+**[FRONTEND / DEV]**
+- Generate `mcp_config.json` template for AI Client (e.g., Claude Desktop) integration.
+- Expose `phase_wise_plan.md` as an MCP Resource to provide the AI with live project context.
+- Document local developer setup for connecting external AI models to the ShrFlow MCP server.
+
+**📋 Planned Tasks — Phase 1.9**
+- Initialize `scripts/mcp/` directory
+- Create `mcp_server.py` with FastMCP foundation
+- Implement shared DB connection utility for MCP
+- Add `db_inspector` tool (read schema/RLS)
+- Add `audit_viewer` tool (query audit_logs)
+- Add `worker_monitor` tool (query RabbitMQ/Redis)
+- Create `mcp_config.json` for AI client linking
+- Expose `phase_wise_plan.md` as an MCP Resource
+- Expose `/logs` as a tailing MCP Resource
+- Manual verification: Connect Claude Desktop to ShrFlow MCP and query DB schema
+
+---
+
 ## Phase 2 — Contacts Engine
+
 **WHY:** Contacts are the core dataset. This phase creates a stable, scalable lifecycle for importing, managing, suppressing, and tagging audiences.
 
 ### Phase 2 Architecture Flow
