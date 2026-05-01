@@ -16,7 +16,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
             defaultTheme="system"
             enableSystem
             disableTransitionOnChange
-            storageKey="shrmail-theme"
+            storageKey="shrflow-theme"
             {...props}
         >
             {children}
