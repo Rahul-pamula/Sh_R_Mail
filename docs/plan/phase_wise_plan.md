@@ -888,8 +888,8 @@ To support gigabyte-scale datasets without memory exhaustion, the import process
 - Planned: Async CSV import.
 - Actual: Highly robust S3-first upload -> RabbitMQ task -> Streaming chunked worker architecture. Eliminates API memory exhaustion.
 
-## Phase 3 — Template Engine & AI Content Creation
-**WHY:** Email content must be responsive, dynamic, and perfectly rendered across extreme client environments (Outlook, Gmail, Apple).
+## Phase 3 — Template Engine (REWRITTEN)
+**WHY:** Email content must be responsive, dynamic, and perfectly rendered across extreme client environments (Outlook, Gmail, Apple). To achieve this, the engine must transition from a "Visual Shell" to a "State-Driven Architectural Core."
 
 ### Phase 3 Architecture Flow
 
@@ -897,148 +897,215 @@ To support gigabyte-scale datasets without memory exhaustion, the import process
 graph TD
     classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
     classDef engine fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
-    classDef ai fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef worker fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
     classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
 
-    subgraph TemplateBuilder [Visual Block Editor]
-        Grid[Template Gallery & Presets]
-        Canvas[Drag-and-Drop Canvas <br> Rows/Cols/Blocks]
-        Preview[Mobile / Inbox Simulation UI]
+    subgraph DesignStudio [Frontend Design Studio]
+        Sidebar[Elements & Templates Sidebar]
+        Store[(Centralized Design Store <br> Zustand / Redux)]
+        Canvas[Reactive Canvas Renderer]
         
-        Grid --> Canvas
-        Canvas --> Preview
-        class Grid frontend;
+        Sidebar --> |"Dispatch Action"| Store
+        Store --> |"Reactive Update"| Canvas
+        class Sidebar frontend;
+        class Store frontend;
         class Canvas frontend;
-        class Preview frontend;
     end
 
-    subgraph ContentEngine [Template Processing API]
+    subgraph ProcessingLayer [Template Processing Engine]
+        API[Template Service API]
         Compiler[MJML compiler <br> JSON > HTML]
-        Plain[Plain-Text Auto-Generator]
-        Spam[Heuristic Spam Score Checker]
+        Validator[Layout Validation Service]
         
-        Canvas -.-> |"Sends design_json"| Compiler
-        Compiler --> Plain
-        Compiler --> Spam
+        Store -.-> |"Save design_json"| API
+        API --> Validator
+        Validator --> Compiler
+        class API engine;
         class Compiler engine;
-        class Plain engine;
-        class Spam engine;
+        class Validator engine;
     end
 
-    subgraph AIModule [AI Generation Layer]
-        Prompt[LLM Proxy Service]
-        Tone[Tone / Rewrite Adjustments]
+    subgraph AsyncOperations [Async Background Workers]
+        Thumbnail[Thumbnail Worker <br> Puppeteer / Headless]
+        Versioning[Version Snapshot Service]
+        Assets[Asset Manager <br> S3 / CDN]
         
-        Canvas --> |"Context Request"| Prompt
-        Prompt --> Tone
-        Tone -.-> |"Returns Text"| Canvas
-        class Prompt ai;
-        class Tone ai;
+        API --> |"Enqueue"| Thumbnail
+        API --> Versioning
+        Compiler --> Assets
+        class Thumbnail worker;
+        class Versioning worker;
+        class Assets worker;
     end
 
-    subgraph TemplateData [Storage & Versioning]
-        Templates[(Templates Table <br> design_json + HTML)]
-        Versions[(Version History <br> Snapshots)]
+    subgraph PersistenceLayer [Storage]
+        DB[(PostgreSQL <br> design_json + HTML)]
+        S3Storage[(S3 Object Storage)]
         
-        Compiler --> Templates
-        Templates --> Versions
-        class Templates database;
-        class Versions database;
+        API --> DB
+        Assets --> S3Storage
+        class DB database;
+        class S3Storage database;
     end
 
     classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
-    class TemplateBuilder dualBox;
-    class ContentEngine dualBox;
-    class AIModule dualBox;
-    class TemplateData dualBox;
+    class DesignStudio dualBox;
+    class ProcessingLayer dualBox;
+    class AsyncOperations dualBox;
+    class PersistenceLayer dualBox;
 ```
 
-**[BACKEND]**
-- Layout preservation logic persistently tracking complex Template JSON constructs.
-- MJML processing pipeline compiling abstract blocks into highly compliant render-safe HTML.
-- Template versioning creating immutable snapshots for draft restorations.
-- Plain-text auto-generation matching HTML changes automatically.
-- Email spam heuristic checker rating subject/body language.
-- **AI-Assisted Content Generation API**: Backend proxy to LLM endpoints designed to rewrite, adjust tone, or generate email copy dynamically based on tenant prompts.
+### 🧱 CORE ARCHITECTURE
+*   **DesignJSON as Single Source of Truth:** The system operates exclusively on a `DesignJSON` state. All visual edits are mutations of this JSON. The MJML and HTML outputs are transient, derived artifacts.
+*   **Strict Structural Schema:** Enforces a hierarchical scaffolding of **Rows → Columns → Blocks**. 
+    *   **Rows:** Control vertical stacking and background isolation.
+    *   **Columns:** Manage horizontal grid distribution (1-4 cols) with strict width calculations.
+    *   **Blocks:** Atomic units (Text, Image, Button) with type-specific validation schemas.
+*   **NO Free Positioning:** To guarantee 100% rendering stability across Outlook and Gmail, the editor enforces a "Flow Layout" only. Absolute "Canva-style" positioning is strictly prohibited.
 
-**[FRONTEND]**
-- Visually rich template gallery with selectable preset starting points.
-- Interactive structured block editor (Rows -> Columns -> Content Blocks).
-- Responsive view toggles forcing desktop vs mobile rendering simulation inside the canvas.
-- Inbox preview mode mocking specific visual anomalies of major clients.
-- Send test email functionality seamlessly embedding custom merge-tag dummy data.
-- **AI Copywriting Assistant UI**: Magic-wand contextual buttons generating subject lines or rewriting paragraphs inline inside the editor canvas.
+### ⚙️ SERVICES
+*   **Template Service:** Manages multi-tenant CRUD and RLS-enforced access to design states.
+*   **MJML Rendering Service:** A stateless microservice that transforms `DesignJSON` into compliant, table-based HTML with automatic CSS inlining.
+*   **Asset Manager Service:** Implements CDN-backed storage with **Dependency Tracking** (prevents deletion of images referenced in active templates).
+*   **Template Versioning Service:** Provides immutable snapshotting and **JSON-Patch diffing** for high-fidelity "Undo/Redo" and version restoration.
+*   **Thumbnail Generation Worker:** A BullMQ-backed headless browser (Puppeteer) service that auto-snapshots templates on every commit for the Library UI.
+*   **Layout Validation Service:** Performs server-side structural integrity checks before saving, ensuring no malformed JSON enters the persistence layer.
 
-**📋 Planned Tasks — Phase 3**
-- Template CRUD
-- Category
-- [ARCH] **RabbitMQ Rendering Worker** — Offload MJML-to-HTML transpilation to background workers for high performance.
-- [ARCH] **Thumbnail Generation Engine** — Automatically take headless screenshots of templates in the background for the library view.
-- [ARCH] **AssetManager Service** — Dedicated S3/CDN optimization pipeline for template images.
-- [UI] **Section-Based Editor (CKEditor 5)** — Structured, MJML-backed drag-and-drop sections that are "unbreakable" for users.
-- Persist compiled HTML from the active block editor
-- Preset gallery and preset-driven template creation
-- Template versioning (save history)
-- Plain text auto-generator (sync from HTML for spam filters)
-- Public View Online link (render template in browser without login)
-- Templates list page (grid of template cards with thumbnails)
-- Create template (blank canvas and preset entry flow)
-- Structured block editor (rows > columns > blocks)
-- Server-side compile preview (design_json > MJML > HTML)
-- Plain Text (Auto-generated) | Plain Text (Custom) tabs
-- Send test email button (enter email address > receive real email)
-- Duplicate template button
-- Category filter tabs on template list
-- Version history panel (see and restore older versions)
-- Dynamic placeholder guide (show list of {{merge_tags}} user can use)
-- Spam score checker (SpamAssassin-style heuristics before campaign send)
-- Mobile preview mode (375px viewport toggle in template editor)
-- Inbox preview simulation (Gmail, Outlook, Apple Mail rendering)
+### 🧩 EDITOR SYSTEM
+*   **Centralized State (Zustand/Redux):** The editor is driven by a global store, not local component state. This eliminates "stale state" bugs.
+*   **Unidirectional Flow:** **Sidebar/Elements → Store Actions → Canvas Re-render**.
+*   **Data-Driven Interaction:** Drag-and-drop actions are **JSON Mutations**, not DOM manipulations. Dropping a block updates the JSON array; the Canvas reactively renders the new data.
+*   **Block Registry:** A modular manifest defining properties, default values, and MJML mapping for every supported element.
+
+### 🎯 OUTPUTS
+*   **design_json:** Source state for the editor.
+*   **compiled_html:** Minified, inlined, and production-ready email payload.
+*   **plain_text:** Auto-generated text version derived from the JSON hierarchy for high deliverability.
 
 ---
 
----
+## Phase 3.5 — Pre-Send Validation Gateway (REWRITTEN)
+**WHY:** This is the **"Mandatory Security Layer"** that prevents campaign failure by blocking any email that doesn't meet strict rendering and data integrity standards.
+
+### Phase 3.5 Architecture Flow
+
+```mermaid
+graph TD
+    classDef gateway fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:10px,ry:10px;
+    classDef engine fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef sandbox fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef output fill:#64748b,stroke:#334155,stroke-width:2px,color:#fff,rx:5px,ry:5px;
+
+    Design([Design State]) --> Gateway{Validation Gateway}
+    class Design output;
+    class Gateway gateway;
+
+    subgraph IntegrityChecks [Data & Compliance Checks]
+        Token[Token Resolver <br> Fallback Engine]
+        Spam[Spam & Deliverability <br> Linter]
+        A11y[Accessibility Engine <br> Contrast/Size]
+        
+        Gateway --> Token
+        Gateway --> Spam
+        Gateway --> A11y
+        class Token engine;
+        class Spam engine;
+        class A11y engine;
+    end
+
+    subgraph SimulationLayer [Rendering Sandbox]
+        Mock[Mock Data Injector <br> Real Personas]
+        Sandbox[Isolated MJML Sandbox]
+        Mapper[Error-Block Mapper]
+        
+        Gateway --> Mock
+        Mock --> Sandbox
+        Sandbox --> Mapper
+        class Mock sandbox;
+        class Sandbox sandbox;
+        class Mapper sandbox;
+    end
+
+    subgraph Certification [Output & Blocking]
+        Report[Validation Report <br> Line-Level Errors]
+        Hash([Validation Hash / Cert])
+        
+        Token & Spam & A11y & Mapper --> Report
+        Report --> |"If 100% Pass"| Hash
+        class Report gateway;
+        class Hash output;
+    end
+
+    Hash --> Campaign[Phase 4: Campaign Engine]
+    class Campaign gateway;
+
+    classDef dualBox fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,stroke-dasharray: 4 4;
+    class IntegrityChecks dualBox;
+    class SimulationLayer dualBox;
+    class Certification dualBox;
+```
+
+### 🚨 THE BLOCKING GATEWAY LAYER
+No campaign can move to the "Sending" state without a **Pass Certificate** from this gateway.
+
+#### 1. Token Engine
+*   **Strict Parsing:** Scans designs for `{{merge_tags}}` and validates them against the tenant's actual data schema.
+*   **Fallback Enforcement:** Blocks sending if any tag lacks a mandatory fallback (e.g., `{{first_name | default("Subscriber")}}`).
+
+#### 2. Mock Data Injection Layer
+*   **Persona Preview:** Instead of static fake data, it pulls real samples from the Phase 2 Contacts Engine.
+*   **Multi-Persona Simulation:** Allows users to toggle through different "Live Personas" to see how the design adapts to varying data lengths and attributes.
+
+#### 3. Rendering Sandbox
+*   **Isolated Execution:** A stateless service that performs a "test-build" of the email.
+*   **Metadata Generation:** Returns the HTML, file size audit (to prevent Gmail clipping), and a **Source Map** for errors.
+
+#### 4. Error Mapping Engine
+*   **Block-Level Reporting:** Translates low-level MJML syntax errors into UI-specific alerts. Errors are mapped to **Block IDs**, not line numbers, highlighting exactly which component in the builder needs fixing.
+
+#### 5. Spam & Deliverability Analyzer
+*   **Content Linter:** Scans for "Spam Trigger" words and high image-to-text ratios.
+*   **Compliance Check:** Validates the presence of required physical addresses and unsubscribe links.
+
+#### 6. Accessibility Engine
+*   **Contrast Audit:** Checks text/background contrast ratios against WCAG 2.1 AA.
+*   **Readability Check:** Flags small font sizes or insufficient line height that break mobile readability.
 
 ---
 
-### 🔐 RBAC System
-- Roles involved: Creator, Admin.
-- What is enforced in backend: `require_permission("template:manage")` and `require_permission("template:view")` actively used.
+### 🔄 CONNECTED SYSTEM FLOW
+**Editor → Validation → Preview → Campaign Send**
 
-## Phase 3.5 — Testing & Validation Gateway
-**WHY:** The "Pre-Send" gateway ensures that every token resolves and every layout works before the "Send" button is enabled.
-
-**[BACKEND]**
-- **Token Validation Service**: A Python logic that scans MJML for `{{tags}}` and cross-references them with the tenant's data schema.
-- **Mock Data Service**: API that merges a template with a custom JSON payload for realistic "Live Data" previews.
-- **Deep Error Reporting**: Context-aware error mapping that highlights the exact line of MJML/Token failure.
-
-**[FRONTEND]**
-- **Live Preview Sync**: WebSocket-driven updates that sync the editor and the preview panel in real-time.
-- **Mock Data UI**: A panel to enter/select dummy subscriber data to see how merge tags resolve visually.
-
-**📋 Planned Tasks — Phase 3.5**
-- Token Validation Service (schema-safe check)
-- Mock Data Service (preview-with-payload)
-- Real-time Preview Sync (WebSockets)
-- Exact-line error highlighting in the editor
-- Multi-client preview panel (Mocked viewport simulation)
+1.  **Change:** User modifies a block in the Builder.
+2.  **Validate:** The **Validation Gateway** runs a background scan of the state.
+3.  **Certify:** The gateway issues a `ValidationHash` only if all blocking checks (Tokens, Spam, Rendering) pass.
+4.  **Lock:** The Phase 4 Campaign Engine **REJECTS** any dispatch attempt that does not include a valid, current `ValidationHash`.
 
 ---
 
+### 🧩 TASK BREAKDOWN
+
+#### BACKEND
+*   **Services:** `TemplateOrchestrator`, `TokenResolver`, `ValidationGateway`, `MjmlSandbox`.
+*   **APIs:** `POST /templates/validate`, `GET /templates/preview/:personaId`.
+*   **Queues:** `thumbnail-gen`, `spam-scan`.
+
+#### FRONTEND
+*   **Panels:** `ValidationChecklist`, `PersonaSwitcher`, `ErrorMapOverlay`.
+*   **Store:** `useValidationStore` tracking real-time design health.
+*   **Isolation Fix:** `EditorCanvas` root enforces a **CSS Variable Reset** to isolate the white document theme from the platform's dark mode.
+
+#### SYSTEM
+*   **Data Models:** `TemplateVersion` (immutable), `ValidationAudit` (blocking results).
+*   **Event Flow:** `onSave -> runValidation -> issueCertificate -> enableSend`.
+*   **Caching:** Redis-backed caching for rendered HTML fragments and persona previews.
+
 ---
 
-## Phase 3.5 — Template Validation & Mock Data Injection
-**WHY:** Ensures templates don't break when real data is injected. Prevents merge tag failures and layout shifts.
-
-**[BACKEND]**
-- **Mock Data Generator**: Service to inject sample tenant data (contact names, custom fields) into the MJML compiler for preview.
-- **Validation Engine**: Pre-check for missing merge tags or invalid spintax before a template is saved.
-- **Token Consistency Checker**: Logic to ensure all fields used in a template actually exist in the tenant's contacts table.
-
-**[FRONTEND]**
-- **Live Preview with Samples**: UI toggle to "View with Sample Data" inside the template editor.
-- **Merge Tag Autocomplete**: Deep integration of tenant custom fields into the editor's text inputs.
+### ⚠️ ARCHITECTURAL FIXES (REAL-WORLD STABILITY)
+*   **Fix: Buttons not working:** Transitioned to **Store-First Dispatch.** UI buttons no longer manage logic; they emit events to the global store, ensuring state consistency.
+*   **Fix: Sidebar addition:** Implemented **Schema Injection.** Dragging an element now injects a validated JSON fragment into the store's array, triggering an automatic Canvas re-render.
+*   **Fix: Theme Isolation:** Encapsulated the Editor Canvas in a **Shadow-Style Reset.** By shadowing CSS variables (`--bg: #fff`), the email document remains white even when the user selects a Dark platform theme.
 
 ---
 
