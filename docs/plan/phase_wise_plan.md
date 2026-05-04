@@ -2040,7 +2040,6 @@ flowchart LR
     classDef owner fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
     classDef system fill:#94a3b8,stroke:#64748b,stroke-width:1px,color:#fff,rx:5px,ry:5px;
 
-    flowchart LR
     A[Parent Owner starts Add Franchise Owner] --> B[Enter franchise owner email]
     B --> C[Create pending child workspace]
     C --> D[Send franchise invitation email]
@@ -2049,6 +2048,9 @@ flowchart LR
     F --> G[Activate franchise workspace]
     G --> H[Franchise owner logs into isolated workspace]
     H --> I[Franchise owner manages own team, campaigns, and settings]
+
+    class A,B,E,H,I owner;
+    class C,D,F,G system;
 ```
 
 **📋 Planned Tasks — Phase 8.3**
