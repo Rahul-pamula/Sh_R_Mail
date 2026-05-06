@@ -115,9 +115,15 @@ class AccountDeletionService:
                 else:
                     outcome = "pending_deletion"
             elif role == "admin" and admin_count <= 1:
-                outcome = "blocked"
-                blocking_reason = "Admin cannot delete account while they are the last admin for this workspace."
-                action_type = "assign_admin"
+                # Option B: Last admin is warned but not blocked, as long as an owner exists.
+                # If there are no owners and no other admins, they are essentially a solo admin (similar to solo owner).
+                if owner_count > 0:
+                    outcome = "warning"
+                    blocking_reason = "You are the last Admin. The Owner will need to appoint a successor."
+                    action_type = "notify_owner"
+                else:
+                    # No owners and no other admins = effectively a solo workspace
+                    outcome = "pending_deletion"
 
             impacts.append(
                 {
@@ -142,6 +148,7 @@ class AccountDeletionService:
         impacts = AccountDeletionService._workspace_impacts(user_id)
 
         blocking_reasons = []
+        warnings = []
         actions_required = []
         pending_workspace_deletions = []
 
@@ -162,7 +169,15 @@ class AccountDeletionService:
                         "tenant_id": impact["tenant_id"],
                         "workspace_name": impact["workspace_name"],
                         "cta_label": "Open Team Settings",
-                        "cta_href": "/settings/team",
+                        "cta_href": f"/settings/team?tenant_id={impact['tenant_id']}",
+                    }
+                )
+            elif impact["outcome"] == "warning":
+                warnings.append(
+                    {
+                        "tenant_id": impact["tenant_id"],
+                        "workspace_name": impact["workspace_name"],
+                        "message": impact["blocking_reason"],
                     }
                 )
             elif impact["outcome"] == "pending_deletion":
@@ -179,6 +194,7 @@ class AccountDeletionService:
             "deletion_scheduled_at": user.get("deletion_scheduled_at"),
             "can_request_deletion": user["user_status"] == USER_STATUS_ACTIVE and len(blocking_reasons) == 0,
             "blocking_reasons": blocking_reasons,
+            "warnings": warnings,
             "actions_required": actions_required,
             "workspace_impacts": impacts,
             "pending_workspace_deletions": pending_workspace_deletions,
@@ -233,11 +249,20 @@ class AccountDeletionService:
             }
         ).eq("id", user_id).execute()
 
+        # 1. Cascade Deletion for Solo Workspaces
         solo_owned_workspaces = [
             impact for impact in preflight["workspace_impacts"] if impact["outcome"] == "pending_deletion"
         ]
         for workspace in solo_owned_workspaces:
             AccountDeletionService._set_workspace_pending_deletion(workspace["tenant_id"], scheduled_for)
+
+        # 2. Immediate Severance for Shared Workspaces (Admin/Member)
+        shared_workspaces = [
+            impact for impact in preflight["workspace_impacts"] 
+            if impact["outcome"] in ("remove_membership", "warning")
+        ]
+        for workspace in shared_workspaces:
+            db.client.table("tenant_users").delete().eq("user_id", user_id).eq("tenant_id", workspace["tenant_id"]).execute()
 
         AccountDeletionService.revoke_refresh_tokens(user_id)
 
@@ -253,6 +278,7 @@ class AccountDeletionService:
                 metadata={
                     "deletion_scheduled_at": scheduled_for,
                     "workspace_name": membership.get("workspace_name"),
+                    "immediate_severance": membership["outcome"] in ("remove_membership", "warning")
                 },
                 ip_address=ip_address,
                 user_agent=user_agent,

@@ -16,6 +16,8 @@ interface User {
     workspaceName: string;
     emailVerified: boolean;
     onboardingRequired?: boolean;
+    userStatus: 'active' | 'pending_deletion' | 'anonymized';
+    deletionScheduledAt?: string | null;
 }
 
 interface WorkspaceState {
@@ -85,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             workspaceName: data.workspace_name || 'Workspace',
             emailVerified: data.email_verified === true || data.email_verified === 'true',
             role: (validRoles.includes(role) ? role : 'VIEWER') as User['role'],
+            userStatus: (data.user_status || 'active') as User['userStatus'],
+            deletionScheduledAt: data.deletion_scheduled_at || null,
         };
 
         const workspaceData: WorkspaceState = {
@@ -277,6 +281,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!isAuthenticated && !isPublicRoute && !isOnboardingRoute) {
             if (pathname !== '/login') router.push('/login');
+            return;
+        }
+
+        // Deletion Restoration Portal Redirect
+        if (isAuthenticated && user?.userStatus === 'pending_deletion' && pathname !== '/account/restore') {
+            router.push('/account/restore');
             return;
         }
 

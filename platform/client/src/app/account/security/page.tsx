@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
     AlertTriangle, 
     ArrowLeft, 
@@ -27,8 +27,10 @@ interface DeletionPreflight {
     deletion_scheduled_at?: string | null;
     can_request_deletion: boolean;
     blocking_reasons: any[];
+    warnings: any[];
     actions_required: any[];
     workspace_impacts: any[];
+    pending_workspace_deletions: any[];
 }
 
 export default function AccountSecurityPage() {
@@ -50,6 +52,7 @@ export default function AccountSecurityPage() {
     const [confirmDeleteText, setConfirmDeleteText] = useState('');
     const [isSubmittingDeletion, setIsSubmittingDeletion] = useState(false);
     const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
+    const [deletionStep, setDeletionStep] = useState<'preflight' | 'confirm'>('preflight');
 
     useEffect(() => {
         if (token) loadDeletionPreflight();
@@ -118,9 +121,12 @@ export default function AccountSecurityPage() {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!res.ok) throw new Error('Failed to request deletion.');
-            success('Deletion scheduled.');
+            success('Deletion scheduled. You will be logged out shortly.');
             setIsDeleteModalOpen(false);
-            loadDeletionPreflight();
+            
+            setTimeout(() => {
+                void logout();
+            }, 2000);
         } catch (err: any) {
             error(err.message);
         } finally {
@@ -165,11 +171,12 @@ export default function AccountSecurityPage() {
                         <div>
                             <p className="text-lg font-bold text-amber-500 leading-none">Account deletion scheduled</p>
                             <p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl leading-relaxed">
-                                Your account is scheduled for anonymization. All your personal data will be removed. You can cancel this request at any time before the deadline.
+                                Your account is scheduled for anonymization on {deletionState.deletion_scheduled_at ? new Date(deletionState.deletion_scheduled_at).toLocaleDateString() : '30 days'}. 
+                                Shared memberships have been severed, and solo workspaces are suspended. You can cancel this request anytime before the deadline to restore access.
                             </p>
                         </div>
                         <Button variant="secondary" size="sm" onClick={handleCancelDeletion} isLoading={isCancellingDeletion}>
-                            Cancel Deletion
+                            Cancel Deletion & Restore
                         </Button>
                     </div>
                 </div>
@@ -284,12 +291,15 @@ export default function AccountSecurityPage() {
                         <div className="space-y-1">
                             <h3 className="text-xl font-bold text-red-500">Danger Zone</h3>
                             <p className="text-sm text-[var(--text-muted)] opacity-80 max-w-xl">
-                                Permanently delete your account and all associated data. This action is irreversible.
+                                Permanently delete your account and all associated data. This action starts a 30-day grace period.
                             </p>
                         </div>
                         <Button 
                             variant="danger"
-                            onClick={() => setIsDeleteModalOpen(true)}
+                            onClick={() => {
+                                setDeletionStep('preflight');
+                                setIsDeleteModalOpen(true);
+                            }}
                             disabled={isDeletionLoading || deletionState?.account_status === 'pending_deletion'}
                             className="px-8 shadow-lg shadow-red-500/20"
                         >
@@ -341,25 +351,122 @@ export default function AccountSecurityPage() {
                 </div>
             </ModalShell>
 
-            {/* Delete Modal */}
-            <ModalShell isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Delete Account" maxWidthClass="max-w-md">
-                <div className="space-y-6">
-                    <p className="text-sm text-[var(--text-muted)] leading-relaxed">
-                        Your account will be scheduled for anonymization. Workspace records remain intact, but your identity will be removed.
-                    </p>
-                    <Input
-                        label='Type "DELETE" to confirm'
-                        value={confirmDeleteText}
-                        onChange={e => setConfirmDeleteText(e.target.value)}
-                        autoFocus
-                    />
-                    <div className="flex justify-end gap-3">
-                        <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
-                        <Button variant="danger" onClick={handleRequestDeletion} isLoading={isSubmittingDeletion} disabled={confirmDeleteText !== 'DELETE'}>
-                            Confirm Deletion
-                        </Button>
+            {/* Delete Modal - Refactored for Multi-Stage Flow */}
+            <ModalShell 
+                isOpen={isDeleteModalOpen} 
+                onClose={() => setIsDeleteModalOpen(false)} 
+                title={deletionStep === 'preflight' ? "Account Deletion Analysis" : "Final Confirmation"} 
+                maxWidthClass="max-w-lg"
+            >
+                {deletionStep === 'preflight' ? (
+                    <div className="space-y-6">
+                        <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                            We analyzed your account memberships. Here is what happens if you proceed:
+                        </p>
+
+                        <div className="space-y-3">
+                            {/* Blocking Reasons */}
+                            {deletionState?.blocking_reasons.map((block: any, i: number) => (
+                                <div key={i} className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+                                    <Shield className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-red-500">Action Required: {block.workspace_name}</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">{block.message}</p>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="mt-3 h-8 text-xs border border-red-500/20 hover:bg-red-500/5"
+                                            onClick={() => {
+                                                const action = deletionState.actions_required.find((a: any) => a.tenant_id === block.tenant_id);
+                                                if (action) window.open(action.cta_href, '_blank');
+                                            }}
+                                        >
+                                            Open Team Settings
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Warnings */}
+                            {deletionState?.warnings?.map((warning: any, i: number) => (
+                                <div key={i} className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+                                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-amber-500">Departure Warning: {warning.workspace_name}</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">{warning.message}</p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Cascade Deletions */}
+                            {deletionState?.pending_workspace_deletions.map((del: any, i: number) => (
+                                <div key={i} className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-start gap-3">
+                                    <Trash2 className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-[var(--text-primary)]">Auto-Delete: {del.workspace_name}</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">{del.message}</p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Standard Removal Info */}
+                            {deletionState?.workspace_impacts.filter(imp => imp.outcome === 'remove_membership').length > 0 && (
+                                <div className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] flex items-start gap-3 opacity-60">
+                                    <LogOut className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-[var(--text-primary)]">Immediate Team Departure</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                                            You will be removed from {deletionState.workspace_impacts.filter(imp => imp.outcome === 'remove_membership').length} shared workspaces immediately.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
+                            <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
+                            <Button 
+                                variant="danger" 
+                                disabled={!deletionState?.can_request_deletion}
+                                onClick={() => setDeletionStep('confirm')}
+                            >
+                                Continue to Deletion
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                        <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                            <p className="text-sm text-red-500 font-bold">This is a high-stakes action.</p>
+                            <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">
+                                Your account will be scheduled for anonymization. You have 30 days to cancel this request before all data is purged.
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <p className="text-sm text-[var(--text-muted)]">To verify your identity, type your email address <strong>{user?.email}</strong> below:</p>
+                            <Input
+                                value={confirmDeleteText}
+                                onChange={e => setConfirmDeleteText(e.target.value)}
+                                placeholder={user?.email}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t border-[var(--border)]">
+                            <Button variant="ghost" onClick={() => setDeletionStep('preflight')}>Back</Button>
+                            <Button 
+                                variant="danger" 
+                                onClick={handleRequestDeletion} 
+                                isLoading={isSubmittingDeletion} 
+                                disabled={confirmDeleteText !== user?.email}
+                                className="px-8"
+                            >
+                                Schedule Permanent Deletion
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </ModalShell>
         </div>
     );
