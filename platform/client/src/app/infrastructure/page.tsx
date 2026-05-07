@@ -51,7 +51,7 @@ export default function InfrastructurePage() {
     const fetchEvents = async () => {
         try {
             const res = await api.get('/infrastructure/webhooks/live');
-            setEvents(res.data || []);
+            setEvents(res.data.data || []);
         } catch (err) {
             console.error('Failed to fetch live webhooks:', err);
         } finally {

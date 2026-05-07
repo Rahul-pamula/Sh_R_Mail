@@ -49,8 +49,10 @@ async def list_domains(
     target_tenant_id = tenant_id
     if jwt_payload.workspace_type == "FRANCHISE":
         t_res = db.client.table("tenants").select("parent_tenant_id").eq("id", tenant_id).single().execute()
-        if t_res.data and t_res.data.get("parent_tenant_id"):
-            target_tenant_id = t_res.data.get("parent_tenant_id")
+        if t_res.data and isinstance(t_res.data, dict):
+            parent_id = t_res.data.get("parent_tenant_id")
+            if parent_id:
+                target_tenant_id = parent_id
 
     res = db.client.table("domains")\
         .select("id, domain_name, status, created_at, dkim_tokens, mail_from_domain")\
@@ -124,7 +126,7 @@ async def add_domain(
             user_id=jwt_payload.user_id,
             action="domain_added",
             resource_type="domain",
-            resource_id=inserted.data[0]["id"],
+            resource_id=inserted.data[0]["id"] if inserted.data and len(inserted.data) > 0 else None,
             metadata={"domain": domain}
         )
         return {"status": "success", "data": inserted.data[0]}
@@ -147,10 +149,12 @@ async def verify_domain(
 
     # Fetch domain
     res = db.client.table("domains").select("*").eq("id", domain_id).eq("tenant_id", tenant_id).single().execute()
-    if not res.data:
+    if not res.data or not isinstance(res.data, dict):
         raise HTTPException(status_code=404, detail="Domain not found")
         
-    domain_name = res.data["domain_name"]
+    domain_name = res.data.get("domain_name")
+    if not domain_name:
+        raise HTTPException(status_code=404, detail="Domain name missing")
     ses = get_ses_client()
     
     new_status = "pending"
@@ -195,24 +199,30 @@ async def verify_domain(
 async def delete_domain(
     domain_id: str, 
     tenant_id: str = Depends(require_active_tenant),
-    jwt_payload: JWTPayload = Depends(require_permission("domains:add"))
+    jwt_payload: JWTPayload = Depends(require_permission("domains:delete"))
 ):
     """Delete domain from DB and AWS SES"""
     # Explicit defense-in-depth security check
-    if not can(jwt_payload, "ADD_DOMAIN") or jwt_payload.workspace_type == "FRANCHISE":
-        raise HTTPException(status_code=403, detail="Franchise workspaces cannot manipulate domains.")
+    if not can(jwt_payload, "domains:delete") or jwt_payload.workspace_type == "FRANCHISE":
+        raise HTTPException(status_code=403, detail="You do not have permission to delete domains or franchises cannot manipulate infrastructure.")
 
     res = db.client.table("domains").select("domain_name").eq("id", domain_id).eq("tenant_id", tenant_id).single().execute()
-    if not res.data:
+    if not res.data or not isinstance(res.data, dict):
         raise HTTPException(status_code=404, detail="Domain not found")
         
-    domain_name = res.data["domain_name"]
+    domain_name = res.data.get("domain_name")
+    if not domain_name:
+        raise HTTPException(status_code=404, detail="Domain name missing")
 
     # 1. PREREQUISITE: Check if domain is assigned to any workspace (Franchise or Main)
     # This prevents breaking the outbound orchestration for assigned tenants.
     usage_res = db.client.table("tenants").select("id, company_name").eq("sending_domain", domain_name).execute()
-    if usage_res.data:
-        workspaces = ", ".join([t["company_name"] for t in usage_res.data[:3]])
+    if usage_res.data and isinstance(usage_res.data, list) and len(usage_res.data) > 0:
+        names = []
+        for t in usage_res.data[:3]:
+            if isinstance(t, dict) and t.get("company_name"):
+                names.append(str(t.get("company_name")))
+        workspaces = ", ".join(names)
         raise HTTPException(
             status_code=400, 
             detail=f"Domain cannot be deleted: It is currently assigned to {len(usage_res.data)} workspace(s) (e.g., {workspaces}). Reassign them before deleting."

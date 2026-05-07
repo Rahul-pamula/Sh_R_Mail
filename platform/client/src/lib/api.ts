@@ -11,23 +11,23 @@
  * - Use `api.get()`, `api.post()`, etc.
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 async function fetchWithInterceptor(endpoint: string, options: RequestInit = {}) {
     // 1. Intercept Request: Inject Tenant ID
-    const storedUser = localStorage.getItem('email_engine_user');
+    const storedUser = localStorage.getItem('user_data');
+    const storedToken = localStorage.getItem('auth_token');
 
-    if (!storedUser) {
-        throw new Error('🚨 SECURITY: No authenticated user found. Blocking API call.');
+    if (!storedUser || !storedToken) {
+        throw new Error('🚨 SECURITY: No authenticated session found. Blocking API call.');
     }
 
     let tenantId: string | null = null;
-    let token: string | null = null;
+    let token: string = storedToken;
 
     try {
         const user = JSON.parse(storedUser);
         tenantId = user.tenantId;
-        token = user.token || null;
     } catch (e) {
         throw new Error('🚨 SECURITY: Invalid user session. Blocking API call.');
     }
@@ -49,7 +49,13 @@ async function fetchWithInterceptor(endpoint: string, options: RequestInit = {})
         headers.set('Authorization', `Bearer ${token}`);
     }
 
-    const fullUrl = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
+    let fullUrl = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
+    
+    // Add cache-buster to GET requests to ensure fresh data in the UI
+    if (!options.method || options.method.toUpperCase() === 'GET') {
+        const separator = fullUrl.includes('?') ? '&' : '?';
+        fullUrl = `${fullUrl}${separator}t=${Date.now()}`;
+    }
 
     console.log(`[API] ${options.method || 'GET'} ${fullUrl} | Tenant: ${tenantId}`);
 

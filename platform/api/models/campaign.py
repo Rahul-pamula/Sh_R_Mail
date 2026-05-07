@@ -4,15 +4,14 @@ from datetime import datetime
 from uuid import UUID
 
 class CampaignBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    subject: str = Field(..., min_length=1, max_length=500)
-    body_html: str = Field(..., description="HTML email content with optional Spintax/variables")
-    from_name: str = Field(..., description="The display name shown to recipients")
-    from_prefix: str = Field(..., pattern="^[a-zA-Z0-9._%+-]+$", description="The local part of the email")
-    domain_id: UUID = Field(..., description="The ID of the verified domain to be used")
+    name: str = Field(min_length=1, max_length=200)
+    subject: str = Field(min_length=1, max_length=500)
+    body_html: str = Field(description="HTML email content with optional Spintax/variables")
+    from_name: str = Field(description="The display name shown to recipients")
+    from_prefix: str = Field(pattern="^[a-zA-Z0-9._%+-]+$", description="The local part of the email")
+    domain_id: UUID = Field(description="The ID of the verified domain to be used")
     status: str = Field(default="draft") # draft, scheduled, sending, sent, paused, cancelled
     scheduled_at: Optional[datetime] = None
-    version: int = Field(default=1, description="Optimistic concurrency control version")
 
 class CampaignCreate(CampaignBase):
     pass
@@ -26,13 +25,11 @@ class CampaignUpdate(BaseModel):
     domain_id: Optional[UUID] = None
     status: Optional[str] = None
     scheduled_at: Optional[datetime] = None
-    version: Optional[int] = None # Used for concurrency validation
 
 class CampaignResponse(CampaignBase):
     id: UUID
     tenant_id: UUID
     created_at: datetime
-    version: int
 
     class Config:
         from_attributes = True

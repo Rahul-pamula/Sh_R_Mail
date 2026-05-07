@@ -11,7 +11,8 @@ Features:
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, cast
+from postgrest.types import CountMethod
 from datetime import datetime
 import uuid
 import re
@@ -63,14 +64,20 @@ async def create_campaign(request: Request, campaign: CampaignCreate, tenant_id:
     
     # 1. Verify Tenant Status
     tenant_result = db.client.table("tenants").select("status").eq("id", tenant_id).execute()
-    if not tenant_result.data or tenant_result.data[0]["status"] != "active":
+    if not tenant_result.data or not isinstance(tenant_result.data, list) or len(tenant_result.data) == 0:
+        raise HTTPException(status_code=403, detail="Access denied.")
+    
+    tenant_data = tenant_result.data[0]
+    if not isinstance(tenant_data, dict) or tenant_data.get("status") != "active":
         raise HTTPException(status_code=403, detail="Access denied.")
     
     # 1.5 Verify Domain
     domain_result = db.client.table("domains").select("status, domain_name").eq("id", str(campaign.domain_id)).eq("tenant_id", tenant_id).execute()
-    if not domain_result.data:
+    if not domain_result.data or not isinstance(domain_result.data, list) or len(domain_result.data) == 0:
         raise HTTPException(status_code=400, detail="Domain not found or does not belong to your workspace.")
-    if domain_result.data[0]["status"] != "verified":
+    
+    domain_data = domain_result.data[0]
+    if not isinstance(domain_data, dict) or domain_data.get("status") != "verified":
         raise HTTPException(status_code=400, detail="Access denied.")
         
     campaign_id = str(uuid.uuid4())
@@ -120,7 +127,7 @@ async def list_campaigns(
     from utils.supabase_client import db
 
     query = db.client.table("campaigns").select("id, name, subject, status, created_at, scheduled_at, is_archived").eq("tenant_id", tenant_id)
-    count_query = db.client.table("campaigns").select("id", count="exact").eq("tenant_id", tenant_id)
+    count_query = db.client.table("campaigns").select("id", count=CountMethod.exact).eq("tenant_id", tenant_id)
 
     if status == "archived":
         query = query.is_("is_archived", "true")
@@ -169,11 +176,14 @@ async def archive_campaign(campaign_id: str, tenant_id: str = Depends(require_ac
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     campaign = result.data[0]
+    if not isinstance(campaign, dict):
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
     if jwt_payload.role == "creator" and campaign.get("created_by_user_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You can only archive campaigns that you created.")
     if campaign.get("is_archived"):
         return {"status": "archived", "id": campaign_id, "message": "Campaign is already archived."}
-    if campaign["status"] == "draft":
+    if campaign.get("status") == "draft":
         raise HTTPException(status_code=400, detail="Draft campaigns should be deleted instead of archived.")
 
     db.client.table("campaigns").update({"is_archived": True}).eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
@@ -188,11 +198,11 @@ async def unarchive_campaign(campaign_id: str, tenant_id: str = Depends(require_
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    campaign = result.data[0]
+    campaign = cast(Dict[str, Any], result.data[0])
     if jwt_payload.role == "creator" and campaign.get("created_by_user_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You can only restore campaigns that you created.")
     if not campaign.get("is_archived"):
-        return {"status": campaign["status"], "id": campaign_id, "message": "Campaign is already active."}
+        return {"status": str(campaign.get("status", "unknown")), "id": campaign_id, "message": "Campaign is already active."}
 
     db.client.table("campaigns").update({"is_archived": False}).eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
     return {"status": "restored", "id": campaign_id, "message": "Campaign restored to the active workflow."}
@@ -209,7 +219,7 @@ async def get_campaign(campaign_id: str, tenant_id: str = Depends(require_active
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    return result.data[0]
+    return cast(Dict[str, Any], result.data[0])
 
 @router.get("/{campaign_id}/dispatch")
 async def get_campaign_dispatch(campaign_id: str, tenant_id: str = Depends(require_active_tenant), jwt_payload: JWTPayload = Depends(require_permission("campaign:manage"))):
@@ -235,30 +245,29 @@ async def update_campaign_patch(campaign_id: str, campaign: CampaignUpdate, tena
     from utils.supabase_client import db
     
     # 1. Verify ownership and state
-    record = db.client.table("campaigns").select("created_by_user_id, status, version").eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
+    record = db.client.table("campaigns").select("created_by_user_id, status").eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
     if not record.data: raise HTTPException(status_code=404, detail="Campaign not found")
     
-    current_status = record.data[0]["status"]
-    current_version = record.data[0]["version"]
+    record_data = cast(Dict[str, Any], record.data[0])
+    current_status = record_data.get("status", "draft")
 
     # 2. Prevent Editing of Non-Draft Campaigns (Fix 4)
     # Once a campaign is approved or sending, content must be immutable to ensure audit integrity.
     if current_status != "draft":
         raise HTTPException(status_code=400, detail=f"Campaign is in '{current_status}' state and cannot be modified. Only 'draft' campaigns are editable.")
 
-    if jwt_payload.role == "creator" and record.data[0].get("created_by_user_id") != jwt_payload.user_id:
+    if jwt_payload.role == "creator" and record_data.get("created_by_user_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You can only edit campaigns that you created.")
     
     update_data = {k: v for k, v in campaign.model_dump().items() if v is not None}
     
-    # 3. Increment Version on every edit (Issue 1)
-    update_data["version"] = current_version + 1
     update_data["updated_at"] = datetime.now().isoformat()
     
     # Verify domain if it's being updated
     if "domain_id" in update_data:
         domain_result = db.client.table("domains").select("status").eq("id", str(update_data["domain_id"])).eq("tenant_id", tenant_id).execute()
-        if not domain_result.data or domain_result.data[0]["status"] != "verified":
+        domain_data = cast(Dict[str, Any], domain_result.data[0])
+        if not domain_result.data or domain_data.get("status") != "verified":
             raise HTTPException(status_code=400, detail="Domain not found or is not verified.")
         update_data["domain_id"] = str(update_data["domain_id"])
         
@@ -282,10 +291,11 @@ async def delete_campaign(campaign_id: str, tenant_id: str = Depends(require_act
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    if jwt_payload.role == "creator" and result.data[0].get("created_by_user_id") != jwt_payload.user_id:
+    campaign_data = cast(Dict[str, Any], result.data[0])
+    if jwt_payload.role == "creator" and campaign_data.get("created_by_user_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You can only delete campaigns that you created.")    
         
-    status = result.data[0]["status"]
+    status = campaign_data.get("status", "draft")
     
     from services.audit_service import write_log
     
@@ -326,10 +336,11 @@ async def update_campaign_put(campaign_id: str, body: dict, tenant_id: str = Dep
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    if jwt_payload.role == "creator" and result.data[0].get("created_by_user_id") != jwt_payload.user_id:
+    campaign_data = cast(Dict[str, Any], result.data[0])
+    if jwt_payload.role == "creator" and campaign_data.get("created_by_user_id") != jwt_payload.user_id:
         raise HTTPException(status_code=403, detail="You can only edit campaigns that you created.")
 
-    status = result.data[0]["status"]
+    status = str(campaign_data.get("status", "draft"))
     if status not in ["draft", "paused", "awaiting_review"]:
         raise HTTPException(status_code=400, detail=f"Cannot edit a '{status}' campaign. Only draft, paused, or pending review campaigns can be edited.")
 
@@ -341,7 +352,7 @@ async def update_campaign_put(campaign_id: str, body: dict, tenant_id: str = Dep
     if "from_prefix" in body: update_fields["from_prefix"] = body["from_prefix"]
     if "domain_id" in body: 
         domain_result = db.client.table("domains").select("status").eq("id", str(body["domain_id"])).eq("tenant_id", tenant_id).execute()
-        if not domain_result.data or domain_result.data[0]["status"] != "verified":
+        if not domain_result.data or cast(Dict[str, Any], domain_result.data[0]).get("status") != "verified":
             raise HTTPException(status_code=403, detail="Access denied.")
         update_fields["domain_id"] = str(body["domain_id"])
     if "scheduled_at" in body: update_fields["scheduled_at"] = body["scheduled_at"]
@@ -370,8 +381,10 @@ async def schedule_campaign(request: Request, campaign_id: str, request_body: Sc
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    if result.data[0]["status"] not in ["draft", "scheduled", "approved"]:
-        raise HTTPException(status_code=400, detail=f"Only draft or approved campaigns can be scheduled. Current status: {result.data[0]['status']}")
+    campaign_data = cast(Dict[str, Any], result.data[0])
+    current_status = str(campaign_data.get("status", "draft"))
+    if current_status not in ["draft", "scheduled", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Only draft or approved campaigns can be scheduled. Current status: {current_status}")
 
     # 2. Validate: scheduled_at must be in the future
     # FIX: use request_body (the Pydantic model), not request (the HTTP Request object)
@@ -414,14 +427,15 @@ async def send_campaign(request: Request, campaign_id: str, send_request: SendRe
     if not campaign_res.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    campaign = campaign_res.data[0]
+    campaign = cast(Dict[str, Any], campaign_res.data[0])
     
     # STATE MACHINE: only 'approved' or 'paused' campaigns may be sent
     # 'paused' is allowed because a paused campaign was already approved before it started sending
-    if campaign["status"] not in ["approved", "paused"]:
+    current_status = str(campaign.get("status", "unknown"))
+    if current_status not in ["approved", "paused"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Campaign must be approved before sending. Current status: '{campaign['status']}'. "
+            detail=f"Campaign must be approved before sending. Current status: '{current_status}'. "
                    f"An admin must approve it first via POST /campaigns/{{id}}/approve."
         )
     
@@ -451,27 +465,29 @@ async def send_campaign(request: Request, campaign_id: str, send_request: SendRe
         "daily_send_limit, daily_sent_count, daily_count_reset_at"
     ).eq("id", tenant_id).execute()
 
+    daily_sent = 0
     if tenant_res.data:
         t = tenant_res.data[0]
-        limit = t.get("daily_send_limit") or 1000
-        today = date.today().isoformat()
-        reset_at = t.get("daily_count_reset_at") or today
+        if isinstance(t, dict):
+            limit = t.get("daily_send_limit") or 1000
+            today = date.today().isoformat()
+            reset_at = t.get("daily_count_reset_at") or today
 
-        if reset_at != today:
-            # New day — reset the counter
-            db.client.table("tenants").update({
-                "daily_sent_count": 0,
-                "daily_count_reset_at": today,
-            }).eq("id", tenant_id).execute()
-            daily_sent = 0
-        else:
-            daily_sent = t.get("daily_sent_count") or 0
+            if reset_at != today:
+                # New day — reset the counter
+                db.client.table("tenants").update({
+                    "daily_sent_count": 0,
+                    "daily_count_reset_at": today,
+                }).eq("id", tenant_id).execute()
+                daily_sent = 0
+            else:
+                daily_sent = int(cast(Any, t.get("daily_sent_count") or 0))
 
-        if daily_sent >= limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Daily send limit reached ({limit:,} emails). Limit resets at midnight."
-            )
+            if daily_sent >= int(cast(Any, limit)):
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Daily send limit reached ({limit:,} emails). Limit resets at midnight."
+                )
     # ──────────────────────────────────────────────────────────────────
     # ── HIGH VOLUME SEND SAFETY ──────────────────────────────────────
     SEND_THRESHOLD = 1000
@@ -507,9 +523,10 @@ async def send_campaign(request: Request, campaign_id: str, send_request: SendRe
         
         # We need to fetch current emails_sent_this_cycle to update it manually without RPC
         cycle_res = db.client.table("tenants").select("emails_sent_this_cycle").eq("id", tenant_id).execute()
+        cycle_data = cast(Dict[str, Any], cycle_res.data[0])
         current_cycle = 0
-        if cycle_res.data and cycle_res.data[0].get("emails_sent_this_cycle"):
-            current_cycle = cycle_res.data[0]["emails_sent_this_cycle"]
+        if cycle_res.data and cycle_data.get("emails_sent_this_cycle"):
+            current_cycle = int(cast(Any, cycle_data["emails_sent_this_cycle"]))
             
         db.client.table("tenants").update({
             "daily_sent_count": current_daily + len(contacts),
@@ -522,19 +539,19 @@ async def send_campaign(request: Request, campaign_id: str, send_request: SendRe
             "email, emails_sent_this_cycle, plans(name, max_monthly_emails)"
         ).eq("id", tenant_id).execute()
         if usage_res.data:
-            t = usage_res.data[0]
-            plan = t.get("plans") or {}
-            limit = plan.get("max_monthly_emails", 1000)
-            used = t.get("emails_sent_this_cycle", 0)
+            t = cast(Dict[str, Any], usage_res.data[0])
+            plan = cast(Dict[str, Any], t.get("plans") or {})
+            limit = int(plan.get("max_monthly_emails") or 1000)
+            used = int(t.get("emails_sent_this_cycle") or 0)
             if limit > 0 and used >= limit * 0.8 and t.get("email"):
                 # Only send once per cycle (use Redis flag)
                 from utils.redis_client import redis_client as rc
                 flag_key = f"tenant:{tenant_id}:quota_warning_sent"
-                already_sent = await rc.get(flag_key)
+                already_sent = await rc.client.get(flag_key)
                 if not already_sent:
                     from services.notification_service import notify_quota_warning
-                    await notify_quota_warning(t["email"], used, limit, plan.get("name", "Free"))
-                    await rc.set(flag_key, "1", ex=30*24*3600)  # Expires after 30 days
+                    await notify_quota_warning(str(t.get("email")), used, limit, plan.get("name", "Free"))
+                    await rc.client.set(flag_key, "1", ex=30*24*3600)  # Expires after 30 days
     except Exception as qe:
         logger.warning(f"Quota warning check failed: {qe}")
     
@@ -585,7 +602,8 @@ async def resume_campaign(campaign_id: str, tenant_id: str = Depends(require_act
     result = db.client.table("campaigns").select("status").eq("id", campaign_id).eq("tenant_id", tenant_id).execute()
     if not result.data: raise HTTPException(status_code=404, detail="Campaign not found")
     
-    if result.data[0]["status"] != "paused":
+    campaign_data = cast(Dict[str, Any], result.data[0])
+    if campaign_data.get("status") != "paused":
         raise HTTPException(status_code=400, detail="Campaign must be paused to resume.")
 
     # Set state in Redis instantly
@@ -613,9 +631,10 @@ async def cancel_campaign(campaign_id: str, tenant_id: str = Depends(require_act
     dispatch_rows = dispatch_res.data or []
     
     if dispatch_rows:
-        all_done = all(r["status"] in ("DISPATCHED", "FAILED", "CANCELLED") for r in dispatch_rows)
-        any_dispatched = any(r["status"] == "DISPATCHED" for r in dispatch_rows)
-        pending_count = sum(1 for r in dispatch_rows if r["status"] in ("PENDING", "PROCESSING"))
+        dispatch_rows_typed = [cast(Dict[str, Any], r) for r in dispatch_rows]
+        all_done = all(r.get("status") in ("DISPATCHED", "FAILED", "CANCELLED") for r in dispatch_rows_typed)
+        any_dispatched = any(r.get("status") == "DISPATCHED" for r in dispatch_rows_typed)
+        pending_count = sum(1 for r in dispatch_rows_typed if r.get("status") in ("PENDING", "PROCESSING"))
         
         if all_done and any_dispatched and pending_count == 0:
             # All emails already went out — this is effectively a successful send
@@ -630,7 +649,8 @@ async def cancel_campaign(campaign_id: str, tenant_id: str = Depends(require_act
     db.client.table("campaigns").update({"status": "cancelled"}).eq("id", campaign_id).execute()
     db.client.table("campaign_dispatch").update({"status": "CANCELLED"}).eq("campaign_id", campaign_id).eq("status", "PENDING").execute()
     
-    pending_stopped = sum(1 for r in dispatch_rows if r["status"] == "PENDING") if dispatch_rows else 0
+    dispatch_rows_typed = [cast(Dict[str, Any], r) for r in dispatch_rows] if dispatch_rows else []
+    pending_stopped = sum(1 for r in dispatch_rows_typed if r.get("status") == "PENDING")
     return {"status": "cancelled", "message": f"Campaign cancelled. {pending_stopped} pending emails discarded."}
 
 @router.post("/{campaign_id}/preview")
@@ -653,10 +673,19 @@ async def preview_campaign(campaign_id: str, sample_contact: Optional[dict] = No
         "last_name": "Doe"
     }
     
-    html_content = process_spintax(campaign_data["body_html"])
+    body_html = str(campaign_data.get("body_html", ""))
+    if body_html.strip().startswith("{") and body_html.strip().endswith("}"):
+        try:
+            import json
+            from services.compile_service import compile_design_json
+            body_html = compile_design_json(json.loads(body_html), template_id=campaign_id)
+        except Exception:
+            pass
+
+    html_content = process_spintax(body_html)
     html_content = process_merge_tags(html_content, contact)
     
-    subject = process_spintax(campaign_data["subject"])
+    subject = process_spintax(str(campaign_data.get("subject", "")))
     subject = process_merge_tags(subject, contact)
     
     return {
@@ -683,8 +712,17 @@ async def send_test_email(campaign_id: str, request: TestEmailRequest, tenant_id
     camp = campaign.data[0]
     sample_contact = {"email": request.recipient_email, "first_name": "Test", "last_name": "User"}
 
-    html_content = process_merge_tags(process_spintax(camp["body_html"]), sample_contact)
-    subject = process_merge_tags(process_spintax(camp["subject"]), sample_contact)
+    body_html = str(camp.get("body_html", ""))
+    if body_html.strip().startswith("{") and body_html.strip().endswith("}"):
+        try:
+            import json
+            from services.compile_service import compile_design_json
+            body_html = compile_design_json(json.loads(body_html), template_id=campaign_id)
+        except Exception:
+            pass
+
+    html_content = process_merge_tags(process_spintax(body_html), sample_contact)
+    subject = process_merge_tags(process_spintax(str(camp.get("subject", ""))), sample_contact)
 
     from services.email_service import send_raw_html
     
@@ -719,13 +757,13 @@ async def duplicate_campaign(request: Request, campaign_id: str, tenant_id: str 
     if not result.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    original = result.data[0]
+    original = cast(Dict[str, Any], result.data[0])
     
     # 2. Prepare new data
     new_campaign_id = str(uuid.uuid4())
     
     # Handle naming (Copy)
-    base_name = original['name']
+    base_name = str(original.get('name', 'Untitled'))
     if " (Copy)" in base_name:
         # Avoid nested (Copy) (Copy)
         base_name = base_name.split(" (Copy)")[0]
@@ -736,11 +774,11 @@ async def duplicate_campaign(request: Request, campaign_id: str, tenant_id: str 
         "id": new_campaign_id,
         "tenant_id": tenant_id,
         "name": new_name,
-        "subject": original["subject"],
-        "body_html": original["body_html"],
-        "from_name": original["from_name"],
-        "from_prefix": original["from_prefix"],
-        "domain_id": str(original["domain_id"]) if original.get("domain_id") else None,
+        "subject": original.get("subject"),
+        "body_html": original.get("body_html"),
+        "from_name": original.get("from_name"),
+        "from_prefix": original.get("from_prefix"),
+        "domain_id": str(original.get("domain_id")) if original.get("domain_id") else None,
         "status": "draft",
         "created_at": datetime.now().isoformat(),
         "created_by_user_id": jwt_payload.user_id,
@@ -771,17 +809,19 @@ async def reject_campaign_review(
         raise HTTPException(status_code=404, detail="Campaign not found.")
     
     # 2. Update Status (Atomic)
-    validate_campaign_transition(campaign_res.data[0]["status"], "draft")
+    campaign_data = cast(Dict[str, Any], campaign_res.data[0])
+    # 2. Update Status (Atomic)
+    validate_campaign_transition(str(campaign_data.get("status", "unknown")), "draft")
     res = db.client.table("campaigns").update({"status": "draft"}).eq("id", campaign_id).eq("status", "awaiting_review").execute()
     
     if not res.data:
         raise HTTPException(status_code=409, detail="State conflict: Campaign was modified or processed by another administrator.")
 
     # 3. Notify Creator (UX Restoration - Issue 4)
-    creator_id = campaign_res.data[0]["created_by_user_id"]
+    creator_id = str(campaign_data.get("created_by_user_id", ""))
     await emit_notification(
         tenant_id, creator_id, jwt_payload.user_id, "campaign_rejected",
-        "📋 Changes Requested", f"Your campaign '{campaign_res.data[0]['name']}' was returned to draft.",
+        "📋 Changes Requested", f"Your campaign '{campaign_data.get('name')}' was returned to draft.",
         {"campaign_id": campaign_id}
     )
 
@@ -802,19 +842,15 @@ async def approve_campaign_review(
     if not campaign_res.data:
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
-    current_status = campaign_res.data[0]["status"]
+    campaign_data = cast(Dict[str, Any], campaign_res.data[0])
+    current_status = str(campaign_data.get("status", "unknown"))
     
     # 1. State Machine Enforcement (Issue 3)
     validate_campaign_transition(current_status, "approved")
 
-    # 2. Atomic Transition + Version Check (Issue 1 & 2)
-    # Using optimistic concurrency control (status check + version match)
+    # 2. Atomic Transition
+    # Using optimistic concurrency control (status check)
     update_query = db.client.table("campaigns").update({"status": "approved"}).eq("id", campaign_id).eq("status", current_status)
-    
-    # If the creator supplied a version (from UI), we check it
-    # campaign_res contains the current version from DB
-    current_version = campaign_res.data[0].get("version", 1)
-    update_query = update_query.eq("version", current_version)
     
     res = update_query.execute()
 
@@ -824,8 +860,8 @@ async def approve_campaign_review(
             detail="Concurrency Error: This campaign has been modified or approved by someone else. Please refresh."
         )
 
-    campaign_name = campaign_res.data[0]["name"]
-    creator_id = campaign_res.data[0]["created_by_user_id"]
+    campaign_name = str(campaign_data.get("name", "Untitled"))
+    creator_id = str(campaign_data.get("created_by_user_id", ""))
 
     # 3. Notify Creator — only if a different person approved (not the creator themselves)
     # Per system requirements: Creators receive ZERO unsolicited alerts from admin actions.
@@ -870,7 +906,8 @@ async def request_campaign_review(
         if not campaign_res.data:
             raise HTTPException(status_code=404, detail="Campaign not found.")
 
-        current_status = campaign_res.data[0]["status"]
+        campaign_data = cast(Dict[str, Any], campaign_res.data[0])
+        current_status = str(campaign_data.get("status", "draft"))
         # STATE MACHINE: only draft or awaiting_review campaigns can (re-)request review
         if current_status not in ["draft", "awaiting_review"]:
             raise HTTPException(
@@ -878,7 +915,7 @@ async def request_campaign_review(
                 detail=f"Only draft campaigns can request review. Current status: '{current_status}'."
             )
 
-        campaign_name = campaign_res.data[0]["name"]
+        campaign_name = str(campaign_data.get("name", "Untitled"))
 
         # 2. Safe creator info lookup — name, role, workspace
         creator_name = "A team member"
@@ -887,21 +924,24 @@ async def request_campaign_review(
         try:
             creator_res = db.client.table("users").select("full_name, email").eq("id", jwt_payload.user_id).execute()
             if creator_res.data:
-                creator_name = creator_res.data[0].get("full_name") or creator_res.data[0].get("email") or "A team member"
+                creator_row = cast(Dict[str, Any], creator_res.data[0])
+                creator_name = str(creator_row.get("full_name") or creator_row.get("email") or "A team member")
         except Exception:
             pass
 
         try:
             role_res = db.client.table("tenant_users").select("role").eq("user_id", jwt_payload.user_id).eq("tenant_id", tenant_id).execute()
             if role_res.data:
-                creator_role = role_res.data[0].get("role", "Creator").capitalize()
+                role_row = cast(Dict[str, Any], role_res.data[0])
+                creator_role = str(role_row.get("role", "Creator")).capitalize()
         except Exception:
             pass
 
         try:
             ws_res = db.client.table("tenants").select("workspace_name").eq("id", tenant_id).execute()
             if ws_res.data:
-                workspace_name = ws_res.data[0].get("workspace_name") or ws_res.data[0].get("company_name") or "your workspace"
+                ws_row = cast(Dict[str, Any], ws_res.data[0])
+                workspace_name = str(ws_row.get("workspace_name") or ws_row.get("company_name") or "your workspace")
         except Exception:
             pass
 
@@ -922,14 +962,15 @@ async def request_campaign_review(
         # 5. Email Notification (Keep existing logic for now)
         # (Assuming send_campaign_review_notification is still needed for SMTP)
         tu_res = db.client.table("tenant_users").select("user_id").eq("tenant_id", tenant_id).in_("role", ["owner", "admin"]).execute()
-        admin_ids = [tu["user_id"] for tu in (tu_res.data or [])]
+        admin_ids = [str(cast(Dict[str, Any], tu).get("user_id")) for tu in (tu_res.data or [])]
         if admin_ids:
             admins_res = db.client.table("users").select("id, email").in_("id", admin_ids).execute()
-            for admin in (admins_res.data or []):
-                if admin["id"] == jwt_payload.user_id: continue
+            for admin_raw in (admins_res.data or []):
+                admin = cast(Dict[str, Any], admin_raw)
+                if admin.get("id") == jwt_payload.user_id: continue
                 try:
                     await send_campaign_review_notification(
-                        to_email=admin["email"],
+                        to_email=str(admin.get("email")),
                         creator_name=creator_name,
                         campaign_name=campaign_name,
                         campaign_id=campaign_id,

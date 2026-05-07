@@ -80,7 +80,7 @@ function CampaignsPage() {
     const fetchCampaigns = async (background = false) => {
         if (!token) return;
         try {
-            const params = new URLSearchParams({ page: String(page), limit: "15" });
+            const params = new URLSearchParams({ page: String(page), limit: "15", t: String(Date.now()) });
             if (activeTab !== "all") params.set("status", activeTab);
             const res = await fetch(`${API_BASE}/campaigns/?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import httpx
 import httpcore
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +25,6 @@ logging.basicConfig(
 )
 
 # Import route modules
-from fastapi.staticfiles import StaticFiles
 from routes import campaigns, webhooks, auth, onboarding, contacts, templates, assets, password_reset, billing, settings, domains, team, senders, infrastructure, notifications, account
 
 # Rate limiter — shared instance backed by Redis for multi-tenant scaling
@@ -57,11 +57,16 @@ async def _run_scheduler():
                 .eq("status", "scheduled").lte("scheduled_at", now_iso) \
                 .is_("is_archived", "false").execute()
             for camp in (res.data or []):
-                cid, tid = camp["id"], camp["tenant_id"]
+                if not isinstance(camp, dict):
+                    continue
+                cid = str(camp.get("id", ""))
+                tid = str(camp.get("tenant_id", ""))
+                if not cid or not tid:
+                    continue
                 if not claim_scheduled_campaign(db.client, cid, tid, now_iso):
                     logger.info(f"[{cid}] Skip embedded scheduler dispatch; campaign already claimed.")
                     continue
-                logger.info(f"[{cid}] Dispatching scheduled campaign '{camp['name']}'")
+                logger.info(f"[{cid}] Dispatching scheduled campaign '{camp.get('name', 'Unnamed')}'")
                 try:
                     contacts, _ = fetch_contacts_for_target(
                         supabase=db.client,
@@ -153,6 +158,19 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Supabase closes idle HTTP/2 connections. When the pool reuses a dead stream,
 # httpx raises RemoteProtocolError. We catch it here and retry ONCE — from the
 # user's perspective the request just works on the first try.
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import logging
+    logger = logging.getLogger("fastapi")
+    logger.error(f"422 Validation Error: {exc.errors()}")
+    logger.error(f"Request body: {await request.body()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors(), "body": str(await request.body())},
+    )
+
 @app.middleware("http")
 async def retry_on_connection_error(request: Request, call_next):
     try:
@@ -167,15 +185,23 @@ async def retry_on_connection_error(request: Request, call_next):
             logging.getLogger("email_engine").error(f"[retry] Second attempt also failed: {e}")
             return JSONResponse(status_code=503, content={"detail": "Service temporarily unavailable. Please try again."})
 
-# Mount static files directory for assets
-# The directory "uploads" will be served at /uploads
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # CRITICAL: Add CORS middleware BEFORE including routers
+# Relaxed CORS for development stability
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+env_origins = os.getenv("FRONTEND_URL", "").split(",")
+for o in env_origins:
+    if o.strip():
+        origins.append(o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv("FRONTEND_URL", "http://localhost:3000").split(",") if origin.strip()],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -214,6 +240,11 @@ app.include_router(tracking.router)
 
 from routes import analytics
 app.include_router(analytics.router)
+ 
+# Mount static assets for legacy support
+UPLOADS_PATH = Path(__file__).resolve().parent / "uploads"
+if UPLOADS_PATH.exists():
+    app.mount("/uploads", StaticFiles(directory=str(UPLOADS_PATH)), name="uploads")
 
 
 @app.get("/health")

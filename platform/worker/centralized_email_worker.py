@@ -121,7 +121,7 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
             
             if task_type == "raw_html":
                 # Bypass Jinja completely for Test Campaigns & Legacy Notifications
-                html_content = data.get("html", "")
+                html_content = data.get("html", "") or data.get("html_content", "")
                 subject = data.get("subject", "Email Engine Notification")
             else:
                 if task_type not in SUBJECTS:

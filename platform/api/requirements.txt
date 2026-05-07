@@ -39,3 +39,4 @@ python-multipart>=0.0.9 # Form parsing (FastAPI forms)
 # Campaign State Management (Phase 4/5)
 redis>=5.0.0
 boto3==1.34.69
+celery>=5.4.0

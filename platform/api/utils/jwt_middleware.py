@@ -11,25 +11,25 @@ Features:
 
 from fastapi import Header, HTTPException, status, Depends
 from jose import JWTError, jwt
-from typing import Optional
+from typing import Optional, Annotated, Any, Dict, cast
+from pydantic import BaseModel
 import os
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 
 
-class JWTPayload:
+class JWTPayload(BaseModel):
     """Validated JWT payload & DB Context"""
-    def __init__(self, user_id: str, tenant_id: str, email: str, role: str, workspace_type: str, tenant_status: str, onboarding_required: bool, token_version: int = 1, isolation_model: str = "team"):
-        self.user_id = user_id
-        self.tenant_id = tenant_id
-        self.email = email
-        self.role = role
-        self.workspace_type = workspace_type
-        self.tenant_status = tenant_status
-        self.onboarding_required = onboarding_required
-        self.token_version = token_version
-        self.isolation_model = isolation_model
+    user_id: str
+    tenant_id: str
+    email: str
+    role: str
+    workspace_type: str
+    tenant_status: str
+    onboarding_required: bool
+    token_version: int = 1
+    isolation_model: str = "team"
 
     @property
     def ui_role(self) -> str:
@@ -51,7 +51,9 @@ def normalize_storage_role(role: Optional[str]) -> Optional[str]:
     return role
 
 
-def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) -> JWTPayload:
+def verify_jwt_token(
+    authorization: Annotated[Optional[str], Header(alias="Authorization")] = None
+) -> JWTPayload:
     """
     Verify JWT token from Authorization header.
     
@@ -99,12 +101,12 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
         if not u_res.data:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
         
-        user_data = u_res.data[0]
+        user_data = cast(Dict[str, Any], u_res.data[0])
         if not user_data.get("is_active", True):
              raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled.")
 
-        db_token_version = user_data.get("token_version") or 1
-        jwt_token_version = payload.get("token_version") or 0
+        db_token_version = cast(int, user_data.get("token_version") or 1)
+        jwt_token_version = cast(int, payload.get("token_version") or 0)
 
         # REVOCATION CHECK: If JWT version is older than DB version, reject.
         if jwt_token_version < db_token_version:
@@ -124,15 +126,16 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
         onboarding_required = True
 
         if tu_res.data:
-            db_role = normalize_public_role(tu_res.data[0].get("role", "viewer"))
-            isolation_model = tu_res.data[0].get("isolation_model", "team")
+            membership = cast(Dict[str, Any], tu_res.data[0])
+            db_role = normalize_public_role(cast(Optional[str], membership.get("role", "viewer"))) or "viewer"
+            isolation_model = cast(str, membership.get("isolation_model", "team"))
 
             t_res = db.client.table("tenants").select("workspace_type, status, onboarding_required").eq("id", tenant_id).execute()
             if t_res.data:
-                tenant_info = t_res.data[0]
-                raw_workspace_type = tenant_info.get("workspace_type") or "MAIN"
-                tenant_status = tenant_info.get("status", "active")
-                onboarding_required = tenant_info.get("onboarding_required", False)
+                tenant_info = cast(Dict[str, Any], t_res.data[0])
+                raw_workspace_type = cast(str, tenant_info.get("workspace_type") or "MAIN")
+                tenant_status = cast(str, tenant_info.get("status", "active"))
+                onboarding_required = cast(bool, tenant_info.get("onboarding_required", False))
                 
                 # FAIL CLOSED: if workspace_type is null/missing/unrecognized, deny access.
                 if raw_workspace_type.upper() not in ("MAIN", "PRIMARY", "FRANCHISE"):
@@ -167,9 +170,9 @@ def verify_jwt_token(authorization: str = Header(..., alias="Authorization")) ->
                 normalized_role = "VIEWER"
 
         return JWTPayload(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            email=email,
+            user_id=cast(str, user_id),
+            tenant_id=cast(str, tenant_id),
+            email=cast(str, email),
             role=normalized_role,
             workspace_type=workspace_type,
             tenant_status=tenant_status,
@@ -266,7 +269,8 @@ def require_active_tenant(
             detail="Tenant not found"
         )
     
-    tenant_status = tenant_result.data[0]["status"]
+    tenant_row = cast(Dict[str, Any], tenant_result.data[0])
+    tenant_status = cast(str, tenant_row.get("status", "pending"))
     
     # CRITICAL: Only active tenants can access protected features
     if tenant_status != "active":
