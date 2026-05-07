@@ -106,8 +106,24 @@ function FloatingToolbar({ block, onUpdate, position, onDuplicate, onDelete }: {
         "Tahoma", "Times New Roman", "Courier New", "Impact"
     ];
 
+    const [activeStyles, setActiveStyles] = useState({ bold: false, italic: false, underline: false });
+    
+    useEffect(() => {
+        const checkStyles = () => {
+            setActiveStyles({
+                bold: document.queryCommandState("bold"),
+                italic: document.queryCommandState("italic"),
+                underline: document.queryCommandState("underline"),
+            });
+        };
+        const timer = setInterval(checkStyles, 200);
+        return () => clearInterval(timer);
+    }, []);
+
     const exec = (command: string, value?: string) => {
         document.execCommand(command, false, value);
+        // Immediate feedback
+        setActiveStyles(prev => ({ ...prev, [command]: document.queryCommandState(command) }));
     };
 
     return (
@@ -116,12 +132,12 @@ function FloatingToolbar({ block, onUpdate, position, onDuplicate, onDelete }: {
             style={{
                 position: "fixed", top: adjustedPos.top, left: adjustedPos.left,
                 transform: "translateX(-50%)",
-                background: "rgba(255, 255, 255, 0.98)", backdropFilter: "blur(20px)",
-                padding: "6px 12px", borderRadius: "16px", display: "flex", alignItems: "center", gap: "8px",
-                boxShadow: "0 20px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)",
-                zIndex: 3000, border: "1px solid rgba(255, 255, 255, 0.3)",
+                background: "rgba(255, 255, 255, 0.98)", backdropFilter: "blur(24px)",
+                padding: "8px 14px", borderRadius: "14px", display: "flex", alignItems: "center", gap: "10px",
+                boxShadow: "0 15px 40px -10px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08)",
+                zIndex: 4000, border: "1px solid #fff",
                 opacity: adjustedPos.opacity,
-                transition: "top 0.2s cubic-bezier(0.16, 1, 0.3, 1), left 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s",
+                transition: "top 0.15s cubic-bezier(0.16, 1, 0.3, 1), left 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s",
                 pointerEvents: "auto"
             }}>
             <style>{`
@@ -234,26 +250,45 @@ function FloatingToolbar({ block, onUpdate, position, onDuplicate, onDelete }: {
 
                     <div style={{ width: 1, height: 20, background: "#E2E8F0", margin: "0 4px" }} />
 
-                    <button className="toolbar-btn" onMouseDown={(e) => { e.preventDefault(); exec("bold"); }}><Bold size={16} /></button>
-                    <button className="toolbar-btn" onMouseDown={(e) => { e.preventDefault(); exec("italic"); }}><Italic size={16} /></button>
-                    <button className="toolbar-btn" onMouseDown={(e) => { e.preventDefault(); exec("underline"); }}><Underline size={16} /></button>
+                    <button className={`toolbar-btn ${activeStyles.bold ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); exec("bold"); }}><Bold size={16} /></button>
+                    <button className={`toolbar-btn ${activeStyles.italic ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); exec("italic"); }}><Italic size={16} /></button>
+                    <button className={`toolbar-btn ${activeStyles.underline ? "active" : ""}`} onMouseDown={(e) => { e.preventDefault(); exec("underline"); }}><Underline size={16} /></button>
 
                     <button 
                         className="toolbar-btn" 
-                        style={{ position: "relative" }}
-                        onMouseDown={(e) => { e.preventDefault(); }}
-                        onClick={() => {
+                        style={{ position: "relative", padding: "8px 10px" }}
+                        onMouseDown={(e) => { 
+                            e.preventDefault(); 
+                            e.stopPropagation();
+                            
                             const input = document.createElement("input");
                             input.type = "color";
-                            input.value = block.props.color || "#000000";
+                            input.value = block.props.color || block.props.textColor || "#000000";
+                            input.style.display = "none";
+                            document.body.appendChild(input);
+                            
                             input.oninput = (ev: any) => {
-                                onUpdate("color", ev.target.value);
+                                const val = ev.target.value;
+                                exec("foreColor", val);
+                                if (block.type === "hero" || block.props.textColor !== undefined) {
+                                    onUpdate("textColor", val);
+                                } else {
+                                    onUpdate("color", val);
+                                }
+                            };
+                            input.onchange = () => {
+                                document.body.removeChild(input);
                             };
                             input.click();
                         }}
                     >
-                        <Type size={16} />
-                        <div style={{ position: "absolute", bottom: 4, width: 12, height: 2, background: block.props.color || "#000" }} />
+                        <Type size={18} style={{ color: block.props.color || block.props.textColor || "#475569" }} />
+                        <div style={{ 
+                            position: "absolute", bottom: 4, left: "20%", right: "20%", height: 3, 
+                            background: block.props.color || block.props.textColor || "#6366F1", 
+                            borderRadius: 4,
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
+                        }} />
                     </button>
 
                     <div style={{ width: 1, height: 20, background: "#E2E8F0", margin: "0 4px" }} />
@@ -373,8 +408,9 @@ export function EditableBlock({
         if (!(isResizingTop || isResizingBottom || isResizingLeft || isResizingRight)) return;
 
         const getUpdates = (ex: number, ey: number) => {
-            const dy = ey - startY.current;
-            const dx = ex - startX.current;
+            const SNAP = 8;
+            const dy = Math.round((ey - startY.current) / SNAP) * SNAP;
+            const dx = Math.round((ex - startX.current) / SNAP) * SNAP;
             const up: Record<string, any> = {};
             const contentWidth = design.theme.contentWidth || 600;
 
@@ -396,10 +432,11 @@ export function EditableBlock({
             }
             if (isResizingRight) {
                 const newWidth = Math.max(10, startSize.current.width + dx);
-                // For most blocks, resizing the right side should update the 'width' property
                 if (["image", "shape", "text", "button", "floating-text"].includes(block.type)) {
                     const isPct = block.props.width?.toString().includes("%") || (!block.props.width && block.type !== "button");
-                    up.width = isPct ? `${Math.min(100, Math.round((newWidth / contentWidth) * 100))}%` : newWidth;
+                    const pctVal = Math.min(100, Math.round((newWidth / contentWidth) * 100));
+                    const snappedPct = Math.round(pctVal / 5) * 5;
+                    up.width = isPct ? `${snappedPct}%` : newWidth;
                 } else {
                     up.paddingRight = Math.max(0, startSize.current.paddingRight + dx);
                 }
@@ -416,18 +453,18 @@ export function EditableBlock({
             if (Object.keys(finalUpdates).length > 0) {
                 onBulkUpdate(finalUpdates);
             }
-            setIsResizingTop(false); setIsResizingBottom(false); 
+            setIsResizingTop(false); setIsResizingBottom(false);
             setIsResizingLeft(false); setIsResizingRight(false);
             setActiveResizeProps(null);
         };
 
         window.addEventListener("mousemove", handleMouseMove);
         window.addEventListener("mouseup", handleMouseUp);
-        return () => { 
-            window.removeEventListener("mousemove", handleMouseMove); 
-            window.removeEventListener("mouseup", handleMouseUp); 
+        return () => {
+            window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mouseup", handleMouseUp);
         };
-    }, [isResizingTop, isResizingBottom, isResizingLeft, isResizingRight, onBulkUpdate, block.type, block.props.width, design.theme.contentWidth]);
+    }, [isResizingTop, isResizingBottom, isResizingLeft, isResizingRight, block, onBulkUpdate, design.theme.contentWidth]);
 
     useEffect(() => {
         const updatePos = () => {
@@ -518,15 +555,34 @@ export function EditableBlock({
                                 style={{ maxHeight: 50, marginBottom: 20, maxWidth: "100%", objectFit: "contain" }} 
                             />
                         )}
-                        <StableText isSelected={isSelected} content={p.headline || "Headline"} onBlur={(e) => onUpdate("headline", e.currentTarget.innerHTML)} style={{ fontSize: getFontSize(p.fontSize || 24), color: "#fff", fontWeight: 700 }} />
-                        <StableText isSelected={isSelected} content={p.subheadline || "Subheadline"} onBlur={(e) => onUpdate("subheadline", e.currentTarget.innerHTML)} style={{ fontSize: 15, color: "rgba(255,255,255,0.8)" }} />
+                        <StableText isSelected={isSelected} content={p.headline || "Headline"} onBlur={(e) => onUpdate("headline", e.currentTarget.innerHTML)} 
+                            style={{ 
+                                fontSize: getFontSize(p.fontSize || 24), 
+                                color: p.textColor || p.color || "#fff", 
+                                fontWeight: 700,
+                                fontFamily: p.fontFamily || design.theme.fontFamily || "Arial"
+                            }} 
+                        />
+                        <StableText isSelected={isSelected} content={p.subheadline || "Subheadline"} onBlur={(e) => onUpdate("subheadline", e.currentTarget.innerHTML)} 
+                            style={{ 
+                                fontSize: 15, 
+                                color: p.textColor || p.color || "rgba(255,255,255,0.8)",
+                                fontFamily: p.fontFamily || design.theme.fontFamily || "Arial"
+                            }} 
+                        />
                     </div>
                 );
             case "footer":
                 return (
                     <div style={{ textAlign: (p.align as any) || "center" }}>
                         {p.logoUrl && <img src={p.logoUrl} style={{ maxHeight: 30, marginBottom: 16 }} />}
-                        <StableText isSelected={isSelected} content={p.content || "© Company"} onBlur={(e) => onUpdate("content", e.currentTarget.innerHTML)} style={{ fontSize: 12, color: "#9CA3AF" }} />
+                        <StableText isSelected={isSelected} content={p.content || "© Company"} onBlur={(e) => onUpdate("content", e.currentTarget.innerHTML)} 
+                            style={{ 
+                                fontSize: 12, 
+                                color: p.textColor || p.color || "#9CA3AF",
+                                fontFamily: p.fontFamily || design.theme.fontFamily || "Arial"
+                            }} 
+                        />
                     </div>
                 );
             case "layout":
@@ -586,6 +642,11 @@ export function EditableBlock({
                 id={block.id}
                 ref={blockRef}
                 onClick={(e) => { e.stopPropagation(); onSelect(); }}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    const textEl = blockRef.current?.querySelector('[contenteditable="true"]') as HTMLElement;
+                    if (textEl) textEl.focus();
+                }}
                 onMouseEnter={onHover}
                 onMouseLeave={onLeave}
                 style={{
@@ -602,15 +663,70 @@ export function EditableBlock({
                     paddingRight: (activeResizeProps?.paddingRight ?? getDefPadding("paddingRight")),
                     cursor: "default",
                     transition: "box-shadow 0.2s, border 0.2s",
-                    border: isHovered && !isSelected ? "1px solid #7D2AE8" : "1px solid transparent",
-                    boxShadow: validationErrors[block.id] ? "0 0 0 2px #EF4444, 0 0 12px rgba(239, 68, 68, 0.4)" : "none",
+                    border: isSelected ? "2px solid #6366F1" : (isHovered ? "2px solid #7D2AE8" : "2px solid transparent"),
+                    boxShadow: isSelected ? "0 0 0 4px rgba(99, 102, 241, 0.1), 0 10px 25px -5px rgba(0, 0, 0, 0.1)" : (validationErrors[block.id] ? "0 0 0 2px #EF4444, 0 0 12px rgba(239, 68, 68, 0.4)" : "none"),
                     boxSizing: "border-box",
                     zIndex: isSelected ? 10 : 1,
-                    overflow: p.borderRadius ? "hidden" : "visible" 
+                    overflow: "visible" 
                 }}
             >
                 {isSelected && (
                     <>
+                        {/* CORNER HANDLES */}
+                        <div 
+                            onMouseDown={(e) => { 
+                                e.preventDefault(); e.stopPropagation(); 
+                                setIsResizingTop(true); setIsResizingLeft(true);
+                                startY.current = e.clientY; startX.current = e.clientX;
+                                startSize.current = { 
+                                    paddingTop: getDefPadding("paddingTop"), paddingBottom: getDefPadding("paddingBottom"),
+                                    paddingLeft: getDefPadding("paddingLeft"), paddingRight: getDefPadding("paddingRight"),
+                                    width: blockRef.current?.offsetWidth || 0, height: blockRef.current?.offsetHeight || 0
+                                };
+                            }}
+                            style={{ position: "absolute", top: -6, left: -6, width: 12, height: 12, background: "#fff", border: "2px solid #6366F1", borderRadius: "50%", zIndex: 130, cursor: "nwse-resize" }} 
+                        />
+                        <div 
+                            onMouseDown={(e) => { 
+                                e.preventDefault(); e.stopPropagation(); 
+                                setIsResizingTop(true); setIsResizingRight(true);
+                                startY.current = e.clientY; startX.current = e.clientX;
+                                startSize.current = { 
+                                    paddingTop: getDefPadding("paddingTop"), paddingBottom: getDefPadding("paddingBottom"),
+                                    paddingLeft: getDefPadding("paddingLeft"), paddingRight: getDefPadding("paddingRight"),
+                                    width: blockRef.current?.offsetWidth || 0, height: blockRef.current?.offsetHeight || 0
+                                };
+                            }}
+                            style={{ position: "absolute", top: -6, right: -6, width: 12, height: 12, background: "#fff", border: "2px solid #6366F1", borderRadius: "50%", zIndex: 130, cursor: "nesw-resize" }} 
+                        />
+                        <div 
+                            onMouseDown={(e) => { 
+                                e.preventDefault(); e.stopPropagation(); 
+                                setIsResizingBottom(true); setIsResizingLeft(true);
+                                startY.current = e.clientY; startX.current = e.clientX;
+                                startSize.current = { 
+                                    paddingTop: getDefPadding("paddingTop"), paddingBottom: getDefPadding("paddingBottom"),
+                                    paddingLeft: getDefPadding("paddingLeft"), paddingRight: getDefPadding("paddingRight"),
+                                    width: blockRef.current?.offsetWidth || 0, height: blockRef.current?.offsetHeight || 0
+                                };
+                            }}
+                            style={{ position: "absolute", bottom: -6, left: -6, width: 12, height: 12, background: "#fff", border: "2px solid #6366F1", borderRadius: "50%", zIndex: 130, cursor: "nesw-resize" }} 
+                        />
+                        <div 
+                            onMouseDown={(e) => { 
+                                e.preventDefault(); e.stopPropagation(); 
+                                setIsResizingBottom(true); setIsResizingRight(true);
+                                startY.current = e.clientY; startX.current = e.clientX;
+                                startSize.current = { 
+                                    paddingTop: getDefPadding("paddingTop"), paddingBottom: getDefPadding("paddingBottom"),
+                                    paddingLeft: getDefPadding("paddingLeft"), paddingRight: getDefPadding("paddingRight"),
+                                    width: blockRef.current?.offsetWidth || 0, height: blockRef.current?.offsetHeight || 0
+                                };
+                            }}
+                            style={{ position: "absolute", bottom: -6, right: -6, width: 12, height: 12, background: "#fff", border: "2px solid #6366F1", borderRadius: "50%", zIndex: 130, cursor: "nwse-resize" }} 
+                        />
+
+                        {/* EDGE RESIZING PILLS */}
                         <div onMouseDown={(e) => { 
                             e.preventDefault();
                             e.stopPropagation(); 
@@ -626,7 +742,7 @@ export function EditableBlock({
                             };
                         }}
                             style={{ position: "absolute", top: -10, left: 0, right: 0, height: 20, cursor: "ns-resize", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <div className="resize-pill" style={{ width: 40, height: 4, background: "#6366F1", borderRadius: 4, opacity: 0.8 }} />
+                            <div className="resize-pill" style={{ width: 40, height: 6, background: "#6366F1", borderRadius: 4, boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }} />
                         </div>
                         <div onMouseDown={(e) => { 
                             e.preventDefault();
@@ -643,7 +759,7 @@ export function EditableBlock({
                             };
                         }}
                             style={{ position: "absolute", bottom: -10, left: 0, right: 0, height: 20, cursor: "ns-resize", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <div className="resize-pill" style={{ width: 40, height: 4, background: "#6366F1", borderRadius: 4, opacity: 0.8 }} />
+                            <div className="resize-pill" style={{ width: 40, height: 6, background: "#6366F1", borderRadius: 4, boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }} />
                         </div>
                         <div onMouseDown={(e) => { 
                             e.preventDefault();
@@ -660,7 +776,7 @@ export function EditableBlock({
                             };
                         }}
                             style={{ position: "absolute", left: -10, top: 0, bottom: 0, width: 20, cursor: "ew-resize", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <div className="resize-pill" style={{ width: 4, height: 40, background: "#6366F1", borderRadius: 4, opacity: 0.8 }} />
+                            <div className="resize-pill" style={{ width: 6, height: 40, background: "#6366F1", borderRadius: 4, boxShadow: "2px 0 4px rgba(0,0,0,0.2)" }} />
                         </div>
                         <div onMouseDown={(e) => { 
                             e.preventDefault();
@@ -677,7 +793,7 @@ export function EditableBlock({
                             };
                         }}
                             style={{ position: "absolute", right: -10, top: 0, bottom: 0, width: 20, cursor: "ew-resize", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <div className="resize-pill" style={{ width: 4, height: 40, background: "#6366F1", borderRadius: 4, opacity: 0.8 }} />
+                            <div className="resize-pill" style={{ width: 6, height: 40, background: "#6366F1", borderRadius: 4, boxShadow: "-2px 0 4px rgba(0,0,0,0.2)" }} />
                         </div>
 
                         {/* PREMIUM MOVE HANDLE */}
@@ -685,21 +801,29 @@ export function EditableBlock({
                             onMouseEnter={() => setCanDrag(true)}
                             onMouseLeave={() => setCanDrag(false)}
                             style={{
-                                position: "absolute", bottom: -40, left: "50%", transform: "translateX(-50%)",
-                                background: "#6366F1", color: "white", width: 32, height: 32, borderRadius: "50%",
+                                position: "absolute", bottom: -45, left: "50%", transform: "translateX(-50%)",
+                                background: "#6366F1", color: "white", width: 36, height: 36, borderRadius: "50%",
                                 display: "flex", alignItems: "center", justifyContent: "center", cursor: "grab",
-                                boxShadow: "0 4px 10px rgba(99, 102, 241, 0.4)", zIndex: 150,
+                                boxShadow: "0 4px 15px rgba(99, 102, 241, 0.5)", zIndex: 150,
                                 border: "2px solid #fff"
                             }}
                             title="Drag to move"
                         >
-                            <Move size={16} />
+                            <Move size={18} />
                         </div>
                     </>
                 )}
                 {renderBlockContent()}
                 {isSelected && toolbarPos && !isResizingTop && !isResizingBottom && !isResizingLeft && !isResizingRight && (
                     <FloatingToolbar block={block} onUpdate={onUpdate} position={toolbarPos} onDuplicate={onDuplicate} onDelete={onDelete} />
+                )}
+
+                {/* SMART CENTER GUIDE */}
+                {(isResizingLeft || isResizingRight) && (
+                    <div style={{
+                        position: "fixed", top: 0, bottom: 0, left: "50%", width: 1,
+                        background: "#6366F1", opacity: 0.3, zIndex: 1000, pointerEvents: "none"
+                    }} />
                 )}
             </div>
         </div>
@@ -749,7 +873,14 @@ export default function EditorCanvas({
                 background: zone === "header" ? design.theme.headerBackground : zone === "footer" ? design.theme.footerBackground : design.theme.bodyBackground,
                 padding: `${zone === "header" ? design.theme.headerPadding : (zone === "body" ? 40 : design.theme.footerPadding)}px 20px`,
             }}>
-                <div style={{ position: "absolute", top: 12, left: 20, fontSize: 9, fontWeight: 800, color: "#94A3B8", opacity: 0.6 }}>{zone.toUpperCase()}</div>
+                {/* GHOST TAG (Outside active area) */}
+                <div style={{ 
+                    position: "absolute", top: 12, left: -90, width: 80, textAlign: "right",
+                    fontSize: 10, fontWeight: 900, color: "#94A3B8", opacity: 0.4, 
+                    pointerEvents: "none", letterSpacing: "0.1em", textTransform: "uppercase",
+                    fontFamily: "Inter, sans-serif"
+                }}>{zone}</div>
+
                 <div style={{ width: "100%", maxWidth: design.theme.contentWidth || 600, margin: "0 auto" }}>
                     {isEmpty && zone === "body" && (
                         <div style={{
@@ -799,21 +930,16 @@ export default function EditorCanvas({
                 display: "flex", 
                 flexDirection: "column",
                 alignItems: "center", 
-                padding: "40px 80px",
+                padding: "40px 20px",
                 position: "relative",
-                backgroundImage: `
-                    linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
-                    linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
-                    linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
-                    linear-gradient(-45deg, transparent 75%, #f1f5f9 75%)
-                `,
-                backgroundSize: "20px 20px",
-                backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px"
+                backgroundImage: "radial-gradient(#E2E8F0 1px, transparent 1px)",
+                backgroundSize: "24px 24px",
+                backgroundPosition: "center center"
             }} 
             onScroll={() => window.dispatchEvent(new CustomEvent("canvas-scroll"))}
             onClick={() => onSelectNode(null)}
         >
-            <SelectionOverlay />
+
             <div 
                 className="canvas-page"
                 onClick={(e) => { e.stopPropagation(); onSelectNode({ type: "page", id: "main" }); }}
@@ -821,7 +947,7 @@ export default function EditorCanvas({
                     width: viewMode === "mobile" ? 390 : (design.theme.contentWidth || 600),
                     minHeight: "100%",
                     background: design.theme.background || "#fff", 
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.06)", 
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.05), 0 20px 50px rgba(0,0,0,0.1)", 
                     borderRadius: 12, 
                     overflow: "visible", // ALLOW HANDLES TO BE SEEN
                     position: "relative",

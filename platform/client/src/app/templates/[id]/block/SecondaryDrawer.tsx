@@ -110,68 +110,71 @@ export const SecondaryDrawer = ({
                         <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
                             <div>
                                 <h4 style={{ fontSize: 12, fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Featured Designs</h4>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                                     {TEMPLATE_PRESETS
-                                        .filter(p => p.name.toLowerCase().includes(gallerySearch.toLowerCase()))
-                                        .slice(0, 12)
-                                        .map((preset) => (
-                                            <div
-                                                key={preset.id}
-                                                onClick={() => loadTemplate(preset)}
-                                                style={{
-                                                    borderRadius: 12, border: "1px solid #E4E4E7",
-                                                    background: "#fff", cursor: "pointer", transition: "all 0.2s",
-                                                    overflow: "hidden", position: "relative"
-                                                }}
-                                                onMouseEnter={e => e.currentTarget.style.borderColor = "#6366F1"}
-                                                onMouseLeave={e => e.currentTarget.style.borderColor = "#E4E4E7"}
-                                            >
-                                                <div style={{ width: "100%", aspectRatio: "3/4", overflow: "hidden", background: "#F4F4F5" }}>
-                                                    {preset.thumbnail ? (
-                                                        <img src={preset.thumbnail} alt={preset.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                                    ) : (
-                                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><LayoutTemplate size={24} style={{ color: "#D4D4D8" }} /></div>
-                                                    )}
-                                                </div>
-                                                <div style={{ padding: "8px", background: "#fff", borderTop: "1px solid #F4F4F5" }}>
-                                                    <div style={{ fontSize: 11, fontWeight: 700, color: "#18191B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</div>
-                                                </div>
-                                            </div>
-                                        ))
+                                         .filter(p => p.name.toLowerCase().includes(gallerySearch.toLowerCase()))
+                                         .slice(0, 12)
+                                         .map((preset) => (
+                                             <div
+                                                 key={preset.id}
+                                                 onClick={() => loadTemplate(preset)}
+                                                 style={{
+                                                     borderRadius: 8, border: "1px solid #E2E8F0",
+                                                     background: "#fff", cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                                     overflow: "hidden", position: "relative"
+                                                 }}
+                                                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#6366F1"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 15px -3px rgba(0,0,0,0.1)"; }}
+                                                 onMouseLeave={e => { e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                                             >
+                                                 <div style={{ width: "100%", aspectRatio: "1/1.2", overflow: "hidden", background: "#F1F5F9" }}>
+                                                     {preset.thumbnail ? (
+                                                         <img src={preset.thumbnail} alt={preset.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                                     ) : (
+                                                         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><LayoutTemplate size={18} style={{ color: "#CBD5E1" }} /></div>
+                                                     )}
+                                                 </div>
+                                                 <div style={{ padding: "6px", background: "#fff" }}>
+                                                     <div style={{ fontSize: 10, fontWeight: 800, color: "#0F172A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</div>
+                                                 </div>
+                                             </div>
+                                         ))
                                     }
                                 </div>
                             </div>
 
                             <div>
-                                <h4 style={{ fontSize: 12, fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Full Library ({TEMPLATE_PRESETS.length})</h4>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                                    <h4 style={{ fontSize: 12, fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em" }}>Full Library</h4>
+                                    <span style={{ fontSize: 10, fontWeight: 700, background: "#F1F5F9", color: "#64748B", padding: "2px 6px", borderRadius: 4 }}>{TEMPLATE_PRESETS.length}</span>
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                                     {TEMPLATE_PRESETS
-                                        .filter(p => p.name.toLowerCase().includes(gallerySearch.toLowerCase()))
-                                        .slice(12)
-                                        .map((preset) => (
-                                            <div
-                                                key={preset.id}
-                                                onClick={() => loadTemplate(preset)}
-                                                style={{
-                                                    borderRadius: 12, border: "1px solid #E4E4E7",
-                                                    background: "#fff", cursor: "pointer", transition: "all 0.2s",
-                                                    overflow: "hidden", position: "relative"
-                                                }}
-                                                onMouseEnter={e => e.currentTarget.style.borderColor = "#6366F1"}
-                                                onMouseLeave={e => e.currentTarget.style.borderColor = "#E4E4E7"}
-                                            >
-                                                <div style={{ width: "100%", aspectRatio: "3/4", overflow: "hidden", background: "#F4F4F5" }}>
-                                                    {preset.thumbnail ? (
-                                                        <img src={preset.thumbnail} alt={preset.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                                    ) : (
-                                                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><LayoutTemplate size={24} style={{ color: "#D4D4D8" }} /></div>
-                                                    )}
-                                                </div>
-                                                <div style={{ padding: "8px", background: "#fff", borderTop: "1px solid #F4F4F5" }}>
-                                                    <div style={{ fontSize: 11, fontWeight: 700, color: "#18191B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</div>
-                                                </div>
-                                            </div>
-                                        ))
+                                         .filter(p => p.name.toLowerCase().includes(gallerySearch.toLowerCase()))
+                                         .slice(12)
+                                         .map((preset) => (
+                                             <div
+                                                 key={preset.id}
+                                                 onClick={() => loadTemplate(preset)}
+                                                 style={{
+                                                     borderRadius: 8, border: "1px solid #E2E8F0",
+                                                     background: "#fff", cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                                     overflow: "hidden", position: "relative"
+                                                 }}
+                                                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#6366F1"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 15px -3px rgba(0,0,0,0.1)"; }}
+                                                 onMouseLeave={e => { e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                                             >
+                                                 <div style={{ width: "100%", aspectRatio: "1/1.2", overflow: "hidden", background: "#F1F5F9" }}>
+                                                     {preset.thumbnail ? (
+                                                         <img src={preset.thumbnail} alt={preset.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                                     ) : (
+                                                         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><LayoutTemplate size={18} style={{ color: "#CBD5E1" }} /></div>
+                                                     )}
+                                                 </div>
+                                                 <div style={{ padding: "6px", background: "#fff" }}>
+                                                     <div style={{ fontSize: 10, fontWeight: 800, color: "#0F172A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{preset.name}</div>
+                                                 </div>
+                                             </div>
+                                         ))
                                     }
                                 </div>
                             </div>
@@ -249,25 +252,29 @@ export const SecondaryDrawer = ({
                             <h3 style={{ fontSize: 13, fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Block Library</h3>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px 8px" }}>
                                 {[
-                                    { id: "headers", name: "Headers", icon: <LayoutTemplate size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #B565F2, #8B3DFF)", shadow: "rgba(139, 61, 255, 0.2)" },
-                                    { id: "footers", name: "Footers", icon: <LayoutTemplate size={20} color="#fff" strokeWidth={2.5} style={{ transform: "rotate(180deg)" }} />, bg: "linear-gradient(135deg, #FF6B6B, #E03131)", shadow: "rgba(224, 49, 49, 0.2)" },
-                                    { id: "text-boxes", name: "Text box", icon: <Type size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #47ADFF, #0077FF)", shadow: "rgba(0, 119, 255, 0.2)" },
-                                    { id: "images", name: "Images", icon: <ImageIcon size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #F59E0B, #D97706)", shadow: "rgba(217, 119, 6, 0.2)" },
-                                    { id: "shapes", name: "Shapes", icon: <Shapes size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #10B981, #059669)", shadow: "rgba(5, 150, 105, 0.2)" },
-                                    { id: "buttons", name: "Buttons", icon: <Plus size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #22B8CF, #0B7285)", shadow: "rgba(11, 114, 133, 0.2)" },
-                                    { id: "icon-blocks", name: "Icon blocks", icon: <Shapes size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #E599F7, #AE3EC9)", shadow: "rgba(174, 62, 201, 0.2)" },
+                                    { id: "headers", name: "Headers", icon: <LayoutTemplate size={20} color="#fff" strokeWidth={2.5} />, bg: "linear-gradient(135deg, #334155, #0F172A)", shadow: "rgba(15, 23, 42, 0.2)" },
+                                    { id: "footers", name: "Footers", icon: <LayoutTemplate size={20} color="#fff" strokeWidth={2.5} style={{ transform: "rotate(180deg)" }} />, bg: "linear-gradient(135deg, #334155, #0F172A)", shadow: "rgba(15, 23, 42, 0.2)" },
+                                    { id: "text-boxes", name: "Text box", icon: <Type size={20} color="#fff" strokeWidth={2.5} />, bg: "#6366F1", shadow: "rgba(99, 102, 241, 0.2)" },
+                                    { id: "images", name: "Images", icon: <ImageIcon size={20} color="#fff" strokeWidth={2.5} />, bg: "#06B6D4", shadow: "rgba(6, 182, 212, 0.2)" },
+                                    { id: "shapes", name: "Shapes", icon: <Shapes size={20} color="#fff" strokeWidth={2.5} />, bg: "#F43F5E", shadow: "rgba(244, 63, 94, 0.2)" },
+                                    { id: "buttons", name: "Buttons", icon: <Plus size={20} color="#fff" strokeWidth={2.5} />, bg: "#10B981", shadow: "rgba(16, 185, 129, 0.2)" },
+                                    { id: "icon-blocks", name: "Icon blocks", icon: <Shapes size={20} color="#fff" strokeWidth={2.5} />, bg: "#F59E0B", shadow: "rgba(245, 158, 11, 0.2)" },
                                 ].map((cat, i) => (
                                     <div key={i} onClick={() => setSelectedCategory(cat.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer" }}>
                                         <div style={{ 
-                                            width: 64, height: 64, borderRadius: 16, background: cat.bg, 
+                                            width: 64, height: 64, borderRadius: 12, background: cat.bg, 
                                             display: "flex", alignItems: "center", justifyContent: "center",
-                                            marginBottom: 8, boxShadow: `0 8px 16px ${cat.shadow}`,
-                                            position: "relative", overflow: "hidden"
-                                        }}>
-                                            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "50%", background: "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)" }} />
+                                            marginBottom: 8, boxShadow: `0 4px 12px ${cat.shadow}`,
+                                            position: "relative", overflow: "hidden",
+                                            transition: "all 0.2s"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.transform = "translateY(-4px)"}
+                                        onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+                                        >
+                                            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", background: "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%)" }} />
                                             {cat.icon}
                                         </div>
-                                        <div style={{ fontSize: 11, fontWeight: 500, color: "#3F3F46", textAlign: "center" }}>{cat.name}</div>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: "#1E293B", textAlign: "center" }}>{cat.name}</div>
                                     </div>
                                 ))}
                             </div>

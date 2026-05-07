@@ -670,66 +670,89 @@ export default function PremiumEmailBuilder() {
     );
 
     return (
-        <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#F4F4F5", overflow: "hidden" }}>
-            {/* ════ TOP BAR (Canva Style) ════ */}
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#F8FAFC", overflow: "hidden", fontFamily: "'Inter', sans-serif" }}>
+            {/* ════ TOP BAR (Obsidian Style) ════ */}
             <div style={{
                 height: 56, display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "0 16px", background: "linear-gradient(90deg, #00C4CC 0%, #7D2AE8 100%)", flexShrink: 0, zIndex: 50,
-                color: "#ffffff"
+                padding: "0 16px", background: "#0F172A", flexShrink: 0, zIndex: 100,
+                color: "#ffffff", borderBottom: "1px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
             }}>
                 {/* Left Section */}
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <button onClick={async () => {
-                        await handleSave();
-                        router.push("/templates");
-                    }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", cursor: "pointer", borderRadius: 8, transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.3)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}>
-                        <ArrowLeft size={18} />
+                    <button 
+                        onClick={async () => {
+                            await handleSave();
+                            router.push("/campaigns");
+                        }} 
+                        style={{ 
+                            display: "flex", alignItems: "center", justifyContent: "center", 
+                            width: 32, height: 32, border: "none", background: "rgba(255,255,255,0.1)", 
+                            color: "#fff", cursor: "pointer", borderRadius: 8, transition: "all 0.2s" 
+                        }} 
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.2)"} 
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                    >
+                        <ChevronLeft size={18} />
                     </button>
                     
-                    <button style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "6px 10px", borderRadius: 6 }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.15)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                        File
-                    </button>
-
-                    <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: 2 }}>
-                        {(["desktop", "mobile"] as const).map(m => (
-                            <button key={m} onClick={() => setViewMode(m)} style={{
-                                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12, fontWeight: 600,
-                                background: viewMode === m ? "#fff" : "transparent", color: viewMode === m ? "#7D2AE8" : "#fff",
-                                transition: "all 0.15s ease",
-                            }}>{m === "desktop" ? <Monitor size={14} /> : <Smartphone size={14} />} <span style={{ display: "none" }}>{m}</span></button>
-                        ))}
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
-                        <button onClick={undo} disabled={!canUndo} style={{ ...iconBtn, color: canUndo ? "#fff" : "rgba(255,255,255,0.4)" }}><Undo2 size={16} /></button>
-                        <button onClick={redo} disabled={!canRedo} style={{ ...iconBtn, color: canRedo ? "#fff" : "rgba(255,255,255,0.4)" }}><Redo2 size={16} /></button>
+                    <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
+                    
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3 }}>
+                            <button 
+                                onClick={() => setViewMode("desktop")}
+                                style={{ 
+                                    padding: "6px 12px", border: "none", borderRadius: 6, cursor: "pointer",
+                                    background: viewMode === "desktop" ? "#6366F1" : "transparent",
+                                    color: "#fff", display: "flex", alignItems: "center", gap: 6,
+                                    fontSize: 12, fontWeight: 600, transition: "all 0.2s"
+                                }}
+                            >
+                                <Monitor size={14} /> Desktop
+                            </button>
+                            <button 
+                                onClick={() => setViewMode("mobile")}
+                                style={{ 
+                                    padding: "6px 12px", border: "none", borderRadius: 6, cursor: "pointer",
+                                    background: viewMode === "mobile" ? "#6366F1" : "transparent",
+                                    color: "#fff", display: "flex", alignItems: "center", gap: 6,
+                                    fontSize: 12, fontWeight: 600, transition: "all 0.2s"
+                                }}
+                            >
+                                <Smartphone size={14} /> Mobile
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Center Section: Title */}
+                {/* Center - Template Name & Status */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                    <input 
-                        value={name} 
-                        onChange={e => setName(e.target.value)} 
-                        style={{ 
-                            border: "none", fontSize: 14, fontWeight: 600, color: "#ffffff", outline: "none", 
-                            background: "transparent", textAlign: "center", minWidth: 200, padding: "4px 8px",
-                            borderRadius: 4, cursor: "text"
-                        }} 
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                        onFocus={e => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
-                        onBlur={e => e.currentTarget.style.background = "transparent"}
-                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input 
+                            value={name} 
+                            onChange={e => setName(e.target.value)} 
+                            style={{ 
+                                border: "none", fontSize: 14, fontWeight: 700, color: "#ffffff", outline: "none", 
+                                background: "transparent", textAlign: "center", minWidth: 100, padding: "2px 8px",
+                                borderRadius: 4, cursor: "text", letterSpacing: "-0.01em"
+                            }} 
+                            onFocus={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                            onBlur={e => e.currentTarget.style.background = "transparent"}
+                        />
+                        <div style={{ padding: "2px 6px", background: "rgba(99, 102, 241, 0.2)", borderRadius: 4, border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, color: "#818CF8", textTransform: "uppercase" }}>BLOCK v2</span>
+                        </div>
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                         {isSaving ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 4, color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: 500 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 500 }}>
                                 <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} />
-                                <span>Saving...</span>
+                                <span>Autosaving...</span>
                             </div>
                         ) : lastSavedAt ? (
-                            <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
-                                <Save size={10} /> Saved
+                            <div style={{ color: "#4ADE80", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, opacity: 0.8 }}>
+                                <CheckCircle2 size={10} /> All changes saved
                             </div>
                         ) : null}
                     </div>
@@ -737,37 +760,39 @@ export default function PremiumEmailBuilder() {
 
                 {/* Right Section */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <button onClick={compileForPreview} disabled={isCompiling} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, cursor: isCompiling ? "wait" : "pointer", fontSize: 13, fontWeight: 600, color: "#fff", transition: "background 0.2s" }} onMouseEnter={e => !isCompiling && (e.currentTarget.style.background = "rgba(255,255,255,0.25)")} onMouseLeave={e => !isCompiling && (e.currentTarget.style.background = "rgba(255,255,255,0.15)")}>
-                        {isCompiling ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Eye size={16} />} <span style={{ display: "inline" }}>Preview</span>
-                    </button>
-                    
-                    <button onClick={() => { setShowSendTest(true); setSendTestResult(null); }} style={{
-                        display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8,
-                        background: "transparent", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                        transition: "all 0.15s ease",
-                    }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                        <Mail size={16} /> Send test email
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 12 }}>
+                        <button onClick={undo} disabled={!canUndo} style={{ background: "none", border: "none", color: canUndo ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)", cursor: canUndo ? "pointer" : "default", padding: 8 }}><Undo2 size={18} /></button>
+                        <button onClick={redo} disabled={!canRedo} style={{ background: "none", border: "none", color: canRedo ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)", cursor: canRedo ? "pointer" : "default", padding: 8 }}><Redo2 size={18} /></button>
+                    </div>
 
                     <button 
-                        onClick={() => setShowValidation(!showValidation)} 
+                        onClick={compileForPreview} 
+                        disabled={isCompiling} 
                         style={{ 
-                            display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", 
-                            background: showValidation ? "#fff" : "rgba(255,255,255,0.15)", 
-                            border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, 
-                            color: showValidation ? "#7D2AE8" : "#fff", transition: "all 0.2s" 
-                        }}
+                            display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", 
+                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", 
+                            borderRadius: 8, cursor: isCompiling ? "wait" : "pointer", 
+                            fontSize: 13, fontWeight: 600, color: "#fff", transition: "all 0.2s" 
+                        }} 
+                        onMouseEnter={e => !isCompiling && (e.currentTarget.style.background = "rgba(255,255,255,0.15)")} 
+                        onMouseLeave={e => !isCompiling && (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
                     >
-                        {errorCount > 0 ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-                        <span>{errorCount > 0 ? `${errorCount} Issues` : "No Issues"}</span>
+                        {isCompiling ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Eye size={16} />}
+                        <span>Preview</span>
                     </button>
-
-                    <button onClick={handleSave} disabled={saving} style={{
-                        display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", border: "none", borderRadius: 8,
-                        background: "#fff", color: "#7D2AE8", cursor: "pointer", fontSize: 13, fontWeight: 700,
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                    }}>
-                        <Share2 size={16} /> Share
+                    
+                    <button 
+                        onClick={() => setShowValidation(true)}
+                        style={{ 
+                            padding: "8px 18px", background: "#6366F1", color: "#fff", 
+                            border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, 
+                            cursor: "pointer", boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+                            transition: "all 0.2s"
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                        onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+                    >
+                        Publish
                     </button>
                 </div>
             </div>
@@ -860,16 +885,17 @@ export default function PremiumEmailBuilder() {
                         <div 
                             style={{ 
                                 flex: 1, 
-                                overflow: "auto", 
-                                background: "#F1F5F9", 
                                 display: "flex", 
                                 justifyContent: "center",
                                 alignItems: "flex-start",
+                                background: "#F1F5F9",
+                                overflow: "hidden", // LET THE CANVAS HANDLE SCROLL
                                 padding: viewMode === "mobile" ? "40px 0" : "0"
                             }}
                         >
                             <div style={{
                                 width: viewMode === "mobile" ? 375 : "100%",
+                                height: viewMode === "mobile" ? "812px" : "100%",
                                 transition: "all 0.3s ease-in-out",
                                 transform: viewMode === "mobile" ? "scale(0.85)" : "none",
                                 transformOrigin: "top center",
@@ -877,7 +903,8 @@ export default function PremiumEmailBuilder() {
                                 boxShadow: viewMode === "mobile" ? "0 20px 50px rgba(0,0,0,0.1)" : "none",
                                 borderRadius: viewMode === "mobile" ? 20 : 0,
                                 overflow: "hidden",
-                                height: viewMode === "mobile" ? "812px" : "100%"
+                                display: "flex", // IMPORTANT: MAKE THIS FLEX
+                                flexDirection: "column"
                             }}>
                                 <EditorCanvas
                                     brandTypography={brandKits.find(b => b.id === activeBrandId)?.typography}
@@ -959,8 +986,9 @@ export default function PremiumEmailBuilder() {
 
             <style>{`
                 @keyframes spin { to { transform: rotate(360deg) } }
-                @keyframes fadeSlideRight { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-                * { box-sizing: border-box; }
+                @keyframes successPulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+                @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
                 .block-card:hover { background-color: #F8FAFC !important; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05) !important; border-color: #E2E8F0 !important; }
                 .search-input:focus { border-color: #6366F1 !important; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important; background: #fff !important; }
             `}</style>

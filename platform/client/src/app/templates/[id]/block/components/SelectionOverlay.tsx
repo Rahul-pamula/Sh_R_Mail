@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useEditorStore } from "@/store/useEditorStore";
-import { Move, Copy, Trash2, RotateCw } from "lucide-react";
+
 
 export function SelectionOverlay() {
-    const { selectedNode, design, updateBlockProp, deleteBlock, duplicateBlock } = useEditorStore();
+    const { selectedNode, design, updateBlockProp } = useEditorStore();
     const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number } | null>(null);
     const observer = useRef<ResizeObserver | null>(null);
 
@@ -85,7 +85,7 @@ export function SelectionOverlay() {
         };
     }, [isResizing, rect, selectedNode, updateBlockProp]);
 
-    if (!rect) return null;
+    if (!rect || !selectedNode) return null;
 
     const onResizeStart = (e: React.MouseEvent, handle: string) => {
         e.stopPropagation();
@@ -99,10 +99,10 @@ export function SelectionOverlay() {
         width: 12,
         height: 12,
         background: "#fff",
-        border: "2px solid #7D2AE8",
+        border: "2px solid #6366F1",
         borderRadius: "50%",
         zIndex: 100,
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+        boxShadow: "0 2px 6px rgba(99, 102, 241, 0.4)",
         pointerEvents: "auto"
     };
 
@@ -117,7 +117,7 @@ export function SelectionOverlay() {
                 left: rect.left,
                 width: rect.width,
                 height: rect.height,
-                border: isFabricBlock ? "none" : "2px solid #7D2AE8",
+                border: isFabricBlock ? "none" : "2px solid #6366F1",
                 pointerEvents: "none",
                 zIndex: 99,
                 transition: isResizing ? "none" : "all 0.1s ease-out"
@@ -131,40 +131,8 @@ export function SelectionOverlay() {
                     </>
                 )}
 
-            {/* Floating Toolbar */}
-            <div style={{
-                position: "absolute",
-                top: -48,
-                left: "50%",
-                transform: "translateX(-50%)",
-                background: "#fff",
-                borderRadius: 8,
-                padding: "4px 8px",
-                display: "flex",
-                gap: 4,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                border: "1px solid #E2E8F0",
-                pointerEvents: "auto"
-            }}>
-                <button onClick={() => duplicateBlock(selectedNode.id)} style={toolbarBtn} title="Duplicate"><Copy size={14} /></button>
-                <div style={{ width: 1, background: "#E2E8F0", margin: "4px 2px" }} />
-                <button onClick={() => deleteBlock(selectedNode.id)} style={{ ...toolbarBtn, color: "#EF4444" }} title="Delete"><Trash2 size={14} /></button>
-                <div style={{ width: 1, background: "#E2E8F0", margin: "4px 2px" }} />
-                <button style={toolbarBtn} title="Rotate"><RotateCw size={14} /></button>
-            </div>
         </div>
     );
 }
 
-const toolbarBtn: React.CSSProperties = {
-    padding: "6px",
-    background: "none",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-    color: "#64748B",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "background 0.2s"
-};
+
