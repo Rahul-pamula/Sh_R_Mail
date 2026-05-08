@@ -1,5 +1,10 @@
 Strategic Briefing: ShrFlow Email Engine Platform
 
+Why You Named As ShrFlow..?
+
+ShrFlow is short for Shared Asynchronous Flows. Architecturally, our platform treats every campaign as a generic data flow. By decoupling the 'flow' logic from the delivery channel, we’ve made the system modular. This allows us to easily plug in new delivery drivers like WhatsApp or Telegram APIs in the future, while keeping the core 'Shr' (Shared) infrastructure stable and high-performing.
+
+
 Executive Summary
 
 The ShrFlow Email Engine is a highly scalable, multi-tenant SaaS platform designed for high-volume email delivery and sophisticated audience management. The platform’s core philosophy centers on Tenant Isolation, Deliverability Protection, and Asynchronous Scalability.
