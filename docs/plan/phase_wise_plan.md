@@ -1648,6 +1648,63 @@ graph TD
 
 ---
 
+## Phase 7.1 — Global Billing & Payment Gateway
+**WHY:** Bridges the gap between plan enforcement and revenue collection. Ensures the platform can scale internationally while remaining compliant with localized financial regulations (like RBI in India).
+
+### Phase 7.1 Architecture Flow
+
+```mermaid
+graph TD
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef gateway fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef logic fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold,rx:5px,ry:5px;
+    classDef database fill:#475569,stroke:#334155,stroke-width:2px,color:#fff,rx:5px,ry:5px;
+
+    User([User / Tenant]) --> |"Selects Plan"| PricingUI[Pricing & Checkout UI]
+    class User frontend;
+    class PricingUI frontend;
+
+    PricingUI --> |"Redirects"| StripeCheckout[Stripe / Razorpay Checkout]
+    class StripeCheckout gateway;
+
+    StripeCheckout --> |"Success / Webhook"| WebhookHandler[Payment Webhook Service]
+    class WebhookHandler logic;
+
+    WebhookHandler --> |"Updates Status"| BillingDB[(Tenant Billing State)]
+    class BillingDB database;
+
+    BillingDB --> |"Triggers"| LimitSync[Plan Limit Synchronizer]
+    class LimitSync logic;
+
+    LimitSync --> |"Enforces"| Phase7[Phase 7 Quota Gate]
+    class Phase7 logic;
+```
+
+**[BACKEND]**
+- **Webhook Orchestrator**: Dedicated handlers for Stripe and Razorpay events (subscription.created, invoice.paid, subscription.deleted).
+- **Idempotency Layer**: Ensures a single webhook event never triggers multiple plan updates.
+- **Subscription State Machine**: Manages transitions between `Trial` -> `Active` -> `Past Due` -> `Canceled`.
+- **SaaS Pricing Localization**: Multi-currency support (INR/USD) with automatic tax calculation based on tenant geography.
+
+**[FRONTEND]**
+- **Tiered Pricing Matrix**: Comparative table showing Free, Starter, Pro, and Enterprise features.
+- **Billing Portal**: Self-service area for tenants to download invoices, update cards, or cancel subscriptions.
+- **Checkout Bridge**: Seamless transition from platform to secure payment gateway and back.
+
+**📋 Planned Tasks — Phase 7.1**
+- Stripe integration (Checkout Sessions + Webhooks)
+- Razorpay integration (INR/RBI compliance)
+- SaaS Pricing Localization (Currency & Tax logic)
+- Subscription state machine (Active / Past Due / Canceled)
+- Automated Invoice generation & email delivery
+- Billing Dashboard (Usage vs. Plan history)
+- Support for Overage micro-billing calculation
+- [SECURITY] HMAC verification for all payment webhooks
+
+---
+
+---
+
 ## Phase 7.5 — Infrastructure & DevOps
 **WHY:** Solidifies architectural foundations ensuring deployment stability, fault tolerance, and developer sanity.
 
@@ -2301,8 +2358,6 @@ graph TD
 - GDPR Compliance / Opt-in consent log viewer.
 
 **📋 Planned Tasks — Phase 9**
-- SaaS Pricing Localization (transition to INR & RBI-compliant structure)
-- Stripe integration with webhook-driven plan updates
 - Custom domain setup wizard (enter domain > get DNS records > verify)
 - Dedicated IP Allocation engine per high-tier tenant
 - Automated DNS Verification CRON (CNAME/TXT for DMARC/SPF/DKIM)
@@ -2791,7 +2846,6 @@ graph TD
 - User Profile Page (Avatar, Name, Password reset)
 - Multi-Factor Authentication (MFA) setup for both Tenants and Admins
 - Workspace Branding (Upload Logo, define Brand Colors for default template styles)
-- Global Billing Dashboard (Sync with Stripe for invoice history and plan upgrades)
 - Workspace Member Management (Invite co-workers to a specific tenant workspace)
 
 ---
