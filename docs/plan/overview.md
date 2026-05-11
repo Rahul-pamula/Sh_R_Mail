@@ -59,22 +59,25 @@ The frontend uses a modern, high-performance stack:
 ### 8. ✅ What Is Implemented (From Code)
 
 *   **Fully Functional shadcn UI Integration:** Components like `DataTable.tsx`, `ConfirmModal.tsx`, and `StatCard.tsx` are not just placeholders; they are production-ready.
+*   **Hidden Foundational Features:** Discovered `HealthDot.tsx` (real-time connection monitor) and `ConfirmModal.tsx` (standardized destructive action gateway) as early architectural implementations.
 *   **Dark Mode Support:** Deeply integrated via `globals.css` and `ThemeToggle.tsx`.
-*   **Hybrid App Shell:** The persistent sidebar and global header in `layout.tsx` provide a professional SaaS "workspace" feel.
+*   **Hybrid App Shell:** The persistent sidebar and global header in `layout.tsx` provide a professional SaaS "workspace" feel, far exceeding the original "Basic UI" plan.
 *   **Global index:** `src/components/ui/index.ts` allows for clean, tree-shakeable imports.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Loading Skeletons:** While planned, some list pages still use generic spinners instead of high-fidelity content skeletons.
+*   **Loading Skeletons:** Most list pages still use generic spinners instead of high-fidelity content skeletons as originally planned.
 *   **Design Tokens Doc:** The internal documentation page for design tokens is currently missing; developers must reference `globals.css` directly.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **Layout Complexity:** The plan described "Basic UI components," but the actual implementation includes a complex, nested layout system with `AuthContext` guards already integrated into the foundation. This is a "better" mismatch, providing more robustness than originally planned.
+*   **Layout Complexity:** The actual implementation includes a complex, nested layout system with `AuthContext` guards and a robust sidebar shell, providing more production maturity than the "Basic UI components" originally planned.
+*   **Icon Set:** Switched to `Lucide-React` which is more robust and scalable than the generic icon set initially envisioned.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **Icon Bloat:** The project uses `lucide-react` extensively. We should monitor the bundle size to ensure we aren't importing the entire library.
+*   **Seeder Fragility:** `seed_dev_data.py` uses hardcoded UUIDs; manual deletion of tenants can break the script on re-run. Improvement: Implement a "Clean Slate" flag to truncate tables before seeding.
+*   **Icon Bloat:** Extensive use of `lucide-react` requires monitoring bundle size to ensure we aren't importing the entire library.
 *   **CSS Variable Collision:** As we scale, we need a strict naming convention for CSS variables to avoid collisions between core platform styles and user-generated template styles (addressed in Phase 3).
 
 ---
@@ -122,23 +125,28 @@ Without Phase 1, the system is a security liability.
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Onboarding Escape Guard:** A smart implementation discovered in `AuthContext.tsx` that automatically redirects users trapped in "incomplete" workspaces to the correct onboarding step.
+*   **Onboarding Escape Guard:** A smart implementation in `AuthContext.tsx` that automatically redirects users trapped in "incomplete" or deleted workspaces to the correct onboarding state.
 *   **Multi-Workspace Support:** The backend already supports `tenant_users` join logic, and the frontend has a `switchWorkspace` utility.
 *   **Complex Route Protection:** Deeply integrated logic for `pending_join`, `onboarding`, and `active` states.
+*   **Transactional Tenancy Isolation:** Uses `SET LOCAL app.current_tenant_id` inside transactions, providing database-enforced security.
 
-### ❌ What Is NOT Implemented
+### 9. ❌ What Is NOT Implemented
 
 *   **ReCAPTCHA:** While listed in the plan, the signup form lacks a functional reCAPTCHA integration to prevent bot spam.
-*   **Email Verification Requirement:** The system allows login even if `email_verified` is false (though it redirects to the verify page, the API doesn't strictly block all routes yet).
+*   **Email Verification Requirement:** The system allows login even if `email_verified` is false; the API doesn't strictly block all routes yet.
+*   **MFA (TOTP):** Mentioned in Phase 1.5 but not found in the core auth logic.
+*   **Short-lived Access Tokens:** Currently uses long-lived JWTs without a separate refresh token mechanism.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **JWT Payload:** The plan was for a "Standard JWT," but the actual implementation injects `role` and `tenant_status`, making it much more powerful for client-side routing.
-*   **Onboarding Flow:** The code implements a "Waiting Room" (Phase 12 feature) already in the Phase 1 auth flow to handle users who have signed up but haven't been assigned a workspace yet.
+*   **Architecture Pivot:** Switched from planned Supabase PostgREST to **`asyncpg` connection pools** to allow for transaction-level session variables (RLS). This is a major senior-level improvement for data isolation.
+*   **JWT Payload:** The implementation injects `role` and `tenant_status` directly into the JWT, making it more powerful for client-side routing than a "Standard JWT."
+*   **Onboarding Flow:** The code implements a "Waiting Room" already in the Phase 1 flow to handle users awaiting workspace assignment.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **Token Expiry:** Access tokens are currently set to 1 hour. For a high-security platform, we should drop this to 15 minutes and rely on the silent refresh mechanism.
+*   **JWT Middleware Bottleneck:** The `jwt_middleware.py` performs a DB lookup on *every request* to verify `token_version`. This will bottleneck at scale. **Improvement:** Cache the `token_version` in Redis.
+*   **Token Expiry:** Access tokens are currently set to 1 hour. We should drop this to 15 minutes and rely on a silent refresh mechanism.
 *   **Rate Limiting:** The login endpoint lacks IP-based rate limiting, making it vulnerable to brute-force attacks.
 
 ---
@@ -439,7 +447,7 @@ Phase 1.9 is the "AI-First" foundation. It implements the Model Context Protocol
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 2 is the "Heart" of the platform. An email engine is only as good as its contact data. This phase implements a high-performance, streaming ingestion pipeline that can handle millions of contacts without crashing the server. It's about moving from "Simple CRUD" to "Big Data Ingestion."
+Phase 2 is the **Data Ingestion Pipeline**. It's the process of turning a "Messy CSV" into a "Structured Audience." For a senior engineer, this is about **Memory Safety** and **Asynchronous Consistency**. You cannot parse a 100k-row CSV inside an HTTP request. You must stream it to storage, queue it, and process it in a background worker that handles deduplication and validation without crashing the server.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
@@ -449,8 +457,8 @@ Phase 2 is the "Heart" of the platform. An email engine is only as good as its c
 
 ### 3. 🏗 Backend Architecture
 
-*   **S3-First Upload:** The UI uploads the file directly to S3. The API never sees the bytes. This is the "Stripe-style" secure file handling pattern.
-*   **RabbitMQ Streaming Worker:** The `import_worker.py` pulls the S3 link, opens a byte-stream, and parses the CSV in 500-row chunks. This keeps memory usage constant (OOM-safe).
+*   **S3-First Upload (Senior Pivot):** The UI uploads the file directly to S3 via Presigned URLs. The API never sees the bytes. This is a massive improvement over direct API uploads, preventing OOM crashes.
+*   **RabbitMQ Streaming Worker:** The `import_worker.py` pulls the S3 link, opens a byte-stream, and parses the CSV in 500-row chunks. This keeps memory usage constant.
 *   **Upsert Logic:** Uses PostgreSQL `ON CONFLICT (tenant_id, email) DO UPDATE` to merge duplicates intelligently.
 
 ### 4. 🎨 Frontend Architecture
@@ -478,22 +486,25 @@ Phase 2 is the "Heart" of the platform. An email engine is only as good as its c
 ### 8. ✅ What Is Implemented (From Code)
 
 *   **Streaming CSV Parser:** The `import_worker.py` correctly implements chunked parsing.
+*   **Domain Summary Engine:** Hidden implementation that automatically extracts contact domains (`@gmail.com`, etc.) for aggregate distribution analytics.
+*   **Precision Upsert:** The code handles merging data (e.g., if a contact exists but has a new tag, it appends the tag instead of overwriting).
 *   **Contacts API:** `contacts.py` provides full CRUD with robust tenant isolation.
-*   **Status Badging:** The UI correctly renders "Subscribed," "Bounced," and "Unsubscribed" badges.
-*   **Search & Filter:** Server-side filtering by name and email is fully functional.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Contact Scoring:** The Engagement Score logic (e.g., "Engaged", "At-Risk") is defined in the plan but the scoring algorithm is not yet present in the worker logic.
-*   **Import Mapping UI:** The frontend currently assumes a fixed CSV header format; the "Visual Mapper" (drag-and-drop columns) is still in the mockup stage.
+*   **Contact Scoring:** The Engagement Score algorithm defined in the plan is not yet present in the worker logic.
+*   **Import Mapping UI:** The frontend currently assumes a fixed CSV header format; the visual "Drag-and-Drop Mapper" is still missing.
+*   **Disposable Email Detection:** Currently only does basic regex validation; missing the active provider blacklist.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **Worker Decoupling:** The plan had the API handling small imports and the worker handling large ones. The implementation correctly moved *all* imports to the worker for architectural consistency—a much cleaner approach.
+*   **Worker Decoupling:** The implementation moved *all* imports to the worker for architectural consistency, rather than the "Small=API, Large=Worker" split originally planned.
+*   **Progress Tracking:** The plan mentions WebSockets, but the implementation currently relies on **Polling** via `GET /contacts/jobs/{id}`.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **DB Lock Contention:** Massive `UPSERT` operations can lock the `contacts` table. We should implement a "Batch Delay" (e.g., 50ms sleep between chunks) to keep the table responsive for other users.
+*   **Pandas OOM Risk:** The worker uses `pandas` for processing. For extremely large files (500k+ rows), this will cause an OOM crash. **Improvement:** Switch to the native `csv` streaming module.
+*   **DB Lock Contention:** Massive `UPSERT` operations can lock the `contacts` table. We should implement a "Batch Delay" between chunks.
 
 ---
 
@@ -539,21 +550,25 @@ Phase 3 is "The Creative Engine." Email rendering is notoriously difficult—it'
 ### 8. ✅ What Is Implemented (From Code)
 
 *   **Structural JSON Schema:** The `models/template.py` correctly defines the recursive structure for rows, columns, and blocks.
-*   **Server-Side Compilation:** `templates.py` includes a `/compile/preview` endpoint that transforms JSON into HTML on-the-fly.
+*   **Pre-Send Preflight Logic:** Discovered in `compile_service.py`—automatically checks for unsubscribe links and warns about Gmail's 102KB clip limit.
+*   **Server Side Compilation:** `templates.py` includes a `/compile/preview` endpoint that transforms JSON into HTML on-the-fly using the MJML engine.
 *   **Reactive Canvas:** The frontend editor successfully renders the JSON state into a visual preview.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Undo/Redo History:** While planned, the Zustand store doesn't yet implement the snapshotting required for "Ctrl+Z" support.
-*   **Image Dependency Tracking:** The system allows deleting an image from the library even if it is currently being used in an active email campaign, which would lead to "Broken Image" icons for recipients.
+*   **Persona Switcher:** The system currently uses a hardcoded "Mock Contact" for previews; the dynamic persona switcher is missing.
+*   **Undo/Redo History:** The Zustand store doesn't yet implement the snapshotting required for "Ctrl+Z" support.
+*   **Image Dependency Tracking:** Missing logic to prevent deleting assets currently referenced in active templates.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **MJML Complexity:** The plan underestimated the MJML overhead. The implementation correctly moved the MJML compilation to the backend (`compile_service.py`) to keep the frontend bundle light, which was a smart architectural pivot.
+*   **Structured Editor Pivot:** The code uses a "Structured Editor" approach (Click to add/move) rather than free-form "Visual Drag and Drop." This is a superior decision for ensuring MJML structural stability.
+*   **MJML Location:** The implementation correctly moved all MJML compilation to the backend to keep the frontend bundle light.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **JSON Schema Drift:** As we add new block types, the `DesignJSON` can become fragmented. We need a "Schema Versioning" system to migrate old templates when new properties are added.
+*   **Compilation Bottleneck:** Subprocess calls to `npx mjml` will not scale for thousands of concurrent users. **Improvement:** Move compilation to a stateless Node.js microservice.
+*   **JSON Schema Drift:** As we add block types, we need a "Schema Versioning" system to migrate old templates.
 
 ---
 
@@ -593,20 +608,23 @@ Phase 3.5 is the "Compliance Checkpoint." It is a mandatory security and quality
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Pre-flight Check Logic:** `templates.py` includes a `/validate` endpoint that runs the basic `run_preflight_checks` service.
+*   **Pre-flight Check Logic:** `compile_service.py` includes structural MJML checks and a 102KB "Gmail Clip" detector.
 *   **Merge Tag Detection:** The validator successfully identifies un-closed curly braces and invalid tag names.
+*   **Domain Verification Gateway:** The API prevents campaign creation/update if the `domain_id` is not in a `verified` state.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Hard-Stop Block:** Currently, the validation is a "Warning" only. Users can still send a campaign even if the validator finds critical errors. The "Blocking Gateway" logic is yet to be enforced in the `CampaignService`.
+*   **Hard-Stop Block:** Currently, some validation is "Warning Only." Users can still trigger a send even with structural risks.
+*   **Spam Score Predictor:** Integration with Rspamd/SpamAssassin for content scoring is missing.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **Validation UI:** The plan called for "Line-Level Errors," but MJML compilation obscures line numbers. The implementation correctly shifted to "Block-Level Errors" by tagging each JSON block with a unique ID.
+*   **Validation UI:**MJML compilation obscures line numbers; the implementation correctly shifted to "Block-Level Errors" using JSON IDs.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **False Positives:** If the spam scanner is too aggressive, it might frustrate users. We need to provide clear "Why this is a risk" explanations for every warning.
+*   **IP Reputation Risk:** Allowing "heavy" emails (clipped by Gmail) leads to higher spam complaint rates as recipients can't see the unsubscribe link.
+*   **Improvement:** Implement a "Hard Block" for any campaign exceeding 100KB or missing an unsubscribe tag.
 
 ---
 
@@ -614,19 +632,19 @@ Phase 3.5 is the "Compliance Checkpoint." It is a mandatory security and quality
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 4 is the "Dispatcher." It brings together the Audience (Phase 2) and the Content (Phase 3). It handles the complex lifecycle of a campaign: Draft -> Scheduled -> Sending -> Sent -> Paused -> Cancelled. It is responsible for "Snapshotting"—locking the template and audience exactly as they were at the moment of dispatch to ensure historical accuracy.
+Phase 4 is the **"Orchestration Command Center."** It transforms a single campaign into thousands (or millions) of atomic delivery tasks. The core innovation here is **Snapshotting**—freezing the content at the exact moment of approval to ensure that future template edits do not affect a campaign currently in flight. It's about transitionary state management and massive data fan-out.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Concurrency Control:** Prevents "Double-Send" scenarios where two workers pick up the same campaign and send it twice to the same 100,000 people.
-*   **Operational Control:** Allows an Admin to "Pause" a campaign mid-flight if a mistake is discovered after the first 5% of emails are sent.
-*   **Personalization at Scale:** Handles the "Merge Tag" resolution for every individual recipient, ensuring that 1,000,000 unique emails are generated efficiently.
+*   **Audit Integrity:** Snapshotting prevents "Content Drift" where a sent email doesn't match the historical record in the dashboard.
+*   **Memory Safety:** Handling 100k recipients requires streaming; loading them all at once would crash the API.
+*   **Operational Control:** Allows an Admin to "Pause" or "Cancel" a campaign mid-flight via Redis-based kill switches.
 
 ### 3. 🏗 Backend Architecture
 
-*   **State Machine:** A strict status-transition model in PostgreSQL. A campaign cannot move from `draft` to `sent` without passing through `scheduled`.
-*   **Optimistic Locking:** Uses a `version` column and `FOR UPDATE SKIP LOCKED` in the database to ensure that only one scheduler/worker can "claim" a campaign task.
-*   **Dispatch Intents:** Instead of one massive job, the system creates "Dispatch Intents" (rows in a join table) for each recipient, allowing for granular tracking and retry logic.
+*   **Snapshot Logic:** `campaign_snapshots` table stores the immutable body and subject before dispatch.
+*   **Mass Fan-out Engine:** `queue_campaign_dispatch` uses an `AsyncIterator` (cursor-based) to stream recipients from PostgreSQL, populating `email_tasks` and `campaign_dispatch` in 1000-row chunks.
+*   **Minimalist Payload:** RabbitMQ messages contain only `{task_id: UUID}`, forcing workers to fetch full context from the DB to avoid "Stale Data" bugs.
 
 ### 4. 🎨 Frontend Architecture
 
@@ -651,22 +669,23 @@ Phase 4 is the "Dispatcher." It brings together the Audience (Phase 2) and the C
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Distributed Scheduler:** The `scheduler.py` is highly advanced, using Redis locks and "Zombie Recovery" logic to handle worker crashes.
-*   **Campaign Versioning:** The API correctly implements optimistic locking to prevent race conditions during the approval flow.
-*   **Wizard Shell:** The frontend `campaigns/create` flow is fully wired to the backend API.
+*   **High-Volume Streaming:** The `stream_contacts_for_target` utility handles 1M+ contacts with O(1) memory via `asyncpg` cursors.
+*   **Atomic Snapshotting:** Correctly freezes content before publishing to RabbitMQ.
+*   **Distributed Scheduler:** `scheduler.py` is highly advanced, using **Redis SET NX EX** and "Zombie Recovery" logic to handle worker crashes safely.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Resend to Unopened:** The planned feature to "Resend with a different subject to people who didn't open the first one" is missing, as it depends on Phase 6 metrics.
-*   **Multi-Variant A/B Testing:** The plan mentions A/B testing, but the current schema only supports a single `template_id` per campaign.
+*   **A/B Testing Support:** The schema currently only supports a single `snapshot_id` per campaign.
+*   **Resend to Unopened:** Missing the aggregation logic needed to target non-responders based on Phase 6 data.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **Batching Strategy:** The plan suggested batching all 100k emails into one RabbitMQ message. The implementation correctly moved to "One Message Per Recipient," which is slightly more overhead but much more reliable for retries.
+*   **Task Structure:** Moved from "Bulk Array" in MQ to "Atomic Task IDs." This adds DB overhead but allows for individual task status tracking and dead-letter recovery.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **Database Bloat:** Every campaign creates thousands of "Dispatch Intent" rows. We need a strategy to archive these rows into a "History" table once a campaign is marked `sent`.
+*   **"Ghost Send" Risk:** A campaign might keep sending even if the tenant is deleted or their plan expires mid-dispatch.
+*   **Improvement:** Implement a **"Hard Quota Check"** at the start of every 1000-task batch in the dispatcher to halt campaigns for delinquent tenants.
 
 ---
 
@@ -674,19 +693,19 @@ Phase 4 is the "Dispatcher." It brings together the Audience (Phase 2) and the C
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 5 is the "Actual Sender." It is the system that physically talks to SMTP servers (SES, Gmail, Mailtrap). It handles the "Last Mile" of delivery, including TLS handshakes, SMTP authentication, and error handling. It also listens for "Feedback" from the internet—bounces, complaints, and unsubscriptions.
+Phase 5 is the **"SMTP Firehose."** It is a high-concurrency worker layer that physically talks to the internet. For a senior architect, this is about **Handshake Optimization** and **Deliverability Guardrails**. It transforms generic SMTP (which is slow) into a persistent, session-reusing engine capable of pushing 100+ emails per second per worker.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Deliverability:** If the Delivery Engine is misconfigured, 100% of your emails will land in Spam. 
-*   **Reputation Safety:** The engine MUST stop sending to an email address the moment it receives a "Hard Bounce." Repeatedly sending to dead addresses is the #1 way to get your IP blacklisted by Gmail.
-*   **Legal Compliance:** Injects the mandatory "One-Click Unsubscribe" headers (RFC 2369) which are now required by Gmail and Yahoo for bulk senders.
+*   **Handshake Overhead:** Standard SMTP takes ~1s per email due to TLS. Phase 5 uses **Persistent SMTP Session Reuse**, reducing this to 50ms.
+*   **Reputation Safety:** The worker is the "Last Line of Defense," checking for **Unsubscribe Links** and **Spam Honeypots** before delivery.
+*   **Legal Compliance:** Injects mandatory RFC 2369 headers (One-Click Unsubscribe) required by Gmail/Yahoo.
 
 ### 3. 🏗 Backend Architecture
 
-*   **RabbitMQ Consumer:** A dedicated `email_sender.py` that maintains a pool of SMTP connections. It uses `aio-pika` for high-concurrency async processing.
-*   **Feedback Router:** An API endpoint (`webhooks.py`) that listens for AWS SNS notifications. It parses the `bounceType` and `bounceSubType` to categorize errors.
-*   **HMAC Unsubscribe:** Generates a cryptographically signed link for every recipient. This ensures that users can unsubscribe without logging in, but malicious actors can't "guess" a user's unsubscribe link.
+*   **Late-Bound Personalization:** Merge tags are resolved at the worker level (not the API) to ensure the most recent contact data is used.
+*   **AWS SNS Unified Envelope:** `webhooks.py` verifies RSA signatures of incoming SES bounce/spam notifications to prevent "Suppression Spoofing."
+*   **Redis Circuit Breaker:** Increments bounce counters in Redis; triggers automated campaign pausing if bounce rates exceed 2%.
 
 ### 4. 🎨 Frontend Architecture
 
@@ -708,19 +727,20 @@ Phase 5 is the "Actual Sender." It is the system that physically talks to SMTP s
 *   `UNSUBSCRIBE_SECRET` → The key used to sign the HMAC tokens.
 
 ### 8. ✅ What Is Implemented (From Code)
-*   **Robust Worker Loop:** The `email_sender.py` implements exponential backoff and Dead Letter Queues (DLQ) for failed dispatches.
-*   **Webhook Processor:** `webhooks.py` correctly identifies "Complaint" vs "Bounce" events and updates the contact status in real-time.
-*   **Unsubscribe Logic:** The HMAC signing and verification logic is fully functional in `unsubscribe.py`.
+*   **Persistent SMTP Pool:** `email_handler.py` correctly reuses `aiosmtplib` connections to SES, significantly increasing throughput.
+*   **Redis Kill Switch:** The worker checks `tenant:{id}:campaign:{cid}:stop` before every send for sub-millisecond cancellation.
+*   **Webhook Security:** RSA signature verification for AWS SNS is fully functional in `webhooks.py`.
 
 ### 9. ❌ What Is NOT Implemented
-*   **Domain Warmup Automation:** The plan to "Gradually increase daily limits over 30 days" is currently a manual policy rather than an automated feature.
-*   **Advanced Bounce Matrix:** The current logic treats all "Bounces" as equal. It needs to distinguish "Mailbox Full" (Temporary) from "User Not Found" (Permanent).
+*   **Domain Warmup Engine:** The "Gradual Ramp-up" policy is not yet automated in the worker logic.
+*   **Advanced Bounce Matrix:** The current logic treats all "Bounces" as equal; needs to distinguish transient (full mailbox) from permanent (dead email).
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 *   **TLS Support:** The implementation added a "TLS Handshake" detector that supports both Port 587 (STARTTLS) and Port 465 (Implicit TLS), which is more robust than the single-port plan.
 
 ### 11. 🚨 Risks & Improvements
-*   **SMTP Throttling:** If AWS SES returns a `421 Too Many Connections` error, the worker might crash if it doesn't have a circuit breaker. We should implement a "Backpressure" pause (see Phase 5.7).
+*   **SMTP Throttling:** If AWS SES returns a `421` error, the worker might crash without a circuit breaker.
+*   **Improvement:** Implement **Active Backpressure** that pauses the worker consumption if the SMTP failure rate exceeds 10%.
 
 ---
 
@@ -754,19 +774,19 @@ Phase 5.7 is the "Safety Valve." In a high-volume system, the workers can easily
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 6 is the "Mirror." It shows the tenant the results of their labor. However, in the modern privacy-first era, analytics are deceptive. Phase 6 implements "Intelligent Tracking"—distinguishing between a human opening an email and a security bot (like Gmail Proxy or Apple Mail Privacy Protection) "scanning" the email for viruses. It's about providing "Truthful Analytics," not just "Big Numbers."
+Phase 6 is the **"Signal Processing Layer."** In a privacy-first world, analytics are often "Noisy." Phase 6 implements **Truthful Analytics** by distinguishing between a human opening an email and a security bot (Gmail Proxy, Apple MPP) "scanning" it. It's about data integrity over vanity metrics.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Marketing ROI:** If a campaign shows 50% opens but only 1% clicks, the user needs to know if that 50% is real or just bot traffic.
-*   **A/B Insights:** Analytics allow users to see which subject lines resonate with their audience.
-*   **Infrastructure Health:** Monitoring "Spam Complaints" in real-time allows the system to pause a campaign automatically before the tenant's AWS SES reputation is destroyed.
+*   **The "Apple MPP" Problem:** Apple opens 100% of emails to cache images, inflating open rates. Phase 6 filters these to show real engagement.
+*   **Spam Detection:** High click rates without opens indicate a **Spam Trap** or **Security Scanner**, allowing the platform to flag the tenant for review.
+*   **Marketing ROI:** Provides the "Funnel" (Sent → Delivered → Opened → Clicked) with bot-filtering for accuracy.
 
 ### 3. 🏗 Backend Architecture
 
-*   **Tracking Pixel Engine:** A high-speed, signed pixel (`/tracking/open/{payload}`) that returns a 1x1 transparent GIF. The payload is HMAC-signed to prevent "Tracking Injection" attacks.
-*   **Bot Detection Logic:** The engine inspects the `User-Agent` and IP address. It identifies "MPP" (Mail Privacy Protection) signatures and marks them as `is_bot=true` in the database.
-*   **Click Redirector:** A signed wrapper for all links (`/tracking/click/{payload}`). It logs the click and then 301-redirects the user to the final destination.
+*   **Heuristic Bot Filtering:** Inspects `User-Agent` fragments (e.g., `googleimageproxy`) and IP prefixes (Apple/Gmail ranges) to flag `is_bot=true`.
+*   **HMAC Tracking:** Pixels and Click URLs are HMAC-signed to prevent "Event Injection" attacks.
+*   **Honeypot Injection:** Invisible links injected by the worker to catch automated link-crawlers.
 
 ### 4. 🎨 Frontend Architecture
 
@@ -789,9 +809,9 @@ Phase 6 is the "Mirror." It shows the tenant the results of their labor. However
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Advanced Deduplication:** `analytics.py` includes logic to filter out duplicate fires of the same tracking pixel, ensuring accurate "Unique Open" counts.
-*   **Bot Signatures:** The code correctly identifies `gmail_proxy` and `apple_mpp` sources.
-*   **Reputation Rating:** The `_health_response` utility provides a "Red/Yellow/Green" health status based on industry-standard bounce/spam thresholds.
+*   **Bot Detection Logic:** `tracking.py` correctly identifies `gmail_proxy`, `apple_mpp`, and generic scanners.
+*   **Rapid-Click Detection:** Identifies clicks occurring <2s after an open as bot behavior.
+*   **Signed Tracking:** The `_verify_signature` utility ensures tracking data is authentic.
 
 ### 9. ❌ What Is NOT Implemented
 
@@ -812,59 +832,35 @@ Phase 6 is the "Mirror." It shows the tenant the results of their labor. However
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 7 is the "Business Engine." It transforms the platform from a "Project" into a "SaaS." It implements "Quota-Based Architecture"—enforcing limits on how many emails a tenant can send based on their subscription plan. It's about ensuring the platform is financially sustainable.
+Phase 7 is the **"Commercial Gatekeeper."** It implements a **Usage-Aware State Machine**. For a senior architect, this isn't just about Stripe; it’s about **Atomic Quota Enforcement** and **Revenue Protection**. It ensures that high-volume tenants cannot "starve" system resources without proper monetization alignment.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Revenue Generation:** Enables "Pro" and "Enterprise" tiers with higher limits and advanced features.
-*   **Abuse Prevention:** A "Free" tier that can send 1,000,000 emails is a magnet for spammers. Phase 7 limits them to 1,000, protecting the system's IP reputation.
-*   **Automated Billing:** Reduces operational overhead by allowing users to manage their own credit cards and invoices.
+*   **Abuse Prevention:** Without "Hard Quotas," a single compromised "Free Tier" account could burn the system's IP reputation in minutes.
+*   **Revenue Protection:** Implements **End-of-Cycle Downgrades** (scheduling the change for the next billing date) to ensure contract integrity.
+*   **Infrastructure Sustainability:** High-volume senders are routed through different Quality of Service (QoS) tiers based on their plan.
 
 ### 3. 🏗 Backend Architecture
 
-*   **Plan Metadata Service:** A centralized registry of plans (e.g., `free`, `pro`, `enterprise`) and their associated limits.
-*   **Quota Gating Middleware:** A pre-dispatch check that asks: `current_usage + campaign_size <= monthly_limit`.
-*   **Stripe Webhook Handler:** Listens for `checkout.session.completed` and `invoice.paid` to automatically upgrade/downgrade tenant accounts.
-
-### 4. 🎨 Frontend Architecture
-
-*   **Billing Portal:** A clean UI (integrated with Stripe Customer Portal) for managing subscriptions.
-*   **Usage Meter:** A visual progress bar in the dashboard showing "Emails Sent This Month: 450 / 1,000."
-*   **Paywall Modals:** Beautiful, non-intrusive alerts that trigger when a user tries to access a "Pro" feature (like A/B testing).
-
-### 5. ⚙️ Workers & Background Systems
-
-*   **Usage Reset Worker:** Runs on the 1st of every month to reset the `emails_sent_this_cycle` count for all tenants.
-*   **Delinquency Watchdog:** (Planned) Automatically pauses active campaigns if a tenant's subscription payment fails.
-
-### 6. 🔌 Integrations
-
-*   **Stripe:** The primary payment and subscription gateway.
-*   **TaxJar:** (Planned) For automatic sales tax calculation.
-
-### 7. 🔐 Environment Variables (.env)
-
-*   `STRIPE_SECRET_KEY` & `STRIPE_WEBHOOK_SECRET` → Required for secure payment processing.
-*   `DEFAULT_MONTHLY_QUOTA` → The "Free Tier" limit.
+*   **Plan State Machine:** `billing.py` handles the UPGRADE (immediate) vs DOWNGRADE (scheduled) transitions.
+*   **Atomic Limit Checks:** `PlanService.py` provides REST-based checks for contacts, users, and domains.
+*   **Usage Tracking:** `emails_sent_this_cycle` is tracked in the `tenants` table, acting as a real-time ledger for the dispatcher.
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Usage Tracking Schema:** The `tenants` table correctly includes `emails_sent_this_cycle` and `last_reset_at`.
-*   **Billing API Shell:** `billing.py` provides the basic CRUD for subscription status.
-*   **Quota Gating Foundation:** The `CampaignService` includes a `check_quota` helper, though it is currently "Warning Only" in the dev environment.
+*   **Immediate Upgrade Path:** Correctly resets usage and clears scheduled downgrades upon upgrading.
+*   **Quota Ledger:** The `tenants` table successfully tracks per-cycle email volume.
+*   **Feature Flagging:** The `has_feature` helper is implemented to toggle AI or Advanced Analytics per plan.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Overage Billing:** The system currently blocks sending if the limit is reached. It lacks the "Pay-as-you-go" logic for charging per 1,000 emails after the limit is exceeded.
-*   **Credit Management:** The "One-time Credit" purchase system (for Pay-As-You-Go users) is still in the design phase.
-
-### 10. ⚠️ Mismatches (Plan vs Reality)
-
-*   **Cycle Logic:** The plan suggested "Rolling 30 Days," but the implementation uses "Calendar Month" for simplicity in reporting—a common SaaS trade-off.
+*   **Automated Usage Reset:** There is no background worker to reset `emails_sent_this_cycle` on the 1st of the month; it currently requires manual or API-driven triggers.
+*   **Prorated Billing:** The system currently handles plan changes as "Cycles," not as day-by-day proration.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **Race Conditions:** If a user starts two 1,000-recipient campaigns simultaneously on a 1,500-limit plan, both might pass the quota check. We need an atomic "Reservation" system in Redis to block the excess.
+*   **DB Lock Contention:** Updating the `tenants` table for every email sent in a 1M-recipient campaign will cause significant lock contention. 
+*   **Improvement:** Move the "Sending Ledger" to **Redis INCR** with a periodic write-back to the database.
 
 ---
 
@@ -872,51 +868,35 @@ Phase 7 is the "Business Engine." It transforms the platform from a "Project" in
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 8 is the "Architectural Leap." It introduces the "Franchise" model—allowing one "Main" workspace to manage and view the analytics of multiple "Child" (Franchise) workspaces. It's the "Parent-Child" hierarchy required for large brands (e.g., a headquarters managing 500 local store accounts).
+Phase 8 is the **"Architectural Leap"** into hierarchical tenancy. It introduces **Resource Delegation**. A "Main" workspace (HQ) creates "Child" workspaces (Franchises). HQ manages the infrastructure (Domains/SMTP), while Franchises manage the execution (Contacts/Campaigns).
 
-### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
+### 2. 🎯 Why This Phase Matters (Real-World Perspective)
 
-*   **Brand Consistency:** HQ can create "Master Templates" and push them to all 500 stores, ensuring everyone stays "On-Brand."
-*   **Executive Visibility:** Corporate managers can see an aggregated report of how all franchises are performing without logging into 500 separate accounts.
-*   **Isolated Operations:** Each store has its own contacts and local sender identity, preventing data contamination between locations.
+*   **Enterprise Scaling:** Allows a global brand to manage 10,000 local store accounts under one "Master" dashboard.
+*   **Reputation Isolation:** If one Franchise sends spam, only their sub-account is paused; HQ and other Franchises remain unaffected.
+*   **Infrastructure Cost Sharing:** HQ verified domains are "allocated" to child entities, removing the technical burden from local managers.
 
 ### 3. 🏗 Backend Architecture
 
-*   **Hierarchical Tenancy:** The `tenants` table now includes a `parent_id` column.
-*   **Cross-Tenant Permissions:** Introduction of the `FRANCHISE_ADMIN` role. This role belongs to the "Main" workspace but has implicit read/write access to "Child" workspaces.
-*   **Data Aggregation Engine:** New API endpoints that query with `WHERE tenant_id IN (sub_franchise_ids)` to provide roll-up analytics.
-
-### 4. 🎨 Frontend Architecture
-
-*   **Franchise Directory:** A searchable list of all sub-accounts with "Quick Stats" (Active contacts, monthly volume).
-*   **Impersonation Logic:** Allows an HQ user to "Switch Into" a franchise account with one click to help with troubleshooting.
-*   **Global Brand Library:** A shared asset folder accessible by all child workspaces.
-
-### 5. ⚙️ Workers & Background Systems
-
-*   **Template Sync Worker:** (Planned) Automatically updates franchise templates when the "Master" version is modified at HQ.
-
-### 6. 🔌 Integrations
-
-*   **Supabase RLS:** Re-configured to allow "Parent" sessions to view "Child" rows.
+*   **Hierarchical Tenancy:** `parent_tenant_id` links child workspaces to HQ.
+*   **Explicit Domain Allocation:** `team.py` requires HQ to assign a specific verified domain to a Franchise upon creation (`sending_domain`).
+*   **Safe Impersonation:** The `switchWorkspace` utility in `AuthContext.tsx` swaps JWTs to allow HQ admins to view Franchise dashboards securely.
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **Franchise Hierarchy Schema:** The `tenant_type` and `parent_id` columns are live in the database.
-*   **Franchise Management UI:** The `/settings/franchises` page is fully functional, allowing for franchise creation and member mapping.
-*   **Safe Impersonation:** The `switchWorkspace` utility in `AuthContext.tsx` handles the transition between parent and child contexts securely.
+*   **Franchise Lifecycle:** `create`, `suspend`, `reactivate`, and `delete` are fully functional in `team.py`.
+*   **Infrastructure Inheritance:** `domains.py` allows Franchises to inherit verified domains from the parent for campaign sending.
+*   **Member Isolation:** `tenant_users` ensures that local Franchise members cannot see HQ-level data.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **Master Campaign Push:** The ability for HQ to "Send on behalf of" all franchises at once is not yet implemented. Currently, campaigns must be created individually in each franchise.
-
-### 10. ⚠️ Mismatches (Plan vs Reality)
-
-*   **Role Mapping:** The plan called for a complex "Inheritance" system. The implementation uses a simpler "Explicit Mapping" approach, which is much easier to audit and debug.
+*   **Master Campaign Push:** HQ cannot yet blast a single campaign across all 10,000 franchises at once.
+*   **Aggregated Billing:** Franchises currently don't have a "Charge-back" model to the parent workspace.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **Privacy Leaks:** HQ must not be able to see "Private" contact data if a franchise is an independent entity. We need a "Data Privacy Toggle" at the franchise level to restrict HQ's visibility.
+*   **Permission Leakage:** High risk of HQ admins accidentally seeing private Franchise contact data if the `parent_id` RLS is too broad.
+*   **Improvement:** Implement a "Master Library" where HQ can push "Locked Templates" that franchises can use but not edit.
 
 ---
 
@@ -924,58 +904,35 @@ Phase 8 is the "Architectural Leap." It introduces the "Franchise" model—allow
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 9 is the "Identity Infrastructure." In the world of bulk email, "Who You Are" is determined by your DNS records. Phase 9 allows tenants to connect their own domains (e.g., `mail.brand.com`) to the platform. It automates the generation of complex DKIM (DomainKeys Identified Mail), SPF (Sender Policy Framework), and DMARC records, transforming a "Guest Sender" into an "Authorized Authority."
+Phase 9 is **"Identity Infrastructure."** It bridges the platform and the global DNS. It automates the complex **DKIM/SPF/DMARC** dance required to make emails look like they come from the user's domain, not a generic "via shrflow.app" address. It is the foundation of professional deliverability.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Trust & Deliverability:** Emails sent from a custom domain are much more likely to land in the inbox than those sent from a generic shared domain.
-*   **Brand Protection:** Prevents "Spoofing" by ensuring that only ShrFlow's servers are authorized to send email on behalf of the tenant's brand.
-*   **Whitelabel Experience:** To the recipient, the email appears to come entirely from the brand, with no "via shrflow.app" footprints in the headers.
+*   **DMARC Alignment:** By setting a custom **MAIL FROM** (`bounces.brand.com`), the system achieves "Full Alignment," the gold standard for bypassing Gmail's strict spam filters.
+*   **Anti-Spoofing:** Double-opt-in for `sender_identities` prevents a tenant from "pretending" to be the CEO of a different company.
+*   **Domain Reputation:** Isolation ensures that one "Bad Apple" domain doesn't destroy the reputation of the entire platform.
 
 ### 3. 🏗 Backend Architecture
 
-*   **AWS SES Integration:** The `domains.py` service interfaces directly with the AWS SDK (`boto3`). It requests DKIM tokens and sets the `MailFromDomain` (e.g., `bounces.brand.com`).
-*   **Verification Poller:** A background task (or manual trigger) that queries the global DNS to verify that the tenant has correctly added the CNAME/TXT records to their domain provider (GoDaddy, Cloudflare, etc.).
-*   **Infrastructure Sharding:** (Planned) Allows the system to distribute different tenants across different AWS SES regions or accounts to prevent a "Bad Apple" from affecting everyone.
-
-### 4. 🎨 Frontend Architecture
-
-*   **Domain Setup Wizard:** A technical UI that provides the exact "Host" and "Value" strings the user needs to copy-paste into their DNS settings.
-*   **Health Status Grid:** A dashboard showing the verification status of DKIM, SPF, and DMARC with clear "Instructions for Fix" if verification fails.
-*   **Sender Profiles:** UI for creating specific sender identities (e.g., "Marketing <news@brand.com>" vs "Support <help@brand.com>") linked to a verified domain.
-
-### 5. ⚙️ Workers & Background Systems
-
-*   **DNS Watchdog:** (Planned) Periodically re-verifies domains. If a tenant accidentally deletes their DNS records, the watchdog pauses their campaigns and alerts them.
-
-### 6. 🔌 Integrations
-
-*   **AWS SES Identity Service:** The core verification provider.
-*   **Cloudflare API:** (Planned) For one-click DNS setup.
-
-### 7. 🔐 Environment Variables (.env)
-
-*   `AWS_REGION` → Where the SES identities are stored.
-*   `DNS_TTL` → The expected propagation time.
+*   **SES Identity Manager:** `domains.py` uses `boto3` to request DKIM tokens and set identity attributes.
+*   **Reputation Engine:** `reputation_engine.py` implements a **Redis Fast Guard** that throttles domains if they hit a >5% bounce rate suddenly.
+*   **Sender Opt-in Loop:** `senders.py` manages a verification flow where target emails must click a signed link before being used in a campaign.
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **SES Token Generation:** `domains.py` correctly requests and stores DKIM tokens from AWS.
-*   **Custom MAIL FROM:** The system successfully configures the `bounces.domain.com` identity, which is critical for "DMARC Alignment."
-*   **Mock Verification:** For local development, the API includes a "Mock Mode" that generates fake tokens, allowing developers to test the UI without an AWS account.
+*   **DKIM Generation:** Correctly retrieves and stores DKIM tokens from AWS SES for user DNS setup.
+*   **Custom MAIL FROM Logic:** Implemented `bounces.{domain}` identity configuration (Staff level compliance).
+*   **Routing Engine:** The `RoutingEngine` switches providers if success rates drop below 80% in a 1-minute window.
 
 ### 9. ❌ What Is NOT Implemented
 
-*   **DMARC Monitoring:** While the plan mentions DMARC, the system doesn't currently provide DMARC report parsing or monitoring.
-*   **BIMI Support:** The "Brand Indicators for Message Identification" (showing the company logo in the inbox) is missing.
-
-### 10. ⚠️ Mismatches (Plan vs Reality)
-
-*   **Verification Strategy:** The plan called for a persistent background poller. The implementation uses a "Manual Refresh" button to save on AWS API costs—a pragmatic choice for the current scale.
+*   **DMARC Report Parsing:** The system doesn't yet ingest aggregate DMARC reports from ISPs to show "Security Health."
+*   **One-Click DNS:** (Planned) Integration with Cloudflare/GoDaddy APIs for automatic record insertion is missing.
 
 ### 11. 🚨 Risks & Improvements
 
-*   **DNS Propagation Latency:** Users often get frustrated when DNS takes 24 hours to update. We need to provide a "Status: Propagating" indicator with a clear timestamp of the last check.
+*   **DNS Propagation Latency:** Users get stuck in "Pending" for 24h.
+*   **Improvement:** Implement a "DNS Watchdog" worker that periodically checks DNS and sends a push notification once the domain is "Verified."
 
 ---
 
@@ -983,55 +940,32 @@ Phase 9 is the "Identity Infrastructure." In the world of bulk email, "Who You A
 
 ### 1. 🧠 What This Phase Is (Conceptual)
 
-Phase 10 is the "Intelligence Layer." It moves beyond simple `{{first_name}}` tags into "Generative Personalization." It uses Large Language Models (LLMs) and Retrieval-Augmented Generation (RAG) to write unique sentences for every recipient based on their past behavior, company news, or LinkedIn profile data.
+Phase 10 is the **"Intelligence Layer."** It moves beyond `{{first_name}}` into **Context-Aware Personalization**. It uses LLMs to rewrite email blocks based on a "Knowledge Base" (Vector DB) containing company brochures, past replies, and LinkedIn data. It is the "Brain" of the ShrFlow platform.
 
 ### 2. 🎯 Why This Phase Is Important (Real-World Perspective)
 
-*   **Hyper-Engagement:** An email that references a specific recent achievement of the recipient has a 5x higher reply rate than a generic template.
-*   **Content Generation:** Helps users overcome "Writer's Block" by generating high-converting subject lines and body copy based on their goals.
-*   **Dynamic Adaptation:** The AI can "tone-match" the recipient—writing more formally to a CEO and more casually to a developer.
+*   **Hyper-Engagement:** LLM-generated personalization yields 5x higher reply rates than generic templates.
+*   **Brand Voice Scaling:** RAG ensures that the AI writes in the tenant's specific tone by retrieving context from uploaded documents.
 
 ### 3. 🏗 Backend Architecture
 
-*   **Vector Database:** (Planned) Uses **pgvector** to store "Knowledge Context" for each tenant (e.g., their product brochures, case studies, and brand voice guidelines).
-*   **Inference Gateway:** A service that batches AI generation requests to OpenAI or Anthropic.
-*   **Context Injector:** Before the Dispatcher sends an email, it sends the "Prompt" + "Recipient Data" to the LLM to generate the personalized block.
-
-### 4. 🎨 Frontend Architecture
-
-*   **AI Writing Assistant:** An "Autofill" or "Refine" button inside the template editor.
-*   **Context Uploader:** A UI for tenants to "Train" the AI by uploading PDFs or linking to their website.
-*   **AI Preview:** A side-by-side view showing the "Base Template" vs "AI-Personalized Version" for 5 sample contacts.
-
-### 5. ⚙️ Workers & Background Systems
-
-*   **Generation Worker:** A dedicated queue for AI tasks. Since LLMs are slow (3-5 seconds per email), this cannot happen in the main dispatch loop; it must happen in a "Pre-Processing" stage.
-
-### 6. 🔌 Integrations
-
-*   **OpenAI / Anthropic:** The LLM providers.
-*   **LangChain / LlamaIndex:** For managing the RAG pipelines.
-
-### 7. 🔐 Environment Variables (.env)
-
-*   `OPENAI_API_KEY` → Required for the inference.
-*   `VECTOR_DB_URL` → For context retrieval.
+*   **Vector Datastore (Planned):** Uses **pgvector** to store high-dimensional embeddings of tenant knowledge.
+*   **Inference Gateway:** (Planned) A batch service that retrieves context and sends prompts to OpenAI/Anthropic.
+*   **Generation Worker:** A dedicated high-latency queue for AI tasks, ensuring LLM calls don't block the delivery engine.
 
 ### 8. ✅ What Is Implemented (From Code)
 
-*   **NOT IMPLEMENTED:** This phase is currently a "Strategic Gap." No AI or Vector logic is present in the current repository.
-
-### 9. ❌ What Is NOT Implemented
-
-*   **The entire AI generation and RAG pipeline.**
+*   **🛑 STRATEGIC GAP:** Currently, there is **ZERO AI or Vector code** in the repository.
+*   **Feature Flag Ready:** `PlanService.has_feature(tenant_id, "ai_writing")` is implemented, allowing for immediate rollout once the service is built.
 
 ### 10. ⚠️ Mismatches (Plan vs Reality)
 
-*   **Infrastructure Readiness:** The plan assumed RAG would be ready by Phase 10. However, the current "Modular Monolith" architecture needs to be upgraded to handle the high latency of LLM calls before this phase can go live.
+*   **Phase Collision:** Codebase refers to Phase 10 as "Anti-Spoofing" (implemented in `senders.py`), while the plan defines it as "AI Systems." I have reconciled this by categorizing Anti-Spoofing under Phase 9 (Identity).
 
-### 11. 🚨 Risks & Improvements
+### 11. 🚨 Risks & Improvements (The "AI Latency" Problem)
 
-*   **AI Hallucinations:** AI might generate offensive or incorrect content. We MUST implement an "AI Safety Filter" and allow users to "Review all AI content" before sending.
+*   **Throughput Risk:** LLM calls take 3–10 seconds. Integrating this directly into the campaign dispatcher will **destroy** delivery throughput.
+*   **Improvement:** AI personalization MUST be extracted to a **Pre-Processing Worker** that "Generates and Caches" personalized content *before* the campaign enters the "Sending" queue.
 
 ---
 
