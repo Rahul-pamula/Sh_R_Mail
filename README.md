@@ -17,6 +17,53 @@ ShrFlow is a **full-scale, self-hosted email marketing platform** — designed a
 *   **Dual Delivery Pipeline:** Critical system emails route securely through trusted Gmail SMTP, while massive bulk marketing campaigns isolate their reputation through AWS SES.
 *   **Deep Observability:** Granular audit logging, Supabase Edge Function open-tracking pixels, and real-time AWS SNS webhook bounce/complaint handling.
 
+---
+
+## 📸 Visual Tour
+
+### 🖥️ Dashboard & Audience Management
+![Contacts Dashboard](docs/plan/screen_shots/Screenshot%202026-05-07%20at%209.10.03%E2%80%AFAM.png)
+*Real-time audience monitoring, segmentation, and health tracking.*
+
+---
+
+### 🎨 Design & Infrastructure
+<table border="0">
+  <tr>
+    <td width="50%">
+      <p align="center"><b>Visual Template Library</b></p>
+      <img src="docs/plan/screen_shots/Screenshot%202026-05-07%20at%209.20.10%E2%80%AFAM.png" width="100%" />
+    </td>
+    <td width="50%">
+      <p align="center"><b>Infrastructure & Senders</b></p>
+      <img src="docs/plan/screen_shots/Screenshot%202026-05-07%20at%2010.09.18%E2%80%AFAM.png" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <p align="center"><b>Enterprise Auth Shell</b></p>
+      <img src="docs/plan/screen_shots/Screenshot%202026-05-07%20at%209.03.21%E2%80%AFAM.png" width="100%" />
+    </td>
+    <td width="50%">
+      <p align="center"><b>Import Workflows</b></p>
+      <img src="docs/plan/screen_shots/Screenshot%202026-05-07%20at%209.09.49%E2%80%AFAM.png" width="100%" />
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary><b>🔍 View More System Previews (Settings, Modals, Preferences)</b></summary>
+<br>
+
+| Feature | Preview |
+| :--- | :--- |
+| **User Preferences** | ![Preferences](docs/plan/screen_shots/Screenshot%202026-05-07%20at%2010.11.04%E2%80%AFAM.png) |
+| **Batch History** | ![Import History](docs/plan/screen_shots/Screenshot%202026-05-07%20at%209.09.49%E2%80%AFAM.png) |
+
+---
+### 📖 [Explore the Full 40+ Screenshot Gallery →](docs/VISUAL_GALLERY.md)
+</details>
+
 ## 🛠 Tech Stack
 
 | Layer | Technology |
