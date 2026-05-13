@@ -27,8 +27,7 @@ const SETTINGS_NAV: { label: string; items: SettingsNavItem[] }[] = [
     {
         label: 'Account',
         items: [
-            { href: '/settings/preferences',   icon: Sliders,   label: 'Preferences' },
-            { href: '/settings/notifications', icon: Bell,      label: 'Notifications' },
+            { href: '/settings/preferences',   icon: Sliders,   label: 'Personalization' },
         ],
     },
     {
@@ -99,12 +98,12 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
 
                 {/* Header */}
                 <div className="px-4 py-6 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/20 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--accent)]/20 to-[var(--accent)]/5 border border-[var(--accent)]/20 flex items-center justify-center shadow-inner">
                         <Settings className="w-4 h-4 text-[var(--accent)]" />
                     </div>
                     <div>
-                        <h1 className="text-[15px] font-bold text-[var(--text-primary)] leading-tight">Settings</h1>
-                        <p className="text-[10px] text-[var(--text-muted)] font-medium uppercase tracking-wider">Configuration</p>
+                        <h1 className="text-[15px] font-bold text-[var(--text-primary)] leading-tight tracking-tight">Settings</h1>
+                        <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-widest mt-0.5">Configuration</p>
                     </div>
                 </div>
 
@@ -120,10 +119,10 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
 
                         return (
                             <div key={section.label} className="space-y-1.5">
-                                <p className="px-3 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-50">
+                                <p className="px-3 text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)] opacity-70 mb-2">
                                     {section.label}
                                 </p>
-                                <ul className="space-y-0.5">
+                                <ul className="space-y-1">
                                     {visibleItems.map(item => {
                                         const active = isActive(item.href);
                                         const Icon = item.icon;
@@ -133,16 +132,20 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
                                                 <Link
                                                     href={item.href}
                                                     className={`
-                                                        group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                                                        group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-semibold transition-all hover-float-right overflow-hidden
                                                         ${active
-                                                            ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
+                                                            ? 'text-[var(--accent)] bg-[var(--accent)]/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] border border-[var(--accent)]/10'
                                                             : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
                                                     `}
                                                 >
-                                                    <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
-                                                    <span className="truncate">{item.label}</span>
+                                                    {/* Strong Active Left Border Indicator */}
+                                                    {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[var(--accent)] rounded-r-full shadow-[0_0_8px_var(--accent)]" />}
+                                                    
+                                                    <Icon className={`w-4.5 h-4.5 flex-shrink-0 transition-colors duration-200 ${active ? 'text-[var(--accent)] drop-shadow-[0_0_2px_var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
+                                                    <span className="truncate tracking-tight">{item.label}</span>
+                                                    
                                                     {active && (
-                                                        <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent)] shadow-sm shadow-[var(--accent)]/50" />
+                                                        <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]" />
                                                     )}
                                                 </Link>
                                             </li>
@@ -155,14 +158,14 @@ export default function SettingsSidebar({ mobileMenuOpen, setMobileMenuOpen }: S
                 </nav>
 
                 {/* Bottom Profile Hint */}
-                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-hover)]/30">
-                    <div className="flex items-center gap-3 px-1">
-                        <div className="w-8 h-8 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-[11px] font-bold text-[var(--text-muted)] uppercase">
+                <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-card)]">
+                    <div className="flex items-center gap-3 px-1 rounded-xl p-2 transition-colors hover:bg-[var(--bg-hover)] cursor-pointer">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--border)] border border-[var(--border)] flex items-center justify-center text-xs font-bold text-[var(--text-primary)] uppercase shadow-sm">
                             {user?.email?.charAt(0) || 'U'}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[11px] font-semibold text-[var(--text-primary)] truncate">{user?.email}</p>
-                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-tighter">Current User</p>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[12px] font-bold text-[var(--text-primary)] truncate">{user?.email}</p>
+                            <p className="text-[10px] text-[var(--text-muted)] font-medium uppercase tracking-wider mt-0.5">Current User</p>
                         </div>
                     </div>
                 </div>

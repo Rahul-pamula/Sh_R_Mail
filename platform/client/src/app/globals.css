@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -71,12 +72,20 @@
   --shadow-glow: 0 0 20px var(--accent-glow);
 
   /* Typography Scale */
-  --text-h1: 2.25rem;
-  --text-h2: 1.5rem;
-  --text-h3: 1.125rem;
-  --text-body: 0.875rem;
-  --text-caption: 0.75rem;
-  --text-mono: 0.875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
 
   /* Shadcn UI Base Tokens (HSL for Tailwind compatibility) */
   --background: 220 38% 98%;
@@ -96,6 +105,36 @@
   --border-hsl: 221 26% 89%;
   --input-hsl: 221 26% 89%;
   --ring: 222 71% 50%;
+}
+
+@layer components {
+  .heading-1 {
+    @apply text-[var(--text-3xl)] font-extrabold tracking-tighter text-[var(--text-primary)] leading-none;
+  }
+
+  .heading-2 {
+    @apply text-[var(--text-2xl)] font-bold tracking-tight text-[var(--text-primary)] leading-tight;
+  }
+
+  .heading-3 {
+    @apply text-[var(--text-lg)] font-bold tracking-tight text-[var(--text-primary)] leading-snug;
+  }
+
+  .body-text {
+    @apply text-[var(--text-sm)] font-medium leading-relaxed text-[var(--text-muted)];
+  }
+
+  .navbar-text {
+    @apply text-[var(--text-sm)] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all duration-200;
+  }
+
+  .label-text {
+    @apply text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)] leading-none;
+  }
+
+  .mono-text {
+    @apply font-mono text-[var(--text-xs)] font-medium tracking-tight;
+  }
 }
 
 /* ── DARK MODE (.dark class applied by next-themes) ─────────── */
@@ -176,22 +215,29 @@
    BASE RESET & CANVAS SETUP
    ============================================================ */
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
+
+
 
 html,
 body {
   height: 100%;
+}
+
+body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+code, kbd, samp, pre, .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
 
 @keyframes fadeIn {
@@ -205,11 +251,11 @@ body {
 }
 
 .fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+  animation: fadeIn 0.2s ease-out forwards;
 }
 
 .slide-up {
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Dark mode canvas gradient (only on dark) */
@@ -244,8 +290,8 @@ body {
 
 .glass-panel {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -300,8 +346,8 @@ body {
   50%       { box-shadow: 0 0 15px 0 var(--accent-glow); }
 }
 
-.animate-slide-up   { animation: slideUpFade  0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.animate-slide-right { animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-up   { animation: slideUpFade  0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
 .stagger-1 { animation-delay: 0.1s; opacity: 0; }
 .stagger-2 { animation-delay: 0.2s; opacity: 0; }
@@ -317,4 +363,15 @@ body {
   transform: translateY(-4px);
   box-shadow: var(--shadow-glow);
   border-color: rgba(59, 130, 246, 0.5);
+}
+
+.hover-float-right {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease;
+}
+.hover-float-right:hover {
+  transform: translateX(6px);
+  box-shadow: var(--shadow-card);
+  border-color: var(--accent-border);
 }

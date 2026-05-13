@@ -560,7 +560,7 @@ function MainDomainManagement({ domains, selectedDomain, setSelectedDomain, refr
                                                 </div>
 
                                                 {(domain.status !== 'verified' || showDnsRecords) && (
-                                                    <div className="grid gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                    <div className="grid gap-8 animate-in fade-in slide-in-from-top-4 duration-300">
                                                         <div className="space-y-3">
                                                             <div className="flex items-center justify-between px-1">
                                                                 <p className="text-xs font-bold text-[var(--text-primary)]">1. DKIM Authentication</p>

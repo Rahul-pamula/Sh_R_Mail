@@ -88,7 +88,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                 {settingsMode && (
                     <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent)]/5 border border-[var(--accent)]/20 animate-in fade-in zoom-in duration-300">
                         <Settings className="w-3.5 h-3.5 text-[var(--accent)]" />
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-[var(--accent)]">Settings Mode</span>
+                        <span className="label-text text-[var(--accent)]">Settings Mode</span>
                     </div>
                 )}
             </div>
@@ -105,7 +105,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                         className="w-full bg-[var(--bg-secondary)] border border-[var(--border)] rounded-full pl-10 pr-4 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-all cursor-pointer"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                        <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-primary)] border border-[var(--border)] rounded">⌘K</kbd>
+                        <kbd className="hidden sm:inline-block px-1.5 py-0.5 mono-text text-[var(--text-muted)] bg-[var(--bg-primary)] border border-[var(--border)] rounded">⌘K</kbd>
                     </div>
                 </div>
             </div>
@@ -137,7 +137,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                 >
                     <UserAvatar email={user.email} name={user.fullName} size="sm" />
                     <div className="hidden sm:flex flex-col items-start text-left">
-                        <span className="text-sm font-semibold text-[var(--text-primary)] leading-none mb-0.5">
+                        <span className="navbar-text text-[var(--text-primary)] leading-none mb-0.5">
                             {user.fullName}
                         </span>
                     </div>
@@ -152,8 +152,8 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                         <div className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border)] mb-1">
                             <UserAvatar email={user.email} name={user.fullName} size="md" />
                             <div className="min-w-0">
-                                <p className="text-sm font-bold text-[var(--text-primary)] truncate">{user.fullName}</p>
-                                <p className="text-xs text-[var(--text-muted)] truncate">{user.email}</p>
+                                <p className="navbar-text text-[var(--text-primary)] truncate">{user.fullName}</p>
+                                <p className="label-text truncate lowercase">{user.email}</p>
                             </div>
                         </div>
 
@@ -162,7 +162,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                             <Link 
                                 href="/account/profile" 
                                 onClick={() => setIsProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+                                className="flex items-center gap-3 px-3 py-2 body-text hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
                                 <User className="w-4 h-4" /> Personal Details
                             </Link>
@@ -170,7 +170,7 @@ export default function Header({ setMobileMenuOpen, settingsMode }: HeaderProps)
                             <Link 
                                 href="/account/security" 
                                 onClick={() => setIsProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+                                className="flex items-center gap-3 px-3 py-2 body-text hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
                             >
                                 <Shield className="w-4 h-4" /> Security
                             </Link>

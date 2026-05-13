@@ -16,11 +16,11 @@ function PageHeader({ title, subtitle, action, breadcrumb }: PageHeaderProps) {
                 {breadcrumb && (
                     <div className="mb-1">{breadcrumb}</div>
                 )}
-                <h1 className="text-[var(--text-h1)] font-bold text-[var(--text-primary)] truncate leading-none mt-0">
+                <h1 className="heading-1 truncate leading-none mt-0">
                     {title}
                 </h1>
                 {subtitle && (
-                    <p className="text-sm text-[var(--text-muted)] mt-1">{subtitle}</p>
+                    <p className="body-text mt-2">{subtitle}</p>
                 )}
             </div>
             {action && (

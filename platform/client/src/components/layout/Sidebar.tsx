@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
     Mail, ChevronLeft, LayoutDashboard, Users, BarChart3,
     LayoutTemplate, Settings, ServerCog, Megaphone, ChevronRight,
+    Gauge,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -80,7 +81,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--ai-accent)] flex items-center justify-center shadow-lg shadow-[var(--accent)]/20">
                                 <Mail className="w-3.5 h-3.5 text-white" />
                             </div>
-                            <span className="font-bold text-[14px] text-[var(--text-primary)] tracking-tight">
+                            <span className="heading-3">
                                 ShrFlow
                             </span>
                         </div>
@@ -118,7 +119,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                         <div key={section.label}>
                             {/* Section label */}
                             {!collapsed && (
-                                <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)] opacity-60 leading-none mt-0">
+                                <p className="px-3 mb-1.5 label-text opacity-60">
                                     {section.label}
                                 </p>
                             )}
@@ -140,7 +141,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                                                 href={item.href}
                                                 title={collapsed ? item.name : undefined}
                                                 className={`
-                                                    group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                                                    group relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all hover-float-right
                                                     ${active
                                                         ? 'text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/20'
                                                         : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'}
@@ -151,7 +152,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                                                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-gradient-to-b from-[var(--accent)] to-[var(--ai-accent)] rounded-r-full" />
                                                 )}
                                                 <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[var(--accent)]' : 'group-hover:text-[var(--text-secondary)]'}`} />
-                                                {!collapsed && <span className="truncate">{item.name}</span>}
+                                                {!collapsed && <span className="truncate navbar-text text-inherit hover:text-inherit">{item.name}</span>}
                                             </Link>
                                         </li>
                                     );
@@ -167,8 +168,8 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)] shadow-sm">
                              <div className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-tight leading-none mb-0.5">Your Role</span>
-                                <span className="text-[12px] font-semibold text-[var(--text-primary)] capitalize">{user?.role?.toLowerCase() || 'Viewer'}</span>
+                                <span className="label-text mb-1">Your Role</span>
+                                <span className="navbar-text text-[var(--text-primary)] capitalize">{user?.role?.toLowerCase() || 'Viewer'}</span>
                              </div>
                         </div>
                     ) : (

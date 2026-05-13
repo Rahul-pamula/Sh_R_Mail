@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, CheckCircle2, Download, Mail, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowUp, CheckCircle2, Download, Mail, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users, X, Zap, Crown, Edit3, Eye } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { can } from '@/utils/permissions';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, ConfirmModal, InlineAlert, Input, KeyValueList, ModalShell, PageHeader, SectionCard, StatCard, TableToolbar, useToast } from '@/components/ui';
-
+import { Badge, Button, ConfirmModal, InlineAlert, Input, ModalShell, PageHeader, SectionCard, TableToolbar, useToast } from '@/components/ui';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
@@ -34,8 +33,34 @@ interface Invite {
 const selectClassName = 'rounded-lg border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20';
 
 function RoleBadge({ role, isCurrentUser = false }: { role: Role; isCurrentUser?: boolean }) {
-    const variant = role === 'OWNER' ? 'warning' : role === 'ADMIN' ? 'info' : role === 'CREATOR' ? 'outline' : 'ghost';
-    return <Badge variant={variant as any}>{role}{isCurrentUser ? ' (You)' : ''}</Badge>;
+    let colorClass = '';
+    let icon = null;
+    
+    switch (role) {
+        case 'OWNER':
+            colorClass = 'bg-purple-500/10 text-purple-600 border-purple-500/30';
+            icon = <Crown className="w-3.5 h-3.5 mr-1" />;
+            break;
+        case 'ADMIN':
+            colorClass = 'bg-blue-500/10 text-blue-600 border-blue-500/30';
+            icon = <Zap className="w-3.5 h-3.5 mr-1" />;
+            break;
+        case 'CREATOR':
+            colorClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30';
+            icon = <Edit3 className="w-3.5 h-3.5 mr-1" />;
+            break;
+        case 'VIEWER':
+            colorClass = 'bg-slate-500/10 text-slate-600 border-slate-500/30';
+            icon = <Eye className="w-3.5 h-3.5 mr-1" />;
+            break;
+    }
+
+    return (
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider font-bold border ${colorClass}`}>
+            {icon}
+            {role}{isCurrentUser ? ' (You)' : ''}
+        </span>
+    );
 }
 
 export default function TeamSettingsPage() {
@@ -73,21 +98,6 @@ export default function TeamSettingsPage() {
     const myRole = (members.find((member) => member.user_id === user?.userId)?.role?.toUpperCase() as Role) || 'VIEWER';
     const isManagerOrOwner = myRole === 'ADMIN' || myRole === 'OWNER';
 
-    const metrics = useMemo(() => {
-        const baseMetrics = [
-            { label: 'Active Members', value: members.length.toString() },
-            { label: 'Pending Invites', value: invites.length.toString() },
-            { label: 'Owners / Admins', value: members.filter((member) => member.role?.toUpperCase() === 'OWNER' || member.role?.toUpperCase() === 'ADMIN').length.toString() },
-        ];
-        if (validationResult && validationResult.limit !== -1) {
-            baseMetrics.push({ 
-                label: 'Seats Used', 
-                value: `${validationResult.used} / ${validationResult.limit}` 
-            });
-        }
-        return baseMetrics;
-    }, [members, invites, validationResult]);
-
     useEffect(() => {
         if (!authLoading) {
             if (user && !can(user, 'team:view')) {
@@ -105,7 +115,6 @@ export default function TeamSettingsPage() {
     if (authLoading || (user && !can(user, 'team:view'))) {
         return null;
     }
-
 
     const fetchTeam = async () => {
         if (!token) return;
@@ -168,12 +177,10 @@ export default function TeamSettingsPage() {
 
 
     useEffect(() => {
-        // Restore pending invite if returning from an upgrade
         const savedInvite = localStorage.getItem('pending_team_invite');
         if (savedInvite && typeof window !== 'undefined') {
             try {
                 const parsed = JSON.parse(savedInvite);
-                // Check TTL (30 minutes)
                 const now = Date.now();
                 if (parsed.timestamp && now - parsed.timestamp > 30 * 60 * 1000) {
                     localStorage.removeItem('pending_team_invite');
@@ -234,7 +241,6 @@ export default function TeamSettingsPage() {
                 return;
             }
 
-            // Handle soft-failure 200s (LIMIT_EXCEEDED, ALREADY_MEMBER, RATE_LIMITED, etc.)
             if (data.status && data.status !== 'OK') {
                 const reasonMap: Record<string, string> = {
                     ALREADY_MEMBER: 'This person is already a member of the workspace.',
@@ -445,180 +451,286 @@ export default function TeamSettingsPage() {
     const pendingInviteError = inviteStatus === 'error';
 
     if (loading) {
-        return <div className="p-12 text-sm text-[var(--text-muted)]">Loading team settings...</div>;
+        return (
+            <div className="flex h-64 items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--border)] border-t-[var(--accent)]"></div>
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-8 pb-8">
-            <PageHeader
-                title="Team Members"
-                subtitle="Manage workspace access and roles so campaign work and infrastructure control stay appropriately separated."
-                action={
-                    isManagerOrOwner ? (
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setShowExportModal(true)}>
-                                <Download className="mr-2 h-4 w-4" />
-                                 Export
+        <div className="space-y-10 pb-16 max-w-7xl mx-auto animate-in fade-in duration-300">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[var(--border)]/60">
+                <div className="space-y-2">
+                    <h1 className="text-3xl font-extrabold text-[var(--text-primary)] tracking-tight">Team Management</h1>
+                    <p className="text-base text-[var(--text-muted)] leading-relaxed">
+                        Control workspace access, roles, and administrative boundaries.
+                    </p>
+                </div>
+                {isManagerOrOwner && (
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Button variant="outline" className="h-11 px-5 rounded-xl shadow-sm transition-all hover:-translate-y-0.5" onClick={() => setShowExportModal(true)}>
+                            <Download className="mr-2 h-4 w-4" />
+                             Export
+                        </Button>
+                        {validationResult?.status === 'LIMIT_EXCEEDED' || (validationResult?.limit !== undefined && validationResult.limit !== -1 && validationResult.remaining <= 0) ? (
+                            <Button className="h-11 px-6 rounded-xl shadow-md transition-all hover:-translate-y-0.5 bg-gradient-to-r from-[var(--accent)] to-[#6366f1] hover:opacity-90" onClick={handleUpgradeClick}>
+                                <ArrowUp className="mr-2 h-4 w-4 text-white" />
+                                Upgrade to Add Members
                             </Button>
-                            {validationResult?.status === 'LIMIT_EXCEEDED' || (validationResult?.limit !== undefined && validationResult.limit !== -1 && validationResult.remaining <= 0) ? (
-                                <Button size="sm" variant="primary" onClick={handleUpgradeClick} className="bg-gradient-to-r from-[var(--accent)] to-[#6366f1] hover:opacity-90">
-                                    <ArrowUp className="mr-2 h-4 w-4" />
-                                    Upgrade to Add Members
-                                </Button>
-                            ) : (
-                                <Button size="sm" onClick={() => setShowInviteModal(true)} isLoading={isValidating}>
-                                    <UserPlus className="mr-2 h-4 w-4" />
-                                    Invite Member
-                                </Button>
-                            )}
-                        </div>
-                    ) : undefined
-                }
-            />
+                        ) : (
+                            <Button className="h-11 px-6 rounded-xl shadow-md transition-all hover:-translate-y-0.5 bg-gradient-to-r from-[var(--accent)] to-[#6366f1] text-white hover:opacity-90 border-0" onClick={() => setShowInviteModal(true)} isLoading={isValidating}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Invite Member
+                            </Button>
+                        )}
+                    </div>
+                )}
+            </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {metrics.map((metric) => (
-                    <StatCard key={metric.label} label={metric.label} value={metric.value} icon={<Users className="h-5 w-5" />} />
-                ))}
+            {/* 🟢 TOP METRICS - COLORED INSIGHT CARDS */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                {/* Active Members */}
+                <div className="relative overflow-hidden group flex flex-col gap-3 rounded-3xl border border-[var(--info)]/30 bg-gradient-to-br from-[var(--info)]/5 to-transparent p-6 transition-all duration-300 hover:shadow-md hover:-translate-y-1">
+                    <div className="flex items-center gap-3 text-[var(--info)]">
+                        <Users className="h-5 w-5" />
+                        <h3 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Active Members</h3>
+                    </div>
+                    <span className="text-3xl font-extrabold text-[var(--text-primary)]">{members.length}</span>
+                </div>
+
+                {/* Pending Invites */}
+                <div className="relative overflow-hidden group flex flex-col gap-3 rounded-3xl border border-[var(--warning)]/30 bg-gradient-to-br from-[var(--warning)]/5 to-transparent p-6 transition-all duration-300 hover:shadow-md hover:-translate-y-1">
+                    <div className="flex items-center gap-3 text-[var(--warning)]">
+                        <Mail className="h-5 w-5" />
+                        <h3 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Pending Invites</h3>
+                    </div>
+                    <span className="text-3xl font-extrabold text-[var(--text-primary)]">{invites.length}</span>
+                </div>
+
+                {/* Admins & Owners */}
+                <div className="relative overflow-hidden group flex flex-col gap-3 rounded-3xl border border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-transparent p-6 transition-all duration-300 hover:shadow-md hover:-translate-y-1">
+                    <div className="flex items-center gap-3 text-purple-500">
+                        <Crown className="h-5 w-5" />
+                        <h3 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Owners / Admins</h3>
+                    </div>
+                    <span className="text-3xl font-extrabold text-[var(--text-primary)]">
+                        {members.filter((member) => member.role?.toUpperCase() === 'OWNER' || member.role?.toUpperCase() === 'ADMIN').length}
+                    </span>
+                </div>
+
+                {/* Seats Used */}
+                {validationResult && validationResult.limit !== -1 && (
+                    <div className="relative overflow-hidden group flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--bg-card)] p-6 transition-all duration-300 hover:shadow-md hover:border-[var(--accent)]/30 hover:-translate-y-1">
+                        <div className="flex items-center gap-3 text-[var(--text-primary)]">
+                            <Shield className="h-5 w-5" />
+                            <h3 className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Seats Used</h3>
+                        </div>
+                        <div className="flex flex-col gap-2 w-full">
+                            <div className="flex items-end justify-between">
+                                <span className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">
+                                    {validationResult.used} <span className="text-base text-[var(--text-muted)] font-bold">/ {validationResult.limit}</span>
+                                </span>
+                                <span className="text-xs font-bold text-[var(--accent)]">{Math.round((validationResult.used / validationResult.limit) * 100)}%</span>
+                            </div>
+                            <div className="h-2 w-full bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full rounded-full transition-all duration-1000 ease-out ${validationResult.used >= validationResult.limit ? 'bg-[var(--danger)]' : 'bg-[var(--accent)]'}`}
+                                    style={{ width: `${Math.min((validationResult.used / validationResult.limit) * 100, 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {!isManagerOrOwner && (
                 <InlineAlert
                     variant="info"
-                    title="Workspace management is limited"
+                    title="Limited Access"
                     description="Only Owners and Admins can invite members, remove users, or change workspace-level permissions."
                 />
             )}
 
-            <SectionCard title="Active Members" description="Use roles for administrative scope boundaries.">
-                <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)]">
-                    <TableToolbar
-                        title="Workspace Access"
-                        description="The person with owner access can control role changes."
-                        trailing={<Badge variant="outline">{members.length} active</Badge>}
-                        className="rounded-none border-0 border-b border-[var(--border)]"
-                    />
-                    <div className="divide-y divide-[var(--border)]">
-                        {members.map((member) => {
-                            const isCurrentUser = member.user_id === user?.userId;
-                            const canEditMember = myRole === 'OWNER' && !isCurrentUser;
-                            return (
-                                <div key={member.user_id} className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-hover)] font-semibold text-[var(--text-primary)]">
-                                            {(member.full_name || member.email).charAt(0).toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-semibold text-[var(--text-primary)]">{member.full_name || 'No name provided'}</p>
-                                            <p className="text-sm text-[var(--text-muted)]">{member.email}</p>
-                                        </div>
+            {/* 🟢 MEMBER LIST REDESIGN */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                    <div>
+                        <h2 className="text-lg font-bold text-[var(--text-primary)]">Active Members</h2>
+                        <p className="text-sm text-[var(--text-muted)]">Manage permissions and workspace access.</p>
+                    </div>
+                    <Badge variant="outline" className="px-3 py-1 text-sm font-bold">{members.length} Active</Badge>
+                </div>
+
+                <div className="space-y-3">
+                    {members.map((member) => {
+                        const isCurrentUser = member.user_id === user?.userId;
+                        const canEditMember = myRole === 'OWNER' && !isCurrentUser;
+                        
+                        return (
+                            <div key={member.user_id} className="group flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[var(--border)]/80">
+                                <div className="flex items-center gap-4">
+                                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${isCurrentUser ? 'border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]' : 'border-[var(--border)] bg-[var(--bg-secondary)]/50 text-[var(--text-primary)]'} text-lg font-extrabold shadow-inner`}>
+                                        {(member.full_name || member.email).charAt(0).toUpperCase()}
                                     </div>
-
-                                    <div className="flex flex-col gap-3 lg:items-end">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            {canEditMember ? (
-                                                <select
-                                                    value={member.role?.toUpperCase()}
-                                                    onChange={(e) => handleChangeMember(member.user_id, 'role', e.target.value)}
-                                                    className={selectClassName}
-                                                >
-                                                    <option value="OWNER">Owner</option>
-                                                    <option value="ADMIN">Admin</option>
-                                                    <option value="CREATOR">Creator</option>
-                                                    <option value="VIEWER">Viewer</option>
-                                                </select>
-                                            ) : (
-                                                <RoleBadge role={member.role} isCurrentUser={isCurrentUser} />
-                                            )}
+                                    <div className="flex flex-col gap-0.5">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-[var(--text-primary)]">{member.full_name || 'No name provided'}</p>
+                                            <RoleBadge role={member.role} isCurrentUser={isCurrentUser} />
                                         </div>
-
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs text-[var(--text-muted)]">Joined {new Date(member.joined_at).toLocaleDateString()}</span>
-                                            {isCurrentUser && member.role?.toUpperCase() !== 'OWNER' && (
-                                                <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setConfirmLeaveOpen(true)}>
-                                                    <Shield className="h-3.5 w-3.5" />
-                                                    Leave
-                                                </Button>
-                                            )}
-                                            {myRole === 'OWNER' && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
-                                                <Button variant="ghost" size="sm" onClick={() => setPendingTransferMember(member)}>
-                                                    <UserCog className="h-3.5 w-3.5" />
-                                                    Make Owner
-                                                </Button>
-                                            )}
-                                            {isManagerOrOwner && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
-                                                <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setPendingRemoveMember(member)}>
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                    Remove
-                                                </Button>
-                                            )}
-                                        </div>
+                                        <p className="text-sm text-[var(--text-muted)]">{member.email}</p>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </SectionCard>
 
+                                <div className="flex flex-col gap-3 lg:items-end">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="text-xs font-semibold text-[var(--text-muted)] mr-2">Joined {new Date(member.joined_at).toLocaleDateString()}</span>
+                                        
+                                        {canEditMember && (
+                                            <select
+                                                value={member.role?.toUpperCase()}
+                                                onChange={(e) => handleChangeMember(member.user_id, 'role', e.target.value)}
+                                                className="rounded-xl border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] outline-none transition-all hover:bg-[var(--bg-hover)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                                            >
+                                                <option value="OWNER">Owner</option>
+                                                <option value="ADMIN">Admin</option>
+                                                <option value="CREATOR">Creator</option>
+                                                <option value="VIEWER">Viewer</option>
+                                            </select>
+                                        )}
+                                        
+                                        {isCurrentUser && member.role?.toUpperCase() !== 'OWNER' && (
+                                            <Button variant="danger" size="sm" className="rounded-xl font-bold bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white border-0" onClick={() => setConfirmLeaveOpen(true)}>
+                                                <Shield className="h-4 w-4 mr-1.5" /> Leave
+                                            </Button>
+                                        )}
+                                        {myRole === 'OWNER' && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
+                                            <Button variant="secondary" size="sm" className="rounded-xl font-bold border-[var(--border)] hover:border-purple-500/50 hover:bg-purple-500/10 hover:text-purple-600" onClick={() => setPendingTransferMember(member)}>
+                                                <Crown className="h-4 w-4 mr-1.5" /> Make Owner
+                                            </Button>
+                                        )}
+                                        {isManagerOrOwner && member.role?.toUpperCase() !== 'OWNER' && !isCurrentUser && (
+                                            <Button variant="ghost" size="sm" className="rounded-xl font-bold text-[var(--danger)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]" onClick={() => setPendingRemoveMember(member)}>
+                                                <Trash2 className="h-4 w-4 mr-1.5" /> Remove
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 🟢 PENDING INVITES */}
             {invites.length > 0 && (
-                <SectionCard title="Pending Invites" description="Keep an eye on expiring invitations so access doesn’t stall during onboarding.">
-                    <div className="divide-y divide-[var(--border)] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)]">
+                <div className="space-y-4 pt-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <div>
+                            <h2 className="text-lg font-bold text-[var(--text-primary)]">Pending Invites</h2>
+                            <p className="text-sm text-[var(--text-muted)]">Manage outstanding invitations to join the workspace.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
                         {invites.map((invite) => {
                             const isExpired = new Date(invite.expires_at) < new Date();
                             return (
-                                <div key={invite.id} className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+                                <div key={invite.id} className="group flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]/30 transition-all duration-200 hover:bg-[var(--bg-card)] hover:border-[var(--border)]/80 hover:shadow-sm">
                                     <div className="flex items-center gap-4">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-hover)]">
-                                            <Mail className="h-4 w-4 text-[var(--text-muted)]" />
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-inner">
+                                            <Mail className="h-5 w-5 text-[var(--text-muted)]" />
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-semibold text-[var(--text-primary)]">{invite.email}</p>
-                                            <p className="text-sm text-[var(--text-muted)]">Invited as {invite.role}</p>
-                                            {invite.inviter_name && <p className="text-xs text-[var(--text-muted)]">Sent by {invite.inviter_name}</p>}
+                                        <div className="flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-bold text-[var(--text-primary)]">{invite.email}</p>
+                                                <RoleBadge role={invite.role} />
+                                            </div>
+                                            <p className="text-[13px] text-[var(--text-muted)]">
+                                                Sent {invite.inviter_name ? `by ${invite.inviter_name}` : ''} • {isExpired ? <span className="text-[var(--danger)] font-bold">Expired</span> : `Expires ${new Date(invite.expires_at).toLocaleDateString()}`}
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        {isExpired ? (
-                                            <Badge variant="danger">Expired</Badge>
-                                        ) : (
-                                            <span className="text-xs text-[var(--text-muted)]">Expires {new Date(invite.expires_at).toLocaleDateString()}</span>
-                                        )}
                                         {(isManagerOrOwner || invite.inviter_id === user?.userId) && (
-                                            <Button variant="ghost" size="sm" onClick={() => handleResendInvite(invite)} isLoading={resendingInviteId === invite.id}>
-                                                <RefreshCcw className="h-3.5 w-3.5" />
-                                                Resend
-                                            </Button>
-                                        )}
-                                        {(isManagerOrOwner || invite.inviter_id === user?.userId) && (
-                                            <Button variant="ghost" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]" onClick={() => setPendingCancelInvite(invite)}>
-                                                <X className="h-3.5 w-3.5" />
-                                                Cancel Invite
-                                            </Button>
+                                            <>
+                                                <Button variant="secondary" size="sm" className="rounded-xl font-bold bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)]" onClick={() => handleResendInvite(invite)} isLoading={resendingInviteId === invite.id}>
+                                                    <RefreshCcw className="h-4 w-4 mr-1.5" /> Resend
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="rounded-xl font-bold text-[var(--danger)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]" onClick={() => setPendingCancelInvite(invite)}>
+                                                    <X className="h-4 w-4 mr-1.5" /> Cancel
+                                                </Button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
                             );
                         })}
                     </div>
-                </SectionCard>
+                </div>
             )}
 
-            <SectionCard title="Roles & Permissions" description="This matrix keeps administrative control boundaries explicit across the workspace.">
-                <KeyValueList
-                    columns={2}
-                    items={[
-                        { label: 'Owner', value: 'Full administrative control', helper: 'Manage roles, domains, and billing.' },
-                        { label: 'Admin', value: 'Operational control', helper: 'Manage domains, invites, and shared operations.' },
-                        { label: 'Creator', value: 'Content producer', helper: 'Create campaigns and manage contacts.' },
-                        { label: 'Viewer', value: 'Read-only access', helper: 'View campaigns and analytics.' },
-                    ]}
-                />
-                <div className="mt-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4 text-sm text-[var(--text-muted)]">
-                    Owners and Admins can manage sending domains and team members.
+            {/* 🟢 ROLES & PERMISSIONS MATRIX */}
+            <div className="space-y-6 pt-8">
+                <div>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-[var(--accent)]" /> Roles & Permissions
+                    </h2>
+                    <p className="text-sm text-[var(--text-muted)] mt-1">Review the access levels available for workspace members.</p>
                 </div>
-            </SectionCard>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {/* Owner Card */}
+                    <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-b from-purple-500/5 to-transparent p-5 transition-transform hover:-translate-y-1">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600">
+                                <Crown className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-[var(--text-primary)]">Owner</h3>
+                        </div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Full Control</p>
+                        <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">Can delete the workspace, manage billing, domains, and all team access.</p>
+                    </div>
 
+                    {/* Admin Card */}
+                    <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-500/5 to-transparent p-5 transition-transform hover:-translate-y-1">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600">
+                                <Zap className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-[var(--text-primary)]">Admin</h3>
+                        </div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Operational Control</p>
+                        <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">Can invite members, configure sending domains, and manage settings.</p>
+                    </div>
+
+                    {/* Creator Card */}
+                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/5 to-transparent p-5 transition-transform hover:-translate-y-1">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
+                                <Edit3 className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-[var(--text-primary)]">Creator</h3>
+                        </div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Content Producer</p>
+                        <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">Can build campaigns, manage contacts, and view analytics.</p>
+                    </div>
+
+                    {/* Viewer Card */}
+                    <div className="rounded-2xl border border-slate-500/20 bg-gradient-to-b from-slate-500/5 to-transparent p-5 transition-transform hover:-translate-y-1">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-xl bg-slate-500/10 text-slate-600">
+                                <Eye className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-[var(--text-primary)]">Viewer</h3>
+                        </div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Read-Only</p>
+                        <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">Can view campaign performance and analytics dashboards.</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* MODALS */}
             <ModalShell
                 isOpen={showInviteModal}
                 onClose={() => {
@@ -631,7 +743,6 @@ export default function TeamSettingsPage() {
                 maxWidthClass="max-w-md"
             >
                 <form onSubmit={handleSendInvite} className="space-y-6">
-                    {/* Plan gate: Free plan has team_members=false → show Upgrade wall immediately */}
                     {validationResult?.status === 'LIMIT_EXCEEDED' || (validationResult?.limit !== undefined && validationResult.limit !== -1 && validationResult.remaining <= 0) ? (
                         <div className="space-y-6">
                             <div className="rounded-[var(--radius-lg)] border border-[var(--danger-border)] bg-[var(--danger-bg)]/20 p-6">
@@ -658,72 +769,36 @@ export default function TeamSettingsPage() {
                                             </div>
                                         </>
                                     )}
-                                    <p className="mt-3 text-xs italic text-[var(--text-muted)] border-t border-[var(--danger-border)] pt-3">
-                                        🚫 Upgrade your plan to add Admins and Creators.
-                                    </p>
                                 </div>
                             </div>
 
-                            {validationResult?.recommended_plan && (
-                                <div className="rounded-[var(--radius-lg)] border border-[var(--accent-border)] bg-[var(--accent)]/5 p-6">
-                                    <div className="flex items-center gap-3 text-[var(--accent)]">
-                                        <Zap className="h-5 w-5" />
-                                        <h4 className="text-sm font-bold uppercase tracking-wider">Recommended Plan</h4>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between">
-                                        <div>
-                                            <p className="text-lg font-bold text-[var(--text-primary)]">{validationResult.recommended_plan.name}</p>
-                                            <p className="text-xs text-[var(--text-muted)]">Allows up to {validationResult.recommended_plan.limit === -1 ? 'Unlimited' : validationResult.recommended_plan.limit} users</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-semibold text-[var(--text-primary)]">{validationResult.recommended_plan.price}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Static starter upsell for Free plan (no recommended_plan in response) */}
-                            {validationResult?.limit === 1 && !validationResult?.recommended_plan && (
-                                <div className="rounded-[var(--radius-lg)] border border-[var(--accent-border)] bg-[var(--accent)]/5 p-6">
-                                    <div className="flex items-center gap-3 text-[var(--accent)]">
-                                        <Zap className="h-5 w-5" />
-                                        <h4 className="text-sm font-bold uppercase tracking-wider">Recommended Plan</h4>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between">
-                                        <div>
-                                            <p className="text-lg font-bold text-[var(--text-primary)]">Starter</p>
-                                            <p className="text-xs text-[var(--text-muted)]">Allows up to 3 users</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-semibold text-[var(--text-primary)]">₹799/mo</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className="flex flex-col gap-3">
-                                <Button type="button" onClick={handleUpgradeClick} fullWidth className="bg-gradient-to-r from-[var(--accent)] to-[#6366f1]">
+                                <Button type="button" onClick={handleUpgradeClick} fullWidth className="h-12 text-base font-bold bg-gradient-to-r from-[var(--accent)] to-[#6366f1] text-white">
                                     Upgrade Plan
                                 </Button>
-                                <Button type="button" variant="ghost" onClick={() => { setShowInviteModal(false); resetInviteForm(); }} fullWidth>
+                                <Button type="button" variant="ghost" className="h-12 font-bold" onClick={() => { setShowInviteModal(false); resetInviteForm(); }} fullWidth>
                                     Cancel
                                 </Button>
                             </div>
                         </div>
                     ) : (
                         <>
-                            <Input
-                                label="Email Address"
-                                type="email"
-                                required
-                                value={inviteEmail}
-                                onChange={(e) => setInviteEmail(e.target.value)}
-                                placeholder="colleague@company.com"
-                                autoFocus
-                            />
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-[var(--text-primary)]">Email Address</label>
+                                <input
+                                    type="email"
+                                    required
+                                    value={inviteEmail}
+                                    onChange={(e) => setInviteEmail(e.target.value)}
+                                    placeholder="colleague@company.com"
+                                    autoFocus
+                                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-input)] px-4 py-3.5 text-sm font-medium text-[var(--text-primary)] outline-none transition-all duration-200 focus:bg-[var(--bg-card)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent)]/10 hover:bg-[var(--bg-hover)]"
+                                />
+                            </div>
 
                             <div className="grid grid-cols-1 gap-6">
-                                <SectionCard title="Workspace Role" description="Controls administrative permissions inside the workspace." noPadding className="border-0 bg-transparent">
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-bold text-[var(--text-primary)]">Workspace Role</label>
                                     <div className="grid gap-3">
                                         {(user?.role === 'ADMIN' ? ['CREATOR', 'VIEWER'] as const : ['ADMIN', 'CREATOR', 'VIEWER'] as const).map((role) => (
                                             <button
@@ -731,10 +806,15 @@ export default function TeamSettingsPage() {
                                                 type="button"
                                                 onClick={() => setInviteRole(role)}
                                                 disabled={validationResult?.used >= validationResult?.limit && validationResult?.limit !== -1}
-                                                className={`rounded-[var(--radius)] border p-4 text-left transition ${inviteRole === role ? 'border-[var(--accent)] bg-[var(--info-bg)]/40' : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)]'} disabled:opacity-50`}
+                                                className={`rounded-xl border p-4 text-left transition-all duration-200 ${inviteRole === role ? 'border-[var(--accent)] bg-[var(--accent)]/5 ring-2 ring-[var(--accent)]/20' : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)]'} disabled:opacity-50`}
                                             >
-                                                <p className="text-sm font-semibold text-[var(--text-primary)] capitalize">{role.toLowerCase()}</p>
-                                                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                                                <p className="text-sm font-bold text-[var(--text-primary)] capitalize flex items-center gap-2">
+                                                    {role === 'ADMIN' && <Zap className="w-4 h-4 text-blue-500" />}
+                                                    {role === 'CREATOR' && <Edit3 className="w-4 h-4 text-emerald-500" />}
+                                                    {role === 'VIEWER' && <Eye className="w-4 h-4 text-slate-500" />}
+                                                    {role.toLowerCase()}
+                                                </p>
+                                                <p className="mt-1 text-[13px] text-[var(--text-muted)] font-medium">
                                                     {role === 'ADMIN' ? 'Full workspace management, domains, and team access.' : 
                                                      role === 'CREATOR' ? 'Create campaigns and manage contacts.' : 
                                                      'Read-only access to analytics and campaigns.'}
@@ -742,7 +822,7 @@ export default function TeamSettingsPage() {
                                             </button>
                                         ))}
                                     </div>
-                                </SectionCard>
+                                </div>
                             </div>
 
                             {pendingInviteError && (
@@ -754,21 +834,12 @@ export default function TeamSettingsPage() {
                                 />
                             )}
 
-                            {inviteStatus === 'success' && (
-                                <InlineAlert
-                                    variant="success"
-                                    title="Invite sent"
-                                    description="The invitation email has been issued successfully."
-                                    icon={<CheckCircle2 className="mt-0.5 h-4 w-4" />}
-                                />
-                            )}
-
-                            <div className="flex items-center justify-end gap-3">
-                                <Button type="button" variant="ghost" onClick={() => { setShowInviteModal(false); resetInviteForm(); }} disabled={inviteStatus === 'sending'}>
-                                    Cancel
+                            <div className="flex items-center gap-3 pt-6 border-t border-[var(--border)]/60">
+                                <Button type="submit" className="h-11 px-8 rounded-xl font-bold flex-1" isLoading={inviteStatus === 'sending'} disabled={inviteStatus === 'success' || (validationResult?.used >= validationResult?.limit && validationResult?.limit !== -1)}>
+                                    Send Invitation
                                 </Button>
-                                <Button type="submit" isLoading={inviteStatus === 'sending'} disabled={inviteStatus === 'success' || (validationResult?.used >= validationResult?.limit && validationResult?.limit !== -1)}>
-                                    Send Invitation Link
+                                <Button type="button" variant="ghost" className="h-11 px-6 rounded-xl font-bold flex-1" onClick={() => { setShowInviteModal(false); resetInviteForm(); }} disabled={inviteStatus === 'sending'}>
+                                    Cancel
                                 </Button>
                             </div>
                         </>
@@ -777,34 +848,34 @@ export default function TeamSettingsPage() {
             </ModalShell>
 
             <ConfirmModal
+                isOpen={Boolean(pendingRoleChange)}
+                onClose={() => setPendingRoleChange(null)}
+                onConfirm={confirmRoleChange}
+                title="Change Member Role"
+                message={`Are you sure you want to change the role for ${pendingRoleChange?.email} to ${pendingRoleChange?.role}? This will immediately alter their permissions.`}
+                confirmLabel="Confirm Change"
+                isLoading={confirmBusy}
+            />
+
+            <ConfirmModal
                 isOpen={Boolean(pendingRemoveMember)}
                 onClose={() => setPendingRemoveMember(null)}
                 onConfirm={handleRemoveMember}
-                title="Remove team member?"
-                message={pendingRemoveMember ? `${pendingRemoveMember.email} will lose access to campaigns, contacts, and workspace history.` : 'Remove this member.'}
+                title="Remove Member"
+                message={pendingRemoveMember ? `Are you sure you want to remove ${pendingRemoveMember.email}? They will instantly lose access to all campaigns, contacts, and workspace history.` : 'Remove this member.'}
                 confirmLabel="Remove Member"
                 isLoading={confirmBusy && Boolean(pendingRemoveMember)}
+                variant="danger"
             />
 
             <ConfirmModal
                 isOpen={Boolean(pendingCancelInvite)}
                 onClose={() => setPendingCancelInvite(null)}
                 onConfirm={handleCancelInvite}
-                title="Cancel invitation?"
-                message={pendingCancelInvite ? `This will invalidate the invite sent to ${pendingCancelInvite.email}.` : 'Cancel this invitation.'}
+                title="Cancel Invitation"
+                message={pendingCancelInvite ? `This will invalidate the invite sent to ${pendingCancelInvite.email}. The link will no longer work.` : 'Cancel this invitation.'}
                 confirmLabel="Cancel Invitation"
                 isLoading={confirmBusy && Boolean(pendingCancelInvite)}
-                variant="warning"
-            />
-
-            <ConfirmModal
-                isOpen={Boolean(pendingTransferMember)}
-                onClose={() => setPendingTransferMember(null)}
-                onConfirm={handleTransferOwnership}
-                title="Transfer ownership?"
-                message={pendingTransferMember ? `${pendingTransferMember.email} will become the new owner of this workspace, and you will become an Admin.` : 'Transfer ownership.'}
-                confirmLabel="Transfer Ownership"
-                isLoading={confirmBusy && Boolean(pendingTransferMember)}
                 variant="warning"
             />
 
@@ -812,107 +883,23 @@ export default function TeamSettingsPage() {
                 isOpen={confirmLeaveOpen}
                 onClose={() => setConfirmLeaveOpen(false)}
                 onConfirm={handleLeaveWorkspace}
-                title="Leave workspace?"
-                message="Are you sure you want to leave this workspace? You will lose access immediately."
+                title="Leave Workspace"
+                message="Are you sure you want to leave this workspace? You will be logged out and lose access immediately."
                 confirmLabel="Leave Workspace"
                 isLoading={confirmBusy}
-            >
-                <div className="rounded-[var(--radius)] border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2 text-sm text-[var(--text-primary)]">
-                    You will need a fresh invitation to regain access later.
-                </div>
-            </ConfirmModal>
+                variant="danger"
+            />
 
-            <ModalShell
-                isOpen={showExportModal}
-                onClose={() => !exportBusy && setShowExportModal(false)}
-                title="Export Workspace Members"
-                description="Download a CSV file of members in this workspace."
-            >
-                <form onSubmit={handleExportMembers} className="space-y-4">
-                    <div className="space-y-4">
-                        <div>
-                            <label className="mb-1 block text-sm font-medium text-[var(--text-primary)]">
-                                Filter by Role
-                            </label>
-                            <select
-                                value={exportRole}
-                                onChange={(e) => setExportRole(e.target.value as any)}
-                                className={selectClassName + ' w-full'}
-                                disabled={exportBusy}
-                            >
-                                <option value="all">All Roles</option>
-                                <option value="ADMIN">Admins Only</option>
-                                <option value="CREATOR">Creators Only</option>
-                                <option value="VIEWER">Viewers Only</option>
-                                <option value="CREATOR">Creators Only</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label className="mb-1 block text-sm font-medium text-[var(--text-primary)]">
-                                Filter by Inviter
-                            </label>
-                            <select
-                                value={exportInvitedBy}
-                                onChange={(e) => setExportInvitedBy(e.target.value)}
-                                className={selectClassName + ' w-full'}
-                                disabled={exportBusy || myRole === 'ADMIN'}
-                            >
-                                <option value="all">All Members</option>
-                                {myRole === 'ADMIN' ? (
-                                    <option value={user?.userId || 'me'}>Invited by Me</option>
-                                ) : (
-                                    <>
-                                        <option value={user?.userId || 'me'}>Invited by Me</option>
-                                        {members
-                                            .filter(m => m.role === 'ADMIN' && m.user_id !== user?.userId)
-                                            .map(m => (
-                                                <option key={m.user_id} value={m.user_id}>
-                                                    Invited by {m.full_name || m.email}
-                                                </option>
-                                            ))
-                                        }
-                                    </>
-                                )}
-                            </select>
-                            {myRole === 'ADMIN' && (
-                                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                                    As an Admin, you can only export members you invited.
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3">
-                        <Button type="button" variant="outline" onClick={() => setShowExportModal(false)} disabled={exportBusy}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" isLoading={exportBusy}>
-                            Download CSV
-                        </Button>
-                    </div>
-                </form>
-            </ModalShell>
-            {/* Role Change Confirmation */}
-            <ModalShell
-                isOpen={!!pendingRoleChange}
-                onClose={() => setPendingRoleChange(null)}
-                title="Confirm Role Shift"
-                description={`You are about to change the role of ${pendingRoleChange?.email} to ${pendingRoleChange?.role}.`}
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-[var(--text-muted)]">
-                        Shifting roles affects the level of administrative and operational control this user has within the workspace. Are you sure you want to proceed with this decision?
-                    </p>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <Button variant="ghost" onClick={() => setPendingRoleChange(null)} disabled={confirmBusy}>
-                            Cancel
-                        </Button>
-                        <Button variant="primary" onClick={confirmRoleChange} isLoading={confirmBusy}>
-                            Confirm Shift
-                        </Button>
-                    </div>
-                </div>
-            </ModalShell>
+            <ConfirmModal
+                isOpen={Boolean(pendingTransferMember)}
+                onClose={() => setPendingTransferMember(null)}
+                onConfirm={handleTransferOwnership}
+                title="Transfer Ownership"
+                message={pendingTransferMember ? `Are you absolutely sure you want to make ${pendingTransferMember.email} the Owner? Your role will automatically be downgraded to Admin.` : 'Transfer ownership.'}
+                confirmLabel="Transfer Ownership"
+                isLoading={confirmBusy && Boolean(pendingTransferMember)}
+                variant="warning"
+            />
         </div>
     );
 }

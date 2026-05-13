@@ -6,15 +6,19 @@ import {
     Activity,
     AlertTriangle,
     ArrowRight,
+    ArrowUpRight,
     BarChart3,
     CheckCircle2,
+    ChevronRight,
     Globe,
+    LayoutDashboard,
     Mail,
     Megaphone,
     ServerCog,
     Sparkles,
     TrendingUp,
     Users,
+    Zap
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge, Button, InlineAlert, KeyValueList, PageHeader, SectionCard, StatCard, StatusBadge } from '@/components/ui';
@@ -43,25 +47,65 @@ function ChecklistItem({
     actionLabel?: string;
 }) {
     return (
-        <div className={`rounded-[var(--radius-lg)] border p-4 transition ${isCompleted ? 'border-[var(--success-border)] bg-[var(--success-bg)]/40' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
-            <div className="flex gap-3">
-                <div className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${isCompleted ? 'bg-[var(--success)] text-white' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>
-                    {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <span className="h-2 w-2 rounded-full bg-[var(--text-muted)]/40" />}
+        <div className={`group relative overflow-hidden rounded-xl border p-5 transition-all ${isCompleted ? 'border-[var(--success-border)] bg-[var(--success-bg)]/10' : 'border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/30'}`}>
+            {/* Subtle glow effect */}
+            {!isCompleted && <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)]/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />}
+            
+            <div className="relative z-10 flex gap-4">
+                <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors ${isCompleted ? 'bg-[var(--success)] text-white shadow-[0_0_15px_rgba(var(--success-rgb),0.4)]' : 'border border-[var(--border)] text-[var(--text-muted)] group-hover:border-[var(--accent)]/50 group-hover:text-[var(--accent)]'}`}>
+                    {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <span className="h-2 w-2 rounded-full bg-current opacity-40 group-hover:opacity-100" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
-                        {isCompleted && <Badge variant="success">Done</Badge>}
+                    <div className="flex items-center gap-3">
+                        <h3 className="heading-3">{title}</h3>
+                        {isCompleted && <Badge variant="success" className="label-text">Done</Badge>}
                     </div>
-                    {description && <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{description}</p>}
+                    {description && <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-muted)]">{description}</p>}
                     {!isCompleted && href && actionLabel && (
-                        <div className="mt-4">
+                        <div className="mt-5">
                             <Link href={href}>
-                                <Button size="sm">{actionLabel}</Button>
+                                <Button size="sm" className="shadow-md shadow-[var(--accent)]/10 transition-all hover:shadow-[var(--accent)]/20">
+                                    {actionLabel} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                                </Button>
                             </Link>
                         </div>
                     )}
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// Custom compact metric card for unified grid
+function MetricCard({ title, value, icon: Icon, trend, tone = 'default', isLoading }: any) {
+    const toneColors = {
+        default: 'text-[var(--text-primary)]',
+        success: 'text-[var(--success)]',
+        warning: 'text-[var(--warning)]',
+        danger: 'text-[var(--danger)]',
+    };
+    
+    return (
+        <div className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition-all hover-float-right shadow-sm">
+            <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2 label-text">
+                    <Icon className="h-4 w-4 opacity-70" />
+                    {title}
+                </div>
+                {trend && (
+                    <Badge variant={tone} className="bg-transparent border-none p-0 text-xs font-bold">
+                        {trend}
+                    </Badge>
+                )}
+            </div>
+            <div className="mt-4">
+                {isLoading ? (
+                    <div className="h-8 w-24 animate-pulse rounded bg-[var(--bg-secondary)]" />
+                ) : (
+                    <span className={`heading-2 ${toneColors[tone as keyof typeof toneColors]}`}>
+                        {value}
+                    </span>
+                )}
             </div>
         </div>
     );
@@ -158,98 +202,226 @@ export default function DashboardPage() {
         return (used / limit) >= 0.8;
     }, [billing]);
 
-    const summaryMetrics = [
-        { label: 'Contacts', value: contactsCount.toLocaleString(), icon: <Users className="h-4 w-4" /> },
-        { label: 'Campaigns', value: campaignsCount.toLocaleString(), icon: <Megaphone className="h-4 w-4" /> },
-        { label: 'Verified Domains', value: domains.filter((d) => d.status === 'verified').length, icon: <Globe className="h-4 w-4" /> },
-        { label: 'Verified Senders', value: senders.filter((s) => s.status === 'verified').length, icon: <Mail className="h-4 w-4" /> },
-    ];
+    const recommendedActions = useMemo(() => {
+        const actions = [];
+        if (!hasDomain) actions.push({ label: 'Verify your domain', desc: 'Unlock branded sending', href: '/settings/domain', priority: 'high' });
+        if (hasDomain && !hasSender) actions.push({ label: 'Add a sender identity', desc: 'Set up your "From" address', href: '/settings/senders', priority: 'high' });
+        if (hasDomain && hasSender && !hasContacts) actions.push({ label: 'Import audience', desc: 'Bring in your contacts', href: '/contacts', priority: 'medium' });
+        if (hasContacts && !hasCampaigns) actions.push({ label: 'Draft campaign', desc: 'Send your first broadcast', href: '/campaigns/new', priority: 'medium' });
+        if (health?.rates?.open_rate !== undefined && health.rates.open_rate < 15) actions.push({ label: 'Improve open rates', desc: 'Review deliverability best practices', href: '/analytics', priority: 'low' });
+        
+        // Default suggestions if all good
+        if (actions.length === 0) {
+            actions.push({ label: 'Create new campaign', desc: 'Engage your audience', href: '/campaigns/new', priority: 'low' });
+            actions.push({ label: 'Review analytics', desc: 'Check your recent performance', href: '/analytics', priority: 'low' });
+        }
+        
+        return actions.slice(0, 3); // Max 3 actions
+    }, [hasDomain, hasSender, hasContacts, hasCampaigns, health]);
 
     const quickLinks = [
-        {
-            title: 'Campaign Workspace',
-            description: 'Create, schedule, and monitor sends without leaving the production flow.',
-            href: '/campaigns',
-            icon: Megaphone,
-        },
-        {
-            title: 'Contacts Engine',
-            description: 'Import audiences, review suppressions, and improve list quality.',
-            href: '/contacts',
-            icon: Users,
-        },
-        {
-            title: 'Analytics',
-            description: 'Check throughput, bounce trends, and recent delivery issues.',
-            href: '/analytics',
-            icon: BarChart3,
-        },
-        {
-            title: 'Infrastructure',
-            description: 'Verify domains, manage keys, and keep compliance in order.',
-            href: '/infrastructure',
-            icon: ServerCog,
-        },
+        { title: 'Campaigns', description: 'Schedule and monitor sends', href: '/campaigns', icon: Megaphone },
+        { title: 'Contacts', description: 'Manage audiences and segments', href: '/contacts', icon: Users },
+        { title: 'Analytics', description: 'Check delivery and engagement', href: '/analytics', icon: BarChart3 },
+        { title: 'Infrastructure', description: 'Manage domains and keys', href: '/infrastructure', icon: ServerCog },
     ];
 
+    const isSystemHealthy = health?.overall === 'green';
+    const systemStatusTone = getHealthTone(health?.overall);
+
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-8 pb-12 max-w-7xl mx-auto">
             {isNearQuota && billing && (
-                <InlineAlert
-                    variant="warning"
-                    title="Approaching monthly limit"
-                    description={`You have used ${(billing.usage.emails_sent_this_cycle / billing.plan_details.max_monthly_emails * 100).toFixed(0)}% of your monthly send capacity on the ${billing.plan_details.name} plan.`}
-                    icon={<AlertTriangle className="mt-0.5 h-5 w-5" />}
-                    action={<Link href="/settings/billing"><Button variant="secondary" size="sm">Review billing</Button></Link>}
-                />
-            )}
-
-            <PageHeader
-                title={isOnboardingCompleted ? 'Operational Overview' : 'Set up your workspace'}
-                subtitle={isOnboardingCompleted
-                    ? 'A calm summary of sending health, audience readiness, and infrastructure posture.'
-                    : 'Complete the core setup tasks once so campaigns, analytics, and infrastructure stay aligned.'}
-                action={
-                    isOnboardingCompleted ? (
-                        <div className="flex gap-3">
-                            <Link href="/campaigns/new">
-                                <Button>New campaign</Button>
-                            </Link>
-                            <Link href="/analytics">
-                                <Button variant="outline">View analytics</Button>
-                            </Link>
-                        </div>
-                    ) : (
-                        <Badge variant="accent">{progressPercent}% complete</Badge>
-                    )
-                }
-            />
-
-            {isOnboardingCompleted && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    {summaryMetrics.map((metric) => (
-                        <StatCard key={metric.label} label={metric.label} value={metric.value} icon={metric.icon} />
-                    ))}
+                <div>
+                    <InlineAlert
+                        variant="warning"
+                        title="Approaching monthly limit"
+                        description={`You have used ${(billing.usage.emails_sent_this_cycle / billing.plan_details.max_monthly_emails * 100).toFixed(0)}% of your monthly send capacity on the ${billing.plan_details.name} plan.`}
+                        icon={<AlertTriangle className="mt-0.5 h-5 w-5" />}
+                        action={<Link href="/settings/billing"><Button variant="secondary" size="sm">Review billing</Button></Link>}
+                    />
                 </div>
             )}
 
-            {!isOnboardingCompleted && (
-                <div className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
-                    <div className="rounded-[var(--radius-lg)] border border-[var(--accent-border)] bg-[var(--bg-card)] p-6">
-                        <div className="mb-6 flex items-center justify-between gap-4">
+            {/* HERO SECTION - Control Center Feel */}
+            <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-8 md:p-10 shadow-sm">
+                
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3 mb-4">
+                            {isLoading ? (
+                                <div className="h-6 w-24 animate-pulse rounded bg-[var(--bg-secondary)]" />
+                            ) : (
+                                <div className={`flex items-center gap-2 rounded-full px-3 py-1 label-text ${isSystemHealthy ? 'bg-[var(--success-bg)]/20 text-[var(--success)] ring-1 ring-[var(--success)]/30' : 'bg-[var(--warning-bg)]/20 text-[var(--warning)] ring-1 ring-[var(--warning)]/30'}`}>
+                                    <div className={`h-2 w-2 rounded-full ${isSystemHealthy ? 'bg-[var(--success)] shadow-[0_0_8px_var(--success)]' : 'bg-[var(--warning)] shadow-[0_0_8px_var(--warning)]'} animate-pulse`} />
+                                    {isSystemHealthy ? 'System Healthy' : (health?.overall ? 'Action Required' : 'Initializing')}
+                                </div>
+                            )}
+                        </div>
+                        <h1 className="heading-1">
+                            {isOnboardingCompleted ? 'Control Center' : 'Set up your workspace'}
+                        </h1>
+                        <p className="max-w-xl body-text">
+                            {isOnboardingCompleted
+                                ? 'Monitor your infrastructure health, audience growth, and campaign performance in real-time.'
+                                : 'Complete these core setup tasks to unlock sending capabilities and ensure high deliverability.'}
+                        </p>
+                    </div>
+
+                    <div className="flex-shrink-0 flex gap-3">
+                        {isOnboardingCompleted ? (
+                            <>
+                                <Link href="/analytics">
+                                    <Button variant="outline" className="h-10 rounded-lg bg-transparent border-[var(--border)] hover:bg-[var(--bg-hover)] font-bold text-[10px] uppercase tracking-widest px-5">
+                                        View Analytics
+                                    </Button>
+                                </Link>
+                                <Link href="/campaigns/new">
+                                    <Button className="h-10 rounded-lg shadow-lg shadow-[var(--accent)]/10 hover-float-right transition-all font-bold text-[10px] uppercase tracking-widest px-5">
+                                        <Zap className="mr-2 h-3.5 w-3.5" /> New Campaign
+                                    </Button>
+                                </Link>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-end gap-2">
+                                <Badge variant="accent" className="px-3 py-1.5 text-sm shadow-sm">{progressPercent}% Setup Complete</Badge>
+                                <p className="text-xs text-[var(--text-muted)] font-medium">{completedSteps} of {totalSteps} tasks done</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {isOnboardingCompleted ? (
+                <>
+                    {/* UNIFIED METRICS GRID */}
+                    <div className="space-y-4">
+                        <h2 className="text-[10px] font-bold text-[var(--text-primary)] flex items-center gap-2 uppercase tracking-[0.2em]">
+                            <Activity className="h-4 w-4 text-[var(--accent)]" /> Platform Metrics
+                        </h2>
+                        
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                            {/* Infrastructure & Audience Stats */}
+                            <MetricCard title="Total Contacts" value={contactsCount.toLocaleString()} icon={Users} isLoading={isLoading} />
+                            <MetricCard title="Campaigns Sent" value={campaignsCount.toLocaleString()} icon={Megaphone} isLoading={isLoading} />
+                            <MetricCard title="Verified Domains" value={domains.filter(d => d.status === 'verified').length} icon={Globe} isLoading={isLoading} />
+                            <MetricCard title="Verified Senders" value={senders.filter(s => s.status === 'verified').length} icon={Mail} isLoading={isLoading} />
+                            
+                            {/* Health Stats */}
+                            <MetricCard 
+                                title="Open Rate" 
+                                value={`${health?.rates?.open_rate?.toFixed(1) || 0}%`} 
+                                icon={TrendingUp} 
+                                tone={getHealthTone(health?.health?.open?.status)}
+                                trend={health?.health?.open?.status === 'green' ? 'Healthy' : 'Needs Work'}
+                                isLoading={isLoading} 
+                            />
+                            <MetricCard 
+                                title="Bounce Rate" 
+                                value={`${health?.rates?.bounce_rate?.toFixed(1) || 0}%`} 
+                                icon={AlertTriangle} 
+                                tone={getHealthTone(health?.health?.bounce?.status)}
+                                trend={health?.health?.bounce?.status === 'green' ? 'Good' : 'High'}
+                                isLoading={isLoading} 
+                            />
+                            <MetricCard 
+                                title="Spam Rate" 
+                                value={`${health?.rates?.spam_rate?.toFixed(2) || 0}%`} 
+                                icon={AlertTriangle} 
+                                tone={getHealthTone(health?.health?.spam?.status)}
+                                trend={health?.health?.spam?.status === 'green' ? 'Safe' : 'Critical'}
+                                isLoading={isLoading} 
+                            />
+                            <MetricCard 
+                                title="Total Emails Sent" 
+                                value={health?.sent?.toLocaleString() || 0} 
+                                icon={Activity} 
+                                tone="default"
+                                isLoading={isLoading} 
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {/* PRODUCT AREAS REFACTOR */}
+                        <div className="lg:col-span-2 space-y-4">
+                            <h2 className="text-[10px] font-bold text-[var(--text-primary)] flex items-center gap-2 uppercase tracking-[0.2em]">
+                                <LayoutDashboard className="h-4 w-4 text-[var(--accent)]" /> Workspaces
+                            </h2>
+                            <div className="grid sm:grid-cols-2 gap-4">
+                                {quickLinks.map((item) => {
+                                    const Icon = item.icon;
+                                    return (
+                                        <Link key={item.href} href={item.href} className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-6 transition-all hover-float-right shadow-sm">
+                                            <div className="absolute top-0 right-0 p-4 opacity-0 transition-all group-hover:opacity-100">
+                                                <ArrowUpRight className="h-4 w-4 text-[var(--accent)]" />
+                                            </div>
+                                            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--bg-secondary)] text-[var(--accent)] shadow-inner">
+                                                <Icon className="h-5 w-5" />
+                                            </div>
+                                            <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-widest">{item.title}</h3>
+                                            <p className="mt-2 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-tighter opacity-70 line-clamp-2">{item.description}</p>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* RECOMMENDED ACTIONS */}
+                        <div className="space-y-4">
+                            <h2 className="text-[10px] font-bold text-[var(--text-primary)] flex items-center gap-2 uppercase tracking-[0.2em]">
+                                <Sparkles className="h-4 w-4 text-[var(--ai-accent)]" /> Suggested Actions
+                            </h2>
+                            <div className="flex flex-col gap-3">
+                                {recommendedActions.map((action, idx) => (
+                                    <Link key={idx} href={action.href} className="group flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4 transition-all hover-float-right shadow-sm">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-bold text-[var(--text-primary)] uppercase tracking-tight">{action.label}</span>
+                                            <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase tracking-tighter opacity-60 mt-0.5">{action.desc}</span>
+                                        </div>
+                                        <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                                    </Link>
+                                ))}
+                                
+                                {/* Placeholder for Data Visualization Feel (e.g. mini chart) */}
+                                <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/30 p-5 h-[140px] flex flex-col justify-between">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Activity 7d</span>
+                                        <Activity className="h-3 w-3 text-[var(--text-muted)]" />
+                                    </div>
+                                    <div className="flex items-end gap-1.5 h-16 w-full opacity-60">
+                                        {/* Skeleton bar chart */}
+                                        <div className="bg-[var(--accent)]/40 w-full rounded-t-sm h-[30%]" />
+                                        <div className="bg-[var(--accent)]/40 w-full rounded-t-sm h-[50%]" />
+                                        <div className="bg-[var(--accent)]/40 w-full rounded-t-sm h-[20%]" />
+                                        <div className="bg-[var(--accent)]/40 w-full rounded-t-sm h-[80%]" />
+                                        <div className="bg-[var(--accent)]/60 w-full rounded-t-sm h-[60%]" />
+                                        <div className="bg-[var(--accent)] w-full rounded-t-sm h-[90%]" />
+                                        <div className="bg-[var(--accent)] w-full rounded-t-sm h-[70%]" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            ) : (
+                /* ONBOARDING STATE */
+                <div className="grid gap-8 lg:grid-cols-[1.35fr_0.95fr]">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-sm">
+                        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                             <div>
-                                <p className="text-sm font-medium text-[var(--text-primary)]">Launch readiness</p>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                    The first five steps create the minimum viable operating posture for ShrFlow.
+                                <h2 className="text-xl font-bold text-[var(--text-primary)]">Launch Checklist</h2>
+                                <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+                                    Establish a solid foundation before sending your first campaign.
                                 </p>
                             </div>
-                            <div className="min-w-[120px]">
-                                <div className="mb-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
-                                    <span>{completedSteps}/{totalSteps} complete</span>
-                                    <span>{progressPercent}%</span>
+                            <div className="w-full sm:w-[160px] flex-shrink-0">
+                                <div className="mb-2 flex items-center justify-between text-xs font-bold text-[var(--text-muted)]">
+                                    <span>Progress</span>
+                                    <span className="text-[var(--accent)]">{progressPercent}%</span>
                                 </div>
-                                <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-secondary)]">
-                                    <div className="h-full bg-[var(--accent)] transition-all duration-700" style={{ width: `${progressPercent}%` }} />
+                                <div className="h-2.5 overflow-hidden rounded-full bg-[var(--bg-secondary)] shadow-inner">
+                                    <div className="h-full bg-gradient-to-r from-[var(--accent)] to-blue-400 transition-all duration-1000 ease-out" style={{ width: `${progressPercent}%` }} />
                                 </div>
                             </div>
                         </div>
@@ -263,125 +435,46 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    <SectionCard
-                        title="What this unlocks"
-                        description="The first completed setup steps unlock safer sending, better diagnostics, and stronger delivery posture."
-                        action={<Sparkles className="h-4 w-4 text-[var(--ai-accent)]" />}
-                    >
-                        <div className="space-y-4 text-sm leading-6 text-[var(--text-muted)]">
-                            <p>Verified infrastructure raises inbox trust and keeps analytics meaningful.</p>
-                            <p>Imported contacts feed the segmentation and suppression engine from day one.</p>
-                            <p>Your first campaign becomes the baseline for future deliverability and performance insights.</p>
-                        </div>
-                        <div className="mt-6">
-                            <KeyValueList
-                                columns={1}
-                                items={[
-                                    { label: 'Recommended order', value: '1. Verify domain', helper: '2. Verify sender  3. Import contacts  4. Create campaign' },
-                                ]}
-                            />
-                        </div>
-                    </SectionCard>
-                </div>
-            )}
-
-            <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-                <SectionCard
-                    title="Product Areas"
-                    description="Each area stays focused, but the dashboard keeps the whole platform legible."
-                >
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {quickLinks.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                                <Link key={item.href} href={item.href} className="group rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-5 transition hover:border-[var(--accent-border)] hover:bg-[var(--bg-hover)]">
-                                    <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/10 text-[var(--accent)]">
-                                        <Icon className="h-5 w-5" />
-                                    </div>
-                                    <h3 className="text-base font-semibold text-[var(--text-primary)]">{item.title}</h3>
-                                    <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{item.description}</p>
-                                    <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
-                                        Open
-                                        <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                                    </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </SectionCard>
-
-                <SectionCard
-                    title="Sender Health"
-                    action={
-                        <div className="flex items-center gap-3">
-                            <TrendingUp className="h-5 w-5 text-[var(--accent)]" />
-                            {health?.overall && (
-                                <Badge variant={getHealthTone(health.overall as HealthStatus) as 'success' | 'warning' | 'danger'}>
-                                    {health.overall === 'green' ? 'Healthy' : health.overall === 'yellow' ? 'Watch' : 'At Risk'}
-                                </Badge>
-                            )}
-                        </div>
-                    }
-                >
-                    {isLoading ? (
-                        <div className="space-y-4">
-                            <div className="h-16 animate-pulse rounded-[var(--radius)] bg-[var(--bg-secondary)]" />
-                            <div className="h-16 animate-pulse rounded-[var(--radius)] bg-[var(--bg-secondary)]" />
-                            <div className="h-16 animate-pulse rounded-[var(--radius)] bg-[var(--bg-secondary)]" />
-                        </div>
-                    ) : health?.health ? (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4 text-sm">
-                                <div>
-                                    <p className="text-[var(--text-muted)]">Sent</p>
-                                    <p className="mt-1 font-semibold text-[var(--text-primary)]">{health?.sent?.toLocaleString() ?? '—'}</p>
+                    <div className="space-y-6">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-sm">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-2 rounded-xl bg-[var(--ai-accent)]/10 text-[var(--ai-accent)]">
+                                    <Sparkles className="h-6 w-6" />
                                 </div>
-                                <div>
-                                    <p className="text-[var(--text-muted)]">Opens</p>
-                                    <p className="mt-1 font-semibold text-[var(--text-primary)]">{health?.opens?.toLocaleString() ?? '—'}</p>
+                                <h3 className="text-xl font-bold text-[var(--text-primary)]">Why this matters</h3>
+                            </div>
+                            
+                            <div className="space-y-5 text-sm leading-relaxed text-[var(--text-muted)]">
+                                <div className="flex gap-3">
+                                    <div className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                                    <p><strong className="text-[var(--text-primary)] font-semibold">Inbox Placement.</strong> Verified infrastructure raises inbox trust and keeps analytics meaningful.</p>
                                 </div>
-                                <div>
-                                    <p className="text-[var(--text-muted)]">Clicks</p>
-                                    <p className="mt-1 font-semibold text-[var(--text-primary)]">{health?.clicks?.toLocaleString() ?? '—'}</p>
+                                <div className="flex gap-3">
+                                    <div className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                                    <p><strong className="text-[var(--text-primary)] font-semibold">Audience Engine.</strong> Imported contacts feed the segmentation and suppression engine from day one.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                                    <p><strong className="text-[var(--text-primary)] font-semibold">Baseline Metrics.</strong> Your first campaign becomes the baseline for future deliverability and performance insights.</p>
                                 </div>
                             </div>
-
-                            {[
-                                { label: 'Bounce Rate', value: health.rates.bounce_rate, status: health.health.bounce.status as HealthStatus, target: 'Target under 2%' },
-                                { label: 'Spam Rate', value: health.rates.spam_rate, status: health.health.spam.status as HealthStatus, target: 'Keep below 0.1%' },
-                                { label: 'Open Rate', value: health.rates.open_rate, status: health.health.open.status as HealthStatus, target: 'Healthy above 20%' },
-                            ].map((item) => (
-                                <div key={item.label} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
-                                            <p className="mt-1 text-xs text-[var(--text-muted)]">{item.target}</p>
-                                        </div>
-                                        <Badge variant={getHealthTone(item.status) as 'success' | 'warning' | 'danger'}>{item.value.toFixed(1)}%</Badge>
-                                    </div>
+                        </div>
+                        
+                        {/* Placeholder visual to make the right column look full and premium */}
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-6 overflow-hidden relative shadow-sm">
+                            <div className="absolute inset-0 bg-grid-pattern opacity-[0.03]" />
+                            <div className="relative z-10 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">System Status</p>
+                                    <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">Ready for launch</p>
                                 </div>
-                            ))}
+                                <div className="h-8 w-8 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center">
+                                    <Activity className="h-4 w-4 text-[var(--text-muted)]" />
+                                </div>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--bg-primary)] p-6 text-center">
-                            <p className="text-sm text-[var(--text-muted)]">Send your first campaign to unlock sender health diagnostics.</p>
-                        </div>
-                    )}
-                </SectionCard>
-            </div>
-
-            {isOnboardingCompleted && (
-                <SectionCard
-                    title="Current Operating Posture"
-                    action={<Activity className="h-4 w-4 text-[var(--ai-accent)]" />}
-                >
-                    <div className="flex flex-wrap gap-3">
-                        <StatusBadge status={hasDomain ? 'verified' : 'pending'} />
-                        <StatusBadge status={hasSender ? 'active' : 'pending'} />
-                        <Badge variant={hasContacts ? 'success' : 'warning'}>{hasContacts ? 'Audience loaded' : 'Audience missing'}</Badge>
-                        <Badge variant={hasCampaigns ? 'success' : 'info'}>{hasCampaigns ? 'Campaigns created' : 'No campaigns yet'}</Badge>
                     </div>
-                </SectionCard>
+                </div>
             )}
         </div>
     );
