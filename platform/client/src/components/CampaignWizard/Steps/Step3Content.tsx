@@ -229,15 +229,25 @@ export default function Step3Content({ data, updateData, onNext, onBack }: any) 
                                                 : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--text-muted)]"
                                         }`}
                                     >
-                                        <div className="flex aspect-[16/9] items-center justify-center bg-black/40">
-                                            <LayoutTemplate className="h-5 w-5 text-[var(--text-muted)]" />
+                                        <div className="relative aspect-[16/9] w-full overflow-hidden bg-white border-b border-[var(--border)]">
+                                            <div className="absolute inset-0 origin-top-left scale-[0.333] w-[300%] h-[300%] pointer-events-none">
+                                                <iframe
+                                                    srcDoc={t.compiled_html}
+                                                    title={t.name}
+                                                    className="w-full h-full border-0 bg-white"
+                                                    sandbox="allow-same-origin"
+                                                />
+                                            </div>
+                                            {/* Accent overlay for selection state */}
                                             {isSelected && (
-                                                <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-white">
-                                                    <Check className="h-2.5 w-2.5" />
+                                                <div className="absolute inset-0 bg-[var(--accent)]/5 flex items-center justify-center transition-all">
+                                                    <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-md">
+                                                        <Check className="h-2.5 w-2.5" />
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="p-2.5">
+                                        <div className="p-2.5 bg-[var(--bg-card)]">
                                             <p className="truncate text-xs font-semibold text-[var(--text-primary)]">{t.name}</p>
                                             <p className="mt-0.5 text-[10px] text-[var(--text-secondary)]">{new Date(t.updated_at).toLocaleDateString()}</p>
                                         </div>

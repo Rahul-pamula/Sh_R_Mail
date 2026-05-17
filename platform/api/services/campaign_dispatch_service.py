@@ -23,14 +23,87 @@ def process_spintax(text: str) -> str:
 def process_merge_tags(text: str, contact: Dict[str, Any]) -> str:
     if not text:
         return ""
-    pattern = r"\{\{(\w+)(?:\|([^}]+))?\}\}"
-
-    def replace_tag(match: re.Match[str]) -> str:
-        field = match.group(1)
-        fallback = match.group(2) or ""
-        return str(contact.get(field, fallback) or fallback)
-
-    return re.sub(pattern, replace_tag, text)
+        
+    # 1. Backend Enrichment & Fallbacks
+    raw_first = contact.get("first_name") or ""
+    raw_last = contact.get("last_name") or ""
+    
+    first_str = str(raw_first).strip()
+    last_str = str(raw_last).strip()
+    
+    enriched_first = first_str if first_str else "there"
+    enriched_last = last_str if last_str else "Customer"
+    
+    if first_str and last_str:
+        enriched_full = f"{first_str} {last_str}"
+    elif first_str:
+        enriched_full = first_str
+    elif last_str:
+        enriched_full = last_str
+    else:
+        enriched_full = "Valued Customer"
+        
+    enriched_contact = {k: v for k, v in contact.items()}
+    enriched_contact["first_name"] = enriched_first
+    enriched_contact["last_name"] = enriched_last
+    enriched_contact["full_name"] = enriched_full
+    
+    # 2. Tag Regex for matching {{ ... }} with re.DOTALL to handle multiline tags
+    tag_pattern = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
+    
+    def replace_tag(match) -> str:
+        inner = match.group(1)
+        
+        # Strip all HTML tags inside the curly braces
+        clean_inner = re.sub(r"<[^>]+>", "", inner)
+        
+        # Normalize whitespace (replace newlines and multiple spaces with a single space, then strip)
+        clean_inner = " ".join(clean_inner.split())
+        
+        if not clean_inner:
+            return ""
+            
+        # Parse fallback if any
+        parts = clean_inner.split("|", 1)
+        tag_name = parts[0].strip().lower()
+        fallback_value = parts[1].strip() if len(parts) > 1 else None
+        
+        # Original value in raw contact
+        orig_val = contact.get(tag_name)
+        orig_val_str = str(orig_val).strip() if orig_val is not None else ""
+        
+        # Standard enrichment fields
+        standard_fields = {"first_name", "last_name", "full_name"}
+        
+        if tag_name in standard_fields:
+            # Check if original value was blank
+            if tag_name == "full_name":
+                orig_has_value = bool(first_str or last_str)
+            else:
+                orig_has_value = bool(orig_val_str)
+                
+            if not orig_has_value:
+                if fallback_value is not None:
+                    return fallback_value
+                return str(enriched_contact[tag_name])
+            else:
+                if tag_name == "full_name":
+                    return f"{first_str} {last_str}".strip()
+                return orig_val_str
+                
+        # For non-standard but allowed fields present in contact
+        elif tag_name in enriched_contact:
+            if not orig_val_str:
+                if fallback_value is not None:
+                    return fallback_value
+                return ""
+            return orig_val_str
+            
+        # For completely unknown fields
+        else:
+            return fallback_value if fallback_value is not None else ""
+            
+    return tag_pattern.sub(replace_tag, text)
 
 
 def build_contacts_query(
