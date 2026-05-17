@@ -65,8 +65,8 @@ def process_merge_tags(text: str, contact: dict) -> str:
         if not clean_inner:
             return ""
             
-        # Parse static fallback if any
-        parts = clean_inner.split("|", 1)
+        # Parse static fallback if any (split on a single pipe, ignoring ||)
+        parts = re.split(r"(?<!\|)\|(?!\|)", clean_inner, 1)
         dynamic_chain_str = parts[0]
         static_fallback = parts[1].strip() if len(parts) > 1 else None
         

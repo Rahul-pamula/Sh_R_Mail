@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-<<<<<<< HEAD
-import { LayoutTemplate, PenLine, Check, Search, Loader2, X, Paperclip, Upload, FileText } from "lucide-react";
-=======
-import { LayoutTemplate, PenLine, Check, Search, Loader2, X, Paperclip, Upload, AlertTriangle, ShieldCheck } from "lucide-react";
->>>>>>> 504b243d5db79fa18d3f3a07575da46986e7b1c3
+import { LayoutTemplate, PenLine, Check, Search, Loader2, X, Paperclip, Upload, FileText, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button, FilterBar, SectionCard } from "@/components/ui";
 

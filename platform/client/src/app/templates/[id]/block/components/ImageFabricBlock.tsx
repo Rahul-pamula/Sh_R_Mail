@@ -36,7 +36,7 @@ export const ImageFabricBlock = ({ block, isSelected, onUpdate }: ImageFabricBlo
 
                 if (!existingImg) {
                     fabric.Image.fromURL(src, (img) => {
-                        if (!img || img.isError) {
+                        if (!img || (img as any).isError) {
                             console.error("Failed to load image:", src);
                             return;
                         }
